@@ -1,0 +1,272 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StudentStatus {
+  active
+  suspended
+  graduated
+  dropped
+}
+
+model Role {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique @db.VarChar(50)
+  description String?  @db.VarChar(200)
+  permissions Json?    // Mảng string hoặc object JSON
+  createdAt   DateTime @default(now())
+
+  users       User[]
+
+  @@index([name])
+}
+
+model User {
+  id            Int           @id @default(autoincrement())
+  email         String        @unique @db.VarChar(100)
+  passwordHash  String        @db.VarChar(255)
+  fullName      String        @db.VarChar(120)
+  avatarUrl     String?       @db.VarChar(500)
+  phone         String?       @db.VarChar(20)
+  dateOfBirth   DateTime?
+  address       String?       @db.VarChar(200)
+  roleId        Int
+  isActive      Boolean       @default(true)
+  emailVerified Boolean       @default(false)
+  lastLogin     DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  role          Role          @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  student       Student?
+  teacher       Teacher?
+  refreshTokens RefreshToken[]
+  uploadedMaterials Material[]
+
+  @@index([roleId])
+  @@index([isActive])
+  @@index([lastLogin])
+}
+
+model Student {
+  id             Int           @id @default(autoincrement())
+  userId         Int           @unique
+  studentCode    String        @unique @db.VarChar(30)
+  className      String?       @db.VarChar(50)
+  major          String?       @db.VarChar(100)
+  academicYear   String?       @db.VarChar(15)
+  enrollmentYear Int?
+  gpa            Decimal?      @default(0.00) @db.Decimal(4, 2)
+  status         StudentStatus @default(active)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollments    SectionEnrollment[]  // 👈 thêm relation ngược lại
+
+  @@index([status])
+  @@index([className])
+  @@index([major])
+}
+
+model Teacher {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @unique
+  teacherCode    String   @unique @db.VarChar(30)
+  department     String?  @db.VarChar(120)
+  position       String?  @db.VarChar(80)
+  specialization String?  @db.VarChar(200)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sections       SectionInstructor[]  // 👈 thêm relation ngược lại
+
+  @@index([department])
+  @@index([position])
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  token     String   @unique @db.VarChar(500)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+}
+
+// Enums
+enum CourseSectionStatus {
+  planned
+  ongoing
+  completed
+  cancelled
+}
+
+enum InstructorRole {
+  owner
+  co
+  ta
+}
+
+enum EnrollmentStatus {
+  enrolled
+  dropped
+  completed
+}
+
+// Subjects (Danh mục môn học)
+model Subject {
+  id           Int             @id @default(autoincrement())
+  subjectCode  String          @unique @db.VarChar(30)
+  subjectName  String          @db.VarChar(200)
+  credits      Int             @default(3)
+
+  // Relations
+  courseSections CourseSection[]
+
+  @@index([subjectCode])
+}
+
+// Terms (Kỳ học)
+model Term {
+  id        Int       @id @default(autoincrement())
+  code      String    @unique @db.VarChar(30)
+  name      String    @db.VarChar(100)
+  startDate DateTime? @db.Date
+  endDate   DateTime? @db.Date
+
+  // Relations
+  courseSections CourseSection[]
+
+  @@index([code])
+}
+
+// Course sections (Lớp học phần)
+model CourseSection {
+  id              Int                  @id @default(autoincrement())
+  subjectId       Int
+  termId          Int
+  sectionCode     String               @unique @db.VarChar(40)
+  schedule        Json?
+  maxStudents     Int                  @default(50)
+  currentStudents Int                  @default(0)
+  status          CourseSectionStatus  @default(planned)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  // Relations
+  subject     Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  term        Term           @relation(fields: [termId], references: [id], onDelete: Cascade)
+  instructors SectionInstructor[]
+  groups      SectionGroup[]
+  enrollments SectionEnrollment[]
+  materials   Material[]
+
+  @@index([subjectId])
+  @@index([termId])
+  @@index([sectionCode])
+}
+
+// Section instructors (Phân công giảng viên cho học phần)
+// Composite primary key (sectionId, teacherId) như trong DDL
+model SectionInstructor {
+  sectionId Int
+  teacherId Int
+  role      InstructorRole @default(owner)
+  assignedAt DateTime      @default(now())
+
+  // Relations
+  section CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  teacher Teacher       @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@id([sectionId, teacherId])
+  @@index([teacherId])
+  @@index([sectionId])
+}
+
+// Section groups (Nhóm trong học phần)
+model SectionGroup {
+  id          Int          @id @default(autoincrement())
+  sectionId   Int
+  groupCode   String?      @db.VarChar(40)
+  groupName   String?      @db.VarChar(100)
+  maxMembers  Int          @default(6)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  section     CourseSection      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  enrollments SectionEnrollment[]   // 👈 thêm quan hệ ngược lại
+
+  @@unique([id, sectionId], map: "uniq_group_section")
+  @@index([sectionId], map: "idx_section")
+}
+
+
+// Section enrollments (Sinh viên đăng ký học phần)
+model SectionEnrollment {
+  id         Int               @id @default(autoincrement())
+  sectionId  Int
+  studentId  Int
+  groupId    Int?
+
+  status     EnrollmentStatus  @default(enrolled)
+  enrolledAt DateTime          @default(now())
+
+  // Relations
+  section CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  student Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  group   SectionGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@unique([sectionId, studentId], map: "uniq_section_student")
+  @@index([studentId])
+  @@index([sectionId])
+  @@index([groupId])
+}
+
+// Loại tài liệu
+enum MaterialCategory {
+  lecture     // Bài giảng
+  slide       // Slide
+  exercise    // Bài tập
+  reference   // Tài liệu tham khảo
+  syllabus    // Đề cương
+  other       // Khác
+}
+
+// Bảng tài liệu
+model Material {
+  id            Int               @id @default(autoincrement())
+  sectionId     Int                                // Học phần
+  title         String            @db.VarChar(200) // Tiêu đề
+  description   String?           @db.Text         // Mô tả
+  fileName      String?           @db.VarChar(255) // Tên file gốc
+  filePath      String?           @db.VarChar(500) // Đường dẫn (server hoặc link drive)
+  fileSize      BigInt?                             // Kích thước (bytes)
+  fileType      String?           @db.VarChar(50)  // pdf, docx, pptx, video...
+  category      MaterialCategory  @default(other)  // Danh mục
+  isPublic      Boolean           @default(false)  // Có công khai không
+  downloadCount Int               @default(0)      // Lượt tải
+  uploadedBy    Int                                // Người tải lên (teacher.userId)
+  uploadedAt    DateTime          @default(now())  // Thời gian tải lên
+  updatedAt     DateTime          @updatedAt       // Cập nhật cuối
+
+  // Relations
+  section   CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  uploader  User          @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
+
+  @@index([sectionId])
+  @@index([uploadedBy])
+}

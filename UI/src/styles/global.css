@@ -1,0 +1,66 @@
+/* Print styles */
+@media print {
+  @page {
+    size: A4;
+    margin: 1cm;
+  }
+  
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    background: white !important;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+  
+  /* Hide all elements except print content */
+  body > *:not(.print-content) {
+    display: none !important;
+  }
+  
+  /* Ensure print content is visible */
+  .print-content {
+    display: block !important;
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    z-index: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  
+  /* Hide debug info when printing */
+  .print-content .debug-info {
+    display: none !important;
+  }
+  
+  /* Table styles for print */
+  table {
+    border-collapse: collapse !important;
+  }
+  
+  th, td {
+    border: 1px solid #000 !important;
+    padding: 8px !important;
+  }
+  
+  /* Typography for print */
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+  
+  /* Avoid page breaks inside tables */
+  table {
+    page-break-inside: avoid;
+  }
+  
+  /* Ensure proper spacing */
+  * {
+    box-sizing: border-box;
+  }
+}
