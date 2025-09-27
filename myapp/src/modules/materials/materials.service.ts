@@ -1,48 +1,68 @@
 import { prisma } from "../../prisma/client";
 
-export async function createMaterial(data: any) {
-    return prisma.material.create({
-        data: {
-            sectionId: Number(data.sectionId),
-            title: data.title,
-            description: data.description,
-            fileName: data.fileName,
-            filePath: data.filePath,
-            fileSize: data.fileSize,
-            fileType: data.fileType,
-            uploadedBy: Number(data.uploadedBy),
-        },
-    });
-
-}
-
-
-export async function listMaterialsBySection(sectionId: number) {
+// Lấy tất cả tài liệu
+export async function getAllMaterials() {
   return prisma.material.findMany({
-    where: { sectionId },
-    include: { uploader: { select: { id: true, fullName: true, email: true } } },
+    include: { uploader: true }, // nếu muốn lấy thông tin người upload
     orderBy: { uploadedAt: "desc" },
   });
 }
 
-export async function getMaterial(id: number) {
+// Lấy 1 tài liệu
+export async function getMaterialById(id: number) {
   return prisma.material.findUnique({
     where: { id },
-    include: { uploader: { select: { id: true, fullName: true, email: true } } },
+    include: { uploader: true },
   });
 }
 
-export async function updateMaterial(id: number, data: any) {
-  return prisma.material.update({ where: { id }, data });
+// Tạo tài liệu
+export async function createMaterial(data: any) {
+  return prisma.material.create({ data });
 }
 
+// Cập nhật tài liệu
+export async function updateMaterial(id: number, data: any) {
+  return prisma.material.update({
+    where: { id },
+    data,
+  });
+}
+
+// Xóa tài liệu
 export async function deleteMaterial(id: number) {
   return prisma.material.delete({ where: { id } });
 }
 
-export async function incrementDownloadCount(id: number) {
-  return prisma.material.update({
-    where: { id },
-    data: { downloadCount: { increment: 1 } },
+// Gán tài liệu vào lớp
+export async function assignMaterialToClass(courseSectionId: number, materialId: number) {
+  return prisma.courseMaterial.create({
+    data: {
+      courseSectionId,
+      materialId,
+    },
+  });
+}
+
+// Lấy tài liệu theo lớp
+export async function getMaterialsByClass(courseSectionId: number) {
+  return prisma.courseMaterial.findMany({
+    where: { courseSectionId },
+    include: {
+      material: true,
+    },
+  });
+}
+
+// Cập nhật isOpen cho tài liệu trong lớp
+export async function toggleMaterialVisibility(courseSectionId: number, materialId: number, isOpen: boolean) {
+  return prisma.courseMaterial.update({
+    where: {
+      courseSectionId_materialId: { // composite unique
+        courseSectionId,
+        materialId,
+      },
+    },
+    data: { isOpen },
   });
 }

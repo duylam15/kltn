@@ -2,7 +2,6 @@ import { z } from "zod";
 
 export const createStudentSchema = z.object({
     body: z.object({
-        user_id: z.number().int().positive(), // user đã tồn tại
         student_code: z.string().min(3),
         class_name: z.string().optional(),
         major: z.string().optional(),
@@ -10,6 +9,7 @@ export const createStudentSchema = z.object({
         enrollment_year: z.number().int().optional(),
     }),
 });
+
 
 export const listStudentQuerySchema = z.object({
     query: z.object({

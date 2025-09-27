@@ -1,0 +1,591 @@
+import React, { useEffect, useState } from "react";
+import {
+  Table,
+  Button,
+  Spin,
+  Typography,
+  message,
+  Tag,
+  Modal,
+  Input,
+  Tooltip,
+  Form,
+  DatePicker,
+  Switch,
+  Popconfirm,
+  Image,
+  Space,
+  Card,
+} from "antd";
+import {
+  ReloadOutlined,
+  SearchOutlined,
+  EyeOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  PlusOutlined,
+  TeamOutlined,
+  QrcodeOutlined,
+} from "@ant-design/icons";
+import axios from "axios";
+import dayjs from "dayjs";
+import toast from "react-hot-toast";
+
+const { Title } = Typography;
+const API_BASE = "http://localhost:4000/api/v1";
+
+type Session = {
+  id: number;
+  sectionId: number;
+  name?: string | null;
+  sessionCode?: string;
+  qrCodeUrl?: string;
+  expiresAt?: string | null;
+  latitude?: number;
+  longitude?: number;
+  radius?: number;
+  createdAt: string;
+  updatedAt?: string;
+  attendances?: Attendance[];
+};
+
+type Attendance = {
+  id: number;
+  sessionId: number;
+  studentId: number;
+  status: "present" | "warning" | "late";
+  checkedInAt: string;
+  distance?: number;
+};
+
+type Student = {
+  id: number;
+  studentCode: string;
+  className: string;
+  user: { fullName: string; email: string };
+};
+
+type Enrollment = {
+  student: Student;
+  attendance?: Attendance;
+};
+
+export default function RollCall() {
+  const path = window.location.pathname;
+  const sectionId = Number(path.split("/")[3]);
+
+  const [loading, setLoading] = useState(true);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [keyword, setKeyword] = useState("");
+
+  // modal states
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [listModalOpen, setListModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [studentList, setStudentList] = useState<Enrollment[]>([]);
+  const [editing, setEditing] = useState<Session | null>(null);
+
+  const [form] = Form.useForm<Session>();
+  const [createForm] = Form.useForm<Session>();
+
+  useEffect(() => {
+    fetchSessions();
+  }, [sectionId]);
+
+  const fetchSessions = async () => {
+    try {
+      setLoading(true);
+      const res = await axios.get(
+        `${API_BASE}/attendance/sections/${sectionId}/sessions`
+      );
+      if (res.data.success) {
+        setSessions(
+          res.data.data.filter((s: Session) => s.sectionId === sectionId)
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Không tải được danh sách phiên điểm danh");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchStudents = async (session: Session) => {
+    try {
+      const res = await axios.get(
+        `${API_BASE}/sections-enrollments/section/${sectionId}/students`
+      );
+      if (res.data.success) {
+        const merged = res.data.data.map((enrollment: any) => {
+          const attendance = session.attendances?.find(
+            (a: Attendance) => a.studentId === enrollment.studentId
+          );
+          return { ...enrollment, attendance };
+        });
+        setStudentList(merged);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Không tải được danh sách sinh viên");
+    }
+  };
+
+  const createSession = async () => {
+    try {
+      const values = await createForm.validateFields();
+
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+        });
+      });
+
+      const latitude = pos.coords.latitude;
+      const longitude = pos.coords.longitude;
+
+      const payload = {
+        sectionId,
+        name: values.name?.trim() || null,
+        expiresAt: values.expiresAt ? values.expiresAt.toString() : null,
+        latitude,
+        longitude,
+        radius: 100,
+      };
+
+      const res = await axios.post(`${API_BASE}/attendance/sessions`, payload);
+
+      if (res.data.success) {
+        toast.success("Tạo phiên điểm danh thành công");
+        setCreateModalOpen(false);
+        createForm.resetFields();
+        fetchSessions();
+      }
+    } catch (err: any) {
+      if (err?.errorFields) return; // lỗi validate form
+      console.error(err);
+      toast.error("Tạo phiên điểm danh thất bại hoặc không lấy được vị trí");
+    }
+  };
+
+  const updateSession = async () => {
+    try {
+      if (!editing) return;
+
+      const values = await form.validateFields();
+      const payload = {
+        ...values,
+        expiresAt: values.expiresAt ? values.expiresAt.toString() : null,
+      };
+
+      await axios.put(`${API_BASE}/attendance/sessions/${editing.id}`, payload);
+      toast.success("Cập nhật phiên điểm danh thành công");
+      setEditModalOpen(false);
+      setEditing(null);
+      fetchSessions();
+    } catch (err: any) {
+      if (err?.errorFields) return; // lỗi validate form
+      console.error(err);
+      toast.error("Cập nhật thất bại");
+    }
+  };
+
+  const deleteSession = async (id: number) => {
+    try {
+      await axios.delete(`${API_BASE}/attendance/sessions/${id}`);
+      toast.success("Xóa phiên điểm danh thành công");
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+    } catch (err) {
+      console.error(err);
+      toast.error("Xóa thất bại");
+    }
+  };
+
+  const handleManualCheckIn = async (studentCode: string) => {
+    if (!selectedSession) return;
+
+    try {
+      const res = await axios.post(`${API_BASE}/attendance/check-in`, {
+        sessionId: selectedSession.id,
+        studentCode,
+        latitude: null,
+        longitude: null,
+      });
+
+      if (res.data.success) {
+        toast.success(res.data.message || "Điểm danh thành công");
+
+        const newAttendance = res.data.data;
+
+        setStudentList((prev) =>
+          prev.map((enrollment) =>
+            enrollment.student.studentCode === studentCode
+              ? { ...enrollment, attendance: newAttendance }
+              : enrollment
+          )
+        );
+
+        setSelectedSession((prev: Session | null) => {
+          if (!prev) return prev;
+          const updated = { ...prev };
+          const idx = updated.attendances?.findIndex(
+            (a: Attendance) => a.studentId === newAttendance.studentId
+          ) ?? -1;
+          if (idx !== -1 && updated.attendances) {
+            updated.attendances[idx] = newAttendance;
+          } else if (updated.attendances) {
+            updated.attendances.push(newAttendance);
+          }
+          return updated;
+        });
+      } else {
+        toast.error(res.data.message || "Không thể điểm danh");
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.message || "Điểm danh thất bại");
+    }
+  };
+
+  const getStatusTag = (status: string) => {
+    switch (status) {
+      case "present":
+        return <Tag color="green">Có mặt</Tag>;
+      case "warning":
+        return <Tag color="orange">Cảnh báo</Tag>;
+      case "late":
+        return <Tag color="red">Trễ</Tag>;
+      default:
+        return <Tag color="default">Chưa điểm danh</Tag>;
+    }
+  };
+
+  const columns = [
+    {
+      title: "Tên phiên",
+      dataIndex: "name",
+      key: "name",
+      sorter: (a: Session, b: Session) => (a.name || "").localeCompare(b.name || ""),
+      render: (text: string, record: Session) => text || `Phiên #${record.id}`,
+    },
+    {
+      title: "Mã phiên",
+      dataIndex: "sessionCode",
+      key: "sessionCode",
+      sorter: (a: Session, b: Session) => (a.sessionCode || "").localeCompare(b.sessionCode || ""),
+      render: (text: string) => text || <Tag color="default">N/A</Tag>,
+    },
+    {
+      title: "Link điểm danh",
+      key: "attendanceLink",
+      render: (_: any, record: Session) => (
+        <Button
+          type="link"
+          size="small"
+          onClick={() => {
+            const link = `http://localhost:5173/diemdanh?sessionId=${record.id}`;
+            navigator.clipboard.writeText(link);
+            toast.success("Đã copy link điểm danh");
+          }}
+        >
+          Copy link
+        </Button>
+      ),
+    },
+    {
+      title: "Số lượng điểm danh",
+      key: "attendanceCount",
+      align: "center" as const,
+      sorter: (a: Session, b: Session) =>
+        (a.attendances?.length || 0) - (b.attendances?.length || 0),
+      render: (_: any, record: Session) => record.attendances?.length || 0,
+    },
+    {
+      title: "Ngày tạo",
+      dataIndex: "createdAt",
+      key: "createdAt",
+      sorter: (a: Session, b: Session) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm"),
+    },
+    {
+      title: "Hết hạn",
+      dataIndex: "expiresAt",
+      key: "expiresAt",
+      sorter: (a: Session, b: Session) =>
+        new Date(a.expiresAt || 0).getTime() - new Date(b.expiresAt || 0).getTime(),
+      render: (v: string) => (v ? dayjs(v).format("DD/MM/YYYY HH:mm") : "—"),
+    },
+    {
+      title: "Hành động",
+      key: "actions",
+      render: (_: any, record: Session) => (
+        <div style={{ display: "flex", gap: 8 }}>
+          <Tooltip title="Xem QR Code">
+            <Button
+              icon={<QrcodeOutlined />}
+              size="small"
+              onClick={() => {
+                setSelectedSession(record);
+                setQrModalOpen(true);
+              }}
+            />
+          </Tooltip>
+          <Tooltip title="Danh sách sinh viên">
+            <Button
+              icon={<TeamOutlined />}
+              size="small"
+              onClick={() => {
+                setSelectedSession(record);
+                fetchStudents(record);
+                setListModalOpen(true);
+              }}
+            />
+          </Tooltip>
+          <Tooltip title="Sửa">
+            <Button
+              icon={<EditOutlined />}
+              size="small"
+              onClick={() => {
+                setEditing(record);
+                form.setFieldsValue({
+                  ...record,
+                  expiresAt: record.expiresAt ? dayjs(record.expiresAt).format("YYYY-MM-DD HH:mm:ss") : null
+                });
+                setEditModalOpen(true);
+              }}
+            />
+          </Tooltip>
+          <Tooltip title="Xóa">
+            <Popconfirm
+              title="Xóa phiên điểm danh"
+              description="Bạn có chắc muốn xóa phiên điểm danh này?"
+              okText="Xóa"
+              cancelText="Hủy"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => deleteSession(record.id)}
+            >
+              <Button danger size="small" icon={<DeleteOutlined />} />
+            </Popconfirm>
+          </Tooltip>
+        </div>
+      ),
+    },
+  ];
+
+  const studentColumns = [
+    {
+      title: "MSSV",
+      dataIndex: ["student", "studentCode"],
+      key: "studentCode",
+      sorter: (a: Enrollment, b: Enrollment) =>
+        a.student.studentCode.localeCompare(b.student.studentCode),
+    },
+    {
+      title: "Họ tên",
+      dataIndex: ["student", "user", "fullName"],
+      key: "fullName",
+      sorter: (a: Enrollment, b: Enrollment) =>
+        a.student.user.fullName.localeCompare(b.student.user.fullName),
+    },
+    {
+      title: "Email",
+      dataIndex: ["student", "user", "email"],
+      key: "email"
+    },
+    {
+      title: "Lớp",
+      dataIndex: ["student", "className"],
+      key: "className"
+    },
+    {
+      title: "Trạng thái",
+      key: "status",
+      align: "center" as const,
+      render: (_: any, record: Enrollment) =>
+        getStatusTag(record.attendance?.status || ""),
+    },
+    {
+      title: "Thời gian điểm danh",
+      key: "checkedInAt",
+      render: (_: any, record: Enrollment) =>
+        record.attendance?.checkedInAt
+          ? dayjs(record.attendance.checkedInAt).format("DD/MM/YYYY HH:mm:ss")
+          : "—",
+    },
+    {
+      title: "Khoảng cách (m)",
+      key: "distance",
+      align: "center" as const,
+      render: (_: any, record: Enrollment) =>
+        record.attendance?.distance
+          ? `${record.attendance.distance.toFixed(2)} m`
+          : "—",
+    },
+    {
+      title: "Hành động",
+      key: "action",
+      render: (_: any, record: Enrollment) => (
+        <Button
+          type="primary"
+          size="small"
+          disabled={!!record.attendance}
+          onClick={() => handleManualCheckIn(record.student.studentCode)}
+        >
+          {record.attendance ? "Đã điểm danh" : "Điểm danh"}
+        </Button>
+      ),
+    },
+  ];
+
+  const filteredSessions = sessions.filter(
+    (s) =>
+      !keyword ||
+      s.name?.toLowerCase().includes(keyword.toLowerCase()) ||
+      s.sessionCode?.toLowerCase().includes(keyword.toLowerCase())
+  );
+
+  if (loading) return <Spin tip="Đang tải..." />;
+
+  return (
+    <div style={{ padding: 16 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          alignItems: "center",
+          marginBottom: 16,
+          marginTop: -16,
+        }}
+      >
+        <div style={{ display: "flex", gap: 8 }}>
+          <Input
+            allowClear
+            prefix={<SearchOutlined />}
+            placeholder="Tìm theo tên/mã phiên..."
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            style={{ width: 260 }}
+          />
+          <Button icon={<ReloadOutlined />} onClick={fetchSessions}>
+            Refresh
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setEditing(null);
+              createForm.resetFields();
+              setCreateModalOpen(true);
+            }}
+          >
+            Tạo phiên điểm danh
+          </Button>
+        </div>
+      </div>
+
+      <Table<Session>
+        dataSource={filteredSessions}
+        columns={columns}
+        rowKey="id"
+        bordered
+        pagination={{ pageSize: 10 }}
+      />
+
+      {/* Modal xem QR Code */}
+      <Modal
+        title="QR Code điểm danh"
+        open={qrModalOpen}
+        onCancel={() => setQrModalOpen(false)}
+        footer={null}
+        width={600}
+        centered
+      >
+        {selectedSession && (
+          <div style={{ textAlign: "center" }} className="flex justify-center items-center flex-col">
+            <img
+              src={`http://localhost:4000${selectedSession.qrCodeUrl}`}
+              alt="QR Code"
+              width={400}
+              height={400}
+              className="flex justify-center items-center"
+            />
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal danh sách sinh viên */}
+      <Modal
+        title={`Danh sách điểm danh - ${selectedSession?.name || `Phiên #${selectedSession?.id}`}`}
+        open={listModalOpen}
+        onCancel={() => setListModalOpen(false)}
+        footer={null}
+        width={1200}
+        bodyStyle={{ maxHeight: "70vh", overflowY: "auto" }}
+      >
+        <Table<Enrollment>
+          dataSource={studentList}
+          columns={studentColumns}
+          rowKey={(record) => record.student.id}
+          pagination={false}
+          bordered
+          scroll={{ x: "max-content" }}
+        />
+      </Modal>
+
+      {/* Modal sửa phiên */}
+      <Modal
+        title="Chỉnh sửa phiên điểm danh"
+        open={editModalOpen}
+        onCancel={() => setEditModalOpen(false)}
+        onOk={updateSession}
+        okText="Lưu"
+      >
+        <Form form={form} layout="vertical">
+          <Form.Item label="Mã phiên" name="sessionCode">
+            <Input disabled />
+          </Form.Item>
+          <Form.Item label="Tên phiên" name="name">
+            <Input placeholder="VD: Buổi học CSDL ngày 25/09" />
+          </Form.Item>
+          <Form.Item label="Ngày hết hạn" name="expiresAt">
+            <DatePicker showTime style={{ width: "100%" }} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Modal tạo phiên */}
+      <Modal
+        title="Tạo phiên điểm danh mới"
+        open={createModalOpen}
+        onCancel={() => setCreateModalOpen(false)}
+        onOk={createSession}
+        okText="Tạo mới"
+      >
+        <Form
+          form={createForm}
+          layout="vertical"
+        >
+          <Form.Item
+            label="Tên phiên điểm danh"
+            name="name"
+            rules={[{ required: true, message: "Vui lòng nhập tên phiên điểm danh" }]}
+          >
+            <Input placeholder="VD: Buổi học CSDL ngày 25/09" />
+          </Form.Item>
+          <Form.Item
+            label="Ngày hết hạn"
+            name="expiresAt"
+            rules={[{ required: true, message: "Vui lòng nhập ngày hết hạn" }]}
+          >
+            <DatePicker showTime style={{ width: "100%" }} />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+}

@@ -6,24 +6,18 @@ interface StudentRouteProps {
 }
 
 const StudentRoute: React.FC<StudentRouteProps> = ({ children }) => {
-	const { user, isLoading } = useAuth();
+	const { user, loading } = useAuth();
 
-	if (isLoading) {
-		return <div>Loading...</div>;
-	}
+	if (loading) return <p>Đang kiểm tra đăng nhập...</p>;
 
 	if (!user) {
 		return <Navigate to="/login" replace />;
 	}
 
-	if (user.role !== "student") {
-		// Redirect to appropriate dashboard based on role
-		if (user.role === "teacher") {
-			return <Navigate to="/teacher" replace />;
-		}
-		if (user.role === "admin") {
-			return <Navigate to="/admin" replace />;
-		}
+	if (user.roleId !== 100) {
+		// Nếu user tồn tại nhưng không phải student → đưa về đúng dashboard của họ
+		if (user.roleId === 101) return <Navigate to="/teacher" replace />;
+		if (user.roleId === 102) return <Navigate to="/admin" replace />;
 		return <Navigate to="/login" replace />;
 	}
 

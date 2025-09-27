@@ -4,7 +4,7 @@ import {
     createTeacherSchema,
     listTeacherQuerySchema,
     teacherIdParamSchema,
-    updateTeacherSchema,
+    updateTeacherSchema
 } from "./teacher.validation";
 import * as controller from "./teacher.controller";
 
@@ -20,5 +20,6 @@ router.get("/", validate(listTeacherQuerySchema), controller.list);
 router.get("/:id", validate(teacherIdParamSchema), controller.detail);
 router.patch("/:id", validate(updateTeacherSchema), controller.update);
 router.delete("/:id", validate(teacherIdParamSchema), controller.remove);
+router.get("/:teacherId/groups", controller.getAllGroupsOfTeacher);
 
 export default router;

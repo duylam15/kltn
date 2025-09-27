@@ -1,45 +1,73 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Mail, Lock, LogIn } from "lucide-react";
-
+import { Lock, LogIn, User } from "lucide-react";
+import axios from "axios";
 
 export default function Login() {
 	const navigate = useNavigate();
-	const [email, setEmail] = useState("");
+	const [studentCode, setStudentCode] = useState("");
 	const [password, setPassword] = useState("");
-	const [role, setRole] = useState<"student" | "teacher" | "admin">("student");
+	const [loading, setLoading] = useState(false);
+	const [error, setError] = useState("");
 
-
-	const onSubmit = (e: React.FormEvent) => {
+	const onSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		// TODO: call API auth → set token → redirect theo role
-		if (role === "teacher") navigate("/teacher");
-		else if (role === "admin") navigate("/admin");
-		else navigate("/student");
-	};
+		setError("");
+		setLoading(true);
+		const payload = { studentCode, password };
+		console.log(payload);
+		try {
+			const res = await axios.post(
+				"http://localhost:4000/api/v1/auths/login/",
+				payload,
+				{ withCredentials: true } // 👈 để nhận cookie từ server
+			);
 
+			const data = res.data;
+			if (!data.success) {
+				throw new Error(data.message || "Đăng nhập thất bại");
+			}
+			console.log(res);
+
+			// điều hướng theo roleId
+			const roleId = data.data.roleId;
+			if (roleId === 2) navigate("/teacher");
+			else if (roleId === 3) navigate("/admin");
+			else navigate("/");
+		} catch (err: any) {
+			setError(err.response?.data?.message || err.message || "Có lỗi xảy ra");
+		} finally {
+			setLoading(false);
+		}
+	};
 
 	return (
 		<div className="min-h-screen grid place-items-center bg-gradient-to-br from-indigo-50 to-white p-4">
 			<div className="w-full max-w-md bg-white rounded-2xl shadow-sm border p-6">
-				<h1 className="text-2xl font-semibold mb-1">Đăng nhập</h1>
-				<p className="text-sm text-gray-500 mb-6">Sử dụng email trường hoặc SSO</p>
+				<div className="text-center mb-6">
+					<h1 className="text-3xl font-bold text-indigo-700">CTIT Learn</h1>
+					<p className="text-gray-500 text-sm mt-1">Đăng nhập để tiếp tục</p>
+				</div>
+
 				<form onSubmit={onSubmit} className="space-y-4">
+					{error && (
+						<div className="text-red-600 text-sm text-center">{error}</div>
+					)}
+
 					<div className="space-y-1">
-						<label className="text-sm font-medium">Email</label>
+						<label className="text-sm font-medium">Mã số sinh viên</label>
 						<div className="relative">
-							<Mail className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+							<User className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
 							<input
-								type="email"
-								value={email}
-								onChange={(e) => setEmail(e.target.value)}
+								type="text"
+								value={studentCode}
+								onChange={(e) => setStudentCode(e.target.value)}
 								required
 								className="w-full rounded-xl border pl-10 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-								placeholder="ten.sv@ctit.edu.vn"
+								placeholder="VD: SV1022"
 							/>
 						</div>
 					</div>
-
 
 					<div className="space-y-1">
 						<label className="text-sm font-medium">Mật khẩu</label>
@@ -56,33 +84,20 @@ export default function Login() {
 						</div>
 					</div>
 
-
-					<div className="space-y-1">
-						<label className="text-sm font-medium">Vai trò</label>
-						<select
-							value={role}
-							onChange={(e) => setRole(e.target.value as any)}
-							className="w-full rounded-xl border px-3 py-2"
-						>
-							<option value="student">Sinh viên</option>
-							<option value="teacher">Giảng viên</option>
-							<option value="admin">Quản trị viên</option>
-						</select>
-					</div>
-
-
-					<button type="submit" className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 text-white py-2.5 hover:bg-indigo-700">
-						<LogIn className="h-4 w-4" /> Đăng nhập
+					<button
+						type="submit"
+						disabled={loading}
+						className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 mt-3 text-white py-2.5 hover:bg-indigo-700 disabled:opacity-50"
+					>
+						{loading ? (
+							<span>Đang đăng nhập...</span>
+						) : (
+							<>
+								<LogIn className="h-4 w-4" /> Đăng nhập
+							</>
+						)}
 					</button>
-
-
-					<button type="button" className="w-full rounded-xl border py-2.5 hover:bg-gray-50">Đăng nhập với SSO</button>
 				</form>
-
-
-				<p className="text-sm text-gray-600 mt-6 text-center">
-					Chưa có tài khoản? <a href="/register" className="text-indigo-600 hover:underline">Đăng ký</a>
-				</p>
 			</div>
 		</div>
 	);

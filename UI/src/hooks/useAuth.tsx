@@ -1,27 +1,35 @@
-import {createContext, useContext } from "react";
+// hooks/useAuth.ts
+import { useEffect, useState } from "react";
+import axios from "axios";
 
 interface User {
 	id: string;
-	name: string;
 	email: string;
-	role: "student" | "teacher" | "admin";
-	avatar?: string;
+	role?: "student" | "teacher" | "admin";
+	name: string;
+	roleId: number;
 }
 
-interface AuthContextType {
-	user: User | null;
-	isLoading: boolean;
-	login: (email: string, password: string) => Promise<void>;
-	logout: () => void;
+export function useAuth() {
+	const [user, setUser] = useState<User | null>(null);
+	const [loading, setLoading] = useState(true);
+
+	useEffect(() => {
+		async function fetchUser() {
+			try {
+				const res = await axios.get("http://localhost:4000/api/v1/auths/me", {
+					withCredentials: true,
+				});
+				setUser(res.data.user);
+			} catch {
+				setUser(null);
+			} finally {
+				setLoading(false);
+			}
+		}
+
+		fetchUser();
+	}, []);
+
+	return { user, loading };
 }
-
-export const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export const useAuth = () => {
-	const context = useContext(AuthContext);
-	if (context === undefined) {
-		throw new Error("useAuth must be used within an AuthProvider");
-	}
-	return context;
-};
-

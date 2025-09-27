@@ -3,6 +3,7 @@ import { catchAsync } from "../../utils/catchAsync";
 import { sendResponse } from "../../utils/response";
 import ApiError from "../../utils/ApiError";
 import * as studentService from "./student.service";
+import { prisma } from "../../prisma/client";
 
 export const create = catchAsync(async (req: Request, res: Response) => {
     const s = await studentService.createStudent(req.body);
@@ -42,20 +43,32 @@ export const detail = catchAsync(
     }
 );
 
-export const update = catchAsync(
-    async (req: Request, res: Response, next: NextFunction) => {
-        const id = Number(req.params.id);
-        const exist = await studentService.getStudent(id);
-        if (!exist) return next(new ApiError(404, "Student not found"));
+export const update = catchAsync(async (req, res, next) => {
+    const id = Number(req.params.id);
+    const exist = await studentService.getStudent(id);
+    if (!exist) return next(new ApiError(404, "Student not found"));
 
-        const updated = await studentService.updateStudent(id, req.body);
-        sendResponse(res, {
-            success: true,
-            message: "Student updated",
-            data: updated,
-        });
-    }
-);
+    // Tách phần studentData
+    const { fullName, email, phoneNumber, ...studentData } = req.body;
+
+    const updated = await prisma.student.update({
+        where: { id },
+        data: {
+            ...studentData,
+            user: {
+                update: { fullName, email, phoneNumber },
+            },
+        },
+        include: { user: true },
+    });
+
+    sendResponse(res, {
+        success: true,
+        message: "Student updated",
+        data: updated,
+    });
+});
+
 
 export const remove = catchAsync(
     async (req: Request, res: Response, next: NextFunction) => {

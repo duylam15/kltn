@@ -1,29 +1,15 @@
 import { Navigate } from "react-router-dom";
-import { useAuth } from "../context/authContext";
+import { useAuth } from "../hooks/useAuth";
 
-interface AdminRouteProps {
-	children: React.ReactNode;
-}
+const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+	const { user, loading } = useAuth();
 
-const AdminRoute: React.FC<AdminRouteProps> = ({ children }) => {
-	const { user, isLoading } = useAuth();
+	if (loading) return <p>Đang kiểm tra đăng nhập...</p>;
+	if (!user) return <Navigate to="/login" replace />;
 
-	if (isLoading) {
-		return <div>Loading...</div>;
-	}
-
-	if (!user) {
-		return <Navigate to="/login" replace />;
-	}
-
-	if (user.role !== "admin") {
-		// Redirect to appropriate dashboard based on role
-		if (user.role === "student") {
-			return <Navigate to="/" replace />;
-		}
-		if (user.role === "teacher") {
-			return <Navigate to="/teacher" replace />;
-		}
+	if (user.roleId !== 102) {
+		if (user.roleId === 100) return <Navigate to="/student" replace />;
+		if (user.roleId === 101) return <Navigate to="/teacher" replace />;
 		return <Navigate to="/login" replace />;
 	}
 

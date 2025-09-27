@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   BookOpen,
   Calendar,
@@ -16,9 +16,12 @@ import {
   X,
   Plus,
   Archive,
-  FolderOpen
+  FolderOpen,
+  Tag
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import api from "../utils/axiosInstance";
+import { Card, Skeleton } from "antd";
 
 export default function LayoutDefault() {
   const navigate = useNavigate();
@@ -34,27 +37,51 @@ export default function LayoutDefault() {
     { to: "/student/settings", label: "Cài đặt", icon: Settings },
   ];
 
-  // Enrolled classes - giống sidebar Google Classroom
-  const enrolledClasses = [
-    {
-      id: "sgu25",
-      label: "[SGU25] PPNCK trong CNTT - N02",
-      code: "SGU25_01 - Học kỳ 2",
-      initial: "S"
-    },
-    {
-      id: "java",
-      label: "Java 4 kì 2 2023 - 2024",
-      code: "JAVA_2023",
-      initial: "J"
-    },
-    {
-      id: "ai",
-      label: "Cơ sở trí tuệ nhân tạo sáng t4",
-      code: "AI_T4",
-      initial: "C"
-    },
-  ];
+  const handleLogout = async () => {
+    try {
+      await api.post("/auths/logout"); // BE clearCookie
+    } catch (err) {
+      console.error("Logout failed:", err);
+    }
+  };
+
+  const { courseId } = useParams();
+  const [section, setSection] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    if (!courseId) {
+      // Không có courseId => reset state
+      setSection(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(
+          `http://localhost:4000/api/v1/course-sections/${courseId}`
+        );
+        const json = await res.json();
+        if (mounted) {
+          setSection(json?.data ?? null);
+          setLoading(false);
+        }
+      } catch {
+        if (mounted) setLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [courseId]);
+
+
+
 
   return (
     <div className="h-screen  flex flex-col">
@@ -62,7 +89,7 @@ export default function LayoutDefault() {
       <header className="h-16 bg-[#f8fafd] flex-shrink-0 z-40">
         <div className="h-full flex items-center px-6">
           {/* Left Section */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-1">
             {/* Mobile Menu Button */}
             <button
               className="p-2 rounded-full hover:bg-gray-100 transition-colors"
@@ -84,6 +111,21 @@ export default function LayoutDefault() {
               </div>
               <span className="text-xl font-normal text-gray-700">Lớp học</span>
             </div>
+
+            {/* Thông tin lớp học – căn giữa */}
+            <div className="flex-1 flex ml-20">
+              {loading && courseId ? (
+                <Skeleton.Input active size="small" style={{ width: 320 }} />
+              ) : section ? (
+                <div className="flex items-center gap-3 text-center">
+                  <span className="font-bold text-sm text-gray-800">
+                    {section.subject.subjectCode} - {section.subject.subjectName} •{" "}
+                    {section.sectionCode} - {section.sectionName} ({section.term?.name})
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
           </div>
 
           {/* Right Section */}
@@ -92,7 +134,10 @@ export default function LayoutDefault() {
             <button className="p-2 rounded-full hover:bg-gray-100 transition-colors">
               <div className="grid grid-cols-3 gap-0.5 w-6 h-6">
                 {[...Array(9)].map((_, i) => (
-                  <div key={i} className="w-1.5 h-1.5 bg-gray-600 rounded-sm" />
+                  <div
+                    key={i}
+                    className="w-1.5 h-1.5 bg-gray-600 rounded-sm"
+                  />
                 ))}
               </div>
             </button>
@@ -102,6 +147,15 @@ export default function LayoutDefault() {
               <div className="h-8 w-8 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 text-white text-sm font-medium flex items-center justify-center">
                 U
               </div>
+            </button>
+
+            {/* Logout Button */}
+            <button
+              onClick={handleLogout}
+              className="ml-2 p-2 rounded-full hover:bg-red-100 transition-colors text-red-600"
+              title="Đăng xuất"
+            >
+              <LogOut className="w-5 h-5" />
             </button>
           </div>
         </div>
@@ -116,7 +170,7 @@ export default function LayoutDefault() {
         {/* Sidebar - Exact Google Classroom Style */}
         <aside className={`
           fixed lg:static inset-y-0 left-0 z-50 
-          ${sidebarCollapsed ? 'w-20 lg:w-20' : 'w-72 lg:w-72'}
+          ${sidebarCollapsed ? 'w-20 lg:w-20' : 'w-60 lg:w-60'}
           bg-[#f8fafd] flex-shrink-0
           transform transition-all duration-300 ease-in-out overflow-hidden
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
@@ -170,7 +224,7 @@ export default function LayoutDefault() {
         {/* Main Content */}
         <main className="flex-1 bg-gray-50 flex flex-col overflow-hidden">
           {/* Sub Navigation Tabs */}
-          <div className="flex-1 overflow-y-auto p-6 bg-white rounded-tl-3xl ">
+          <div className="flex-1 overflow-y-auto p-3 bg-white rounded-tl-3xl ">
             <Outlet />
           </div>
         </main>

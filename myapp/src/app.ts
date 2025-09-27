@@ -7,6 +7,8 @@ import pinoHttp from "pino-http";
 import routes from "./routes";
 import { notFound } from "./middlewares/notFound";
 import errorHandler from "./middlewares/errorHandler";
+import cookieParser from "cookie-parser";
+import path from "path";
 
 const logger = pino({
     transport:
@@ -17,9 +19,17 @@ const logger = pino({
 
 const app = express();
 
+app.use(
+    cors({
+        origin: "http://localhost:5173", // 👈 FE chạy trên Vite
+        credentials: true, // 👈 Cho phép gửi cookie
+    })
+);
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+
+app.use(cookieParser()); 
 app.use(pinoHttp({ logger }));
 app.use(helmet());
-app.use(cors());
 app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

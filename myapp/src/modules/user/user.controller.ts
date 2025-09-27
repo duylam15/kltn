@@ -76,37 +76,43 @@ export const detail = catchAsync(
     }
 );
 
-export const update = catchAsync(
-    async (req: Request, res: Response, next: NextFunction) => {
-        const id = Number(req.params.id);
-        const existing = await userService.getUser(id);
-        if (!existing) return next(new ApiError(404, "User not found"));
+export const update = catchAsync(async (req, res, next) => {
+    const id = Number(req.params.id); // hoặc để nguyên string nếu User.id là cuid
+    const existing = await userService.getUser(id);
+    if (!existing) return next(new ApiError(404, "User not found"));
 
-        const mapped = {
-            fullName: req.body.full_name ?? req.body.fullName,
-            avatarUrl: req.body.avatar_url ?? req.body.avatarUrl,
-            phone: req.body.phone,
-            dateOfBirth: req.body.date_of_birth ?? req.body.dateOfBirth,
-            address: req.body.address,
-            isActive:
-                typeof req.body.is_active === "boolean"
-                    ? req.body.is_active
-                    : req.body.isActive,
-        };
+   const mapped = {
+       email: req.body.email,
+       fullName: req.body.full_name ?? req.body.fullName,
+       avatarUrl: req.body.avatar_url ?? req.body.avatarUrl,
+       phone: req.body.phone,
+       dateOfBirth: req.body.date_of_birth ?? req.body.dateOfBirth,
+       address: req.body.address,
+       isActive:
+           typeof req.body.is_active === "boolean"
+               ? req.body.is_active
+               : req.body.isActive,
+   };
 
-        const updated = await userService.updateUser(id, mapped);
+    // lọc field undefined
+    const cleaned = Object.fromEntries(
+        Object.entries(mapped).filter(([_, v]) => v !== undefined && v !== null)
+    );
 
-        sendResponse(res, {
-            success: true,
-            message: "User updated",
-            data: {
-                id: updated.id,
-                email: updated.email,
-                fullName: updated.fullName,
-            },
-        });
-    }
-);
+    const updated = await userService.updateUser(id, cleaned);
+
+    sendResponse(res, {
+        success: true,
+        message: "User updated",
+        data: {
+            id: updated.id,
+            email: updated.email,
+            fullName: updated.fullName,
+            phone: updated.phone,
+        },
+    });
+});
+
 
 export const remove = catchAsync(
     async (req: Request, res: Response, next: NextFunction) => {

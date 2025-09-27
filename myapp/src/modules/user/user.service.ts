@@ -84,6 +84,7 @@ export const getUser = async (id: number) => {
 export const updateUser = async (
     id: number,
     data: {
+        email?: string;
         fullName?: string;
         avatarUrl?: string;
         phone?: string;
@@ -95,6 +96,7 @@ export const updateUser = async (
     return prisma.user.update({
         where: { id },
         data: {
+            email: data.email,
             fullName: data.fullName,
             avatarUrl: data.avatarUrl,
             phone: data.phone,
@@ -106,6 +108,7 @@ export const updateUser = async (
         },
     });
 };
+
 
 export const deleteUser = async (id: number) => {
     await prisma.user.delete({ where: { id } });

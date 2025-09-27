@@ -1,34 +1,67 @@
 import { prisma } from "../../prisma/client";
 import ApiError from "../../utils/ApiError";
+import type { StudentStatus } from "@prisma/client";
+
+// services/student.service.ts
+import bcrypt from "bcrypt";
+
+const SALT_ROUNDS = 10;
 
 export const createStudent = async (data: {
-    userId: number;
-    studentCode: string;
-    className?: string;
-    major?: string;
-    academicYear?: string;
-    enrollmentYear?: number;
+  studentCode: string;
+  password: string;
+  fullName: string;
+  email?: string;
+  className?: string;
+  major?: string;
+  academicYear?: string;
+  enrollmentYear?: number;
 }) => {
-    const user = await prisma.user.findUnique({ where: { id: data.userId } });
-    if (!user) throw new ApiError(400, "User not found");
+  // Check trùng studentCode
+  const existingStudent = await prisma.student.findUnique({
+    where: { studentCode: data.studentCode },
+  });
+  if (existingStudent) throw new ApiError(409, "Student code already exists");
 
-    const existingProfile = await prisma.student.findUnique({
-        where: { userId: data.userId },
+  // Check trùng email (nếu có)
+  if (data.email) {
+    const existingEmail = await prisma.user.findUnique({
+      where: { email: data.email },
     });
-    if (existingProfile)
-        throw new ApiError(409, "Student profile already exists");
+    if (existingEmail) throw new ApiError(409, "Email already exists");
+  }
 
-    return prisma.student.create({
-        data: {
-            userId: data.userId,
-            studentCode: data.studentCode,
-            className: data.className,
-            major: data.major,
-            academicYear: data.academicYear,
-            enrollmentYear: data.enrollmentYear,
+  // Hash password
+  const passwordHash = await bcrypt.hash(data.password, SALT_ROUNDS);
+
+  // Tạo user + student cùng lúc
+  const user = await prisma.user.create({
+    data: {
+      studentCode: data.studentCode,
+      email: data.email,
+      passwordHash,
+      fullName: data.fullName,
+      role: {
+        connect: { name: "student" }, // 👈 giả sử Role có sẵn record name="student"
+      },
+      student: {
+        create: {
+          studentCode: data.studentCode,
+          className: data.className,
+          major: data.major,
+          academicYear: data.academicYear,
+          enrollmentYear: data.enrollmentYear,
         },
-    });
+      },
+    },
+    include: {
+      student: true,
+    },
+  });
+
+  return user;
 };
+
 
 export const listStudents = async (params: {
     page: number;
@@ -75,7 +108,6 @@ export const getStudent = (id: number) =>
         },
     });
 
-import type { StudentStatus } from "@prisma/client";
 
 export const updateStudent = (
     id: number,
@@ -86,12 +118,24 @@ export const updateStudent = (
         enrollmentYear?: number;
         gpa?: number;
         status?: StudentStatus;
+        fullName?: string;
+        email?: string;
+        phoneNumber?: string;
     }
-) =>
-    prisma.student.update({
+) => {
+    const { fullName, email, phoneNumber, ...studentData } = data;
+
+    return prisma.student.update({
         where: { id },
-        data,
+        data: {
+            ...studentData,
+            user: {
+                update: { fullName, email },
+            },
+        },
+        include: { user: true },
     });
+};
 
 export const deleteStudent = (id: number) =>
     prisma.student.delete({ where: { id } });

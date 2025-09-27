@@ -3,6 +3,7 @@ import { RouterProvider } from "react-router-dom";
 import { router } from "./routes/Routes";
 import { AuthProvider } from "./hooks/AuthProvider";
 import "./App.css"; 
+import { Toaster } from "react-hot-toast";
 /**
  * App gọn nhẹ dùng RouterProvider với router đã có sẵn.
  * - Hỗ trợ lazy routes qua <Suspense>.
@@ -13,6 +14,7 @@ export default function App() {
     <AuthProvider>
       <Suspense fallback={<div className="p-4">Đang tải…</div>}>
         <RouterProvider router={router} />
+        <Toaster position="top-right" reverseOrder={false} />
       </Suspense>
     </AuthProvider>
   );

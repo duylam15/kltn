@@ -7,6 +7,8 @@ import {
     updateStudentSchema,
 } from "./student.validation";
 import * as controller from "./student.controller";
+import { requireAuth } from "../../middlewares/requireAuth";
+import { requirePermission } from "../../middlewares/requirePermission";
 
 // import { authenticate, requireRole } from '../../middlewares/auth';
 
@@ -16,7 +18,14 @@ const router = Router();
 // router.use(requireRole('admin')); // hoặc teacher tùy logic
 
 router.post("/", validate(createStudentSchema), controller.create);
-router.get("/", validate(listStudentQuerySchema), controller.list);
+router.get(
+    "/",
+    requireAuth, // phải login
+    requirePermission("student", "read"), // cần quyền student.read
+    validate(listStudentQuerySchema), // validate query
+    controller.list // controller xử lý
+);
+
 router.get("/:id", validate(studentIdParamSchema), controller.detail);
 router.patch("/:id", validate(updateStudentSchema), controller.update);
 router.delete("/:id", validate(studentIdParamSchema), controller.remove);

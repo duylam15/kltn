@@ -4,6 +4,39 @@ import { sendResponse } from "../../utils/response";
 import ApiError from "../../utils/ApiError";
 import * as teacherService from "./teacher.service";
 
+export async function getAllGroupsOfTeacher(req: Request, res: Response) {
+    try {
+        const teacherIdParam = Number(req.params.teacherId);
+        const {
+            userId, // tùy chọn: nếu FE chỉ biết userId
+            termId, // lọc theo kỳ
+            status, // lọc theo trạng thái section: planned|ongoing|completed|cancelled
+            activeOnly, // 'true' => chỉ lấy nhóm đang active
+            q, // tìm kiếm theo sectionCode / subjectName / groupName
+            page = "1",
+            pageSize = "50",
+        } = req.query as Record<string, string>;
+
+        const pageNum = Math.max(1, Number(page) || 1);
+        const sizeNum = Math.min(200, Math.max(1, Number(pageSize) || 50));
+
+        const result = await teacherService.listTeacherGroups({
+            teacherId: teacherIdParam,
+            userId: userId ? Number(userId) : undefined,
+            termId: termId ? Number(termId) : undefined,
+            status: status as any,
+            activeOnly: activeOnly === "true",
+            q,
+            page: pageNum,
+            pageSize: sizeNum,
+        });
+
+        res.json({ success: true, ...result }); // {data, page, pageSize, total}
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+}
+
 export const create = catchAsync(async (req: Request, res: Response) => {
     const t = await teacherService.createTeacher(req.body);
     sendResponse(
@@ -66,3 +99,4 @@ export const remove = catchAsync(
         sendResponse(res, { success: true, message: "Teacher deleted" });
     }
 );
+

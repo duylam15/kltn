@@ -1,5 +1,6 @@
-import { AuthContext } from "./useAuth";
-import { useState, useEffect} from "react";
+import { useState, useEffect, createContext, useContext } from "react";
+import axios from "axios";
+
 interface User {
 	id: string;
 	name: string;
@@ -8,70 +9,61 @@ interface User {
 	avatar?: string;
 }
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
-	children,
-}) => {
+interface AuthContextType {
+	user: User | null;
+	isLoading: boolean;
+	login: (studentCode: string, password: string) => Promise<void>;
+	logout: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | null>(null);
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 	const [user, setUser] = useState<User | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 
 	useEffect(() => {
-		// Check if user is logged in on app start
-		const checkAuth = async () => {
+		async function checkAuth() {
 			try {
-				const token = localStorage.getItem("token");
-				if (token) {
-					// Verify token with backend
-					const response = await fetch("/api/auth/verify", {
-						headers: {
-							Authorization: `Bearer ${token}`,
-						},
-					});
-					if (response.ok) {
-						const userData = await response.json();
-						setUser(userData);
-					} else {
-						localStorage.removeItem("token");
-					}
-				}
-			} catch (error) {
-				console.error("Auth check failed:", error);
-				localStorage.removeItem("token");
+				const res = await axios.get("http://localhost:4000/api/v1/auths/me", {
+					withCredentials: true, // 👈 gửi cookie HttpOnly
+				});
+				setUser(res.data.user);
+			} catch {
+				setUser(null);
 			} finally {
 				setIsLoading(false);
 			}
-		};
+		}
 
 		checkAuth();
 	}, []);
 
-	const login = async (email: string, password: string) => {
+	const login = async (studentCode: string, password: string) => {
 		setIsLoading(true);
 		try {
-			const response = await fetch("/api/auth/login", {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ email, password }),
+			await axios.post(
+				"http://localhost:4000/api/v1/auths/login",
+				{ studentCode, password },
+				{ withCredentials: true } // cookie set ở đây
+			);
+
+			// login xong thì gọi lại /me để lấy user info
+			const res = await axios.get("http://localhost:4000/api/v1/auths/me", {
+				withCredentials: true,
 			});
-
-			if (!response.ok) {
-				throw new Error("Login failed");
-			}
-
-			const data = await response.json();
-			localStorage.setItem("token", data.token);
-			setUser(data.user);
-		// eslint-disable-next-line no-useless-catch
-		} catch (error) {
-			throw error;
+			setUser(res.data.user);
 		} finally {
 			setIsLoading(false);
 		}
 	};
 
-	const logout = () => {
-		localStorage.removeItem("token");
+	const logout = async () => {
+		await axios.post(
+			"http://localhost:4000/api/v1/auths/logout",
+			{},
+			{ withCredentials: true }
+		);
 		setUser(null);
 	};
 
@@ -81,3 +73,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 		</AuthContext.Provider>
 	);
 };
+
+// Hook tiện dùng
+// eslint-disable-next-line react-refresh/only-export-components
+export function useAuth() {
+	const ctx = useContext(AuthContext);
+	if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+	return ctx;
+}

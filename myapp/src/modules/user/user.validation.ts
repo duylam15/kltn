@@ -9,13 +9,13 @@ export const createUserSchema = z.object({
 
 export const userIdParamSchema = z.object({
     params: z.object({
-        id: z.string().cuid(),
+        id: z.string(),
     }),
 });
 
 export const updateUserSchema = z.object({
     params: z.object({
-        id: z.string().cuid(),
+        id: z.string(),
     }),
     body: z.object({
         name: z.string().min(1).optional(),

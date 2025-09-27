@@ -120,11 +120,11 @@ export const getStudentsByGroup = catchAsync(async (req, res, next) => {
 });
 
 export const assignStudentToGroup = catchAsync(async (req, res) => {
-    const enrollmentId = Number(req.params.enrollmentId);
+    const studentId = Number(req.params.studentId);
     const { groupId } = req.body;
 
     const updated = await sectionEnrollmentService.updateSectionEnrollment(
-        enrollmentId,
+        studentId,
         { groupId } as any
     );
     sendResponse(res, {

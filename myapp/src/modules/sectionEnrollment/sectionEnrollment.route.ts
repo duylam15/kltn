@@ -40,7 +40,7 @@ router.get(
 );
 
 // Gán sinh viên vào group
-router.patch("/:enrollmentId/assign-group", controller.assignStudentToGroup);
+router.patch("/:studentId/assign-group", controller.assignStudentToGroup);
 
 // Xóa sinh viên khỏi group
 router.patch("/:enrollmentId/remove-group", controller.removeStudentFromGroup);

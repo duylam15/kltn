@@ -6,25 +6,18 @@ interface PublicRouteProps {
 }
 
 const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
-	const { user, isLoading } = useAuth();
+	const { user, loading } = useAuth();
 
-	if (isLoading) {
-		return <div>Loading...</div>;
-	}
+	if (loading) return <p>Đang kiểm tra đăng nhập...</p>;
 
+	// Nếu đã đăng nhập thì không cho vào public routes nữa
 	if (user) {
-		// Redirect to appropriate dashboard based on role
-		if (user.role === "student") {
-			return <Navigate to="/" replace />;
-		}
-		if (user.role === "teacher") {
-			return <Navigate to="/teacher" replace />;
-		}
-		if (user.role === "admin") {
-			return <Navigate to="/admin" replace />;
-		}
+		if (user.roleId === 100) return <Navigate to="/student" replace />;
+		if (user.roleId === 101) return <Navigate to="/teacher" replace />;
+		if (user.roleId === 102) return <Navigate to="/admin" replace />;
 	}
 
+	// Nếu chưa đăng nhập thì cho vào public route (login, register)
 	return <>{children}</>;
 };
 
