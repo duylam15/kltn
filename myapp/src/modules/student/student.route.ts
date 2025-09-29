@@ -18,13 +18,14 @@ const router = Router();
 // router.use(requireRole('admin')); // hoặc teacher tùy logic
 
 router.post("/", validate(createStudentSchema), controller.create);
-router.get(
-    "/",
-    requireAuth, // phải login
-    requirePermission("student", "read"), // cần quyền student.read
-    validate(listStudentQuerySchema), // validate query
-    controller.list // controller xử lý
-);
+// router.get(
+//     "/",
+//     requireAuth, // phải login
+//     // requirePermission("student", "read"), // cần quyền student.read
+//     validate(listStudentQuerySchema), // validate query
+//     controller.list // controller xử lý
+// );
+router.get("/", validate(listStudentQuerySchema), controller.list);
 
 router.get("/:id", validate(studentIdParamSchema), controller.detail);
 router.patch("/:id", validate(updateStudentSchema), controller.update);

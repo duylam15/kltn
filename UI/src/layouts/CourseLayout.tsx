@@ -4,13 +4,14 @@ import { Card, Tabs, Tag, Skeleton, Typography } from "antd";
 
 const tabDefs = [
 	{ key: "overview", label: "Tổng quan" },
+	{ key: "friend", label: "Nhóm" },  // 👈 thêm
 	{ key: "roll-call", label: "Điểm danh" },
-	{ key: "assignments", label: "Bài kiểm tra" },
 	{ key: "materials", label: "Tài liệu" },
 	{ key: "qa", label: "Thảo luận" },
+	{ key: "assignments", label: "Bài kiểm tra" },
 	{ key: "grades", label: "Điểm số" },
-	{ key: "friend", label: "Nhóm" },  // 👈 thêm
 ];
+
 const CourseLayout: React.FC = () => {
 	const { courseId } = useParams();
 	const location = useLocation();

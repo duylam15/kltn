@@ -1,6 +1,7 @@
 import { prisma } from "../../prisma/client";
 import ApiError from "../../utils/ApiError";
 import { Prisma } from "@prisma/client";
+import bcrypt from "bcrypt";
 
 type Params = {
     teacherId: number;
@@ -142,38 +143,72 @@ export async function listTeacherGroups(params: Params) {
     return { data, page, pageSize, total };
 }
 
-
-
+const SALT_ROUNDS = 10;
 
 export const createTeacher = async (data: {
-    user_id: number;
-    teacher_code: string;
+    teacherCode: string;
+    password: string;
+    fullName: string;
+    email?: string;
     department?: string;
     position?: string;
     specialization?: string;
 }) => {
-    const user = await prisma.user.findUnique({
-        where: { id: data.user_id },
-    });
-    if (!user) throw new ApiError(400, "User not found");
+    // Validate input
+    if (!data.teacherCode) throw new ApiError(400, "teacherCode is required");
+    if (!data.password) throw new ApiError(400, "password is required");
+    if (!data.fullName) throw new ApiError(400, "fullName is required");
 
-    const existingProfile = await prisma.teacher.findUnique({
-        where: { id: data.user_id },
+    // Check trùng teacherCode
+    const existingTeacher = await prisma.teacher.findFirst({
+        where: { teacherCode: data.teacherCode },
     });
-    if (existingProfile)
-        throw new ApiError(409, "Teacher profile already exists for this user");
+    if (existingTeacher) throw new ApiError(409, "Teacher code already exists");
 
-    const teacher = await prisma.teacher.create({
+    // Check trùng email (nếu có)
+    if (data.email) {
+        const existingEmail = await prisma.user.findUnique({
+            where: { email: data.email },
+        });
+        if (existingEmail) throw new ApiError(409, "Email already exists");
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(data.password, SALT_ROUNDS);
+
+    // Tạo user + teacher
+    const user = await prisma.user.create({
         data: {
-            userId: data.user_id,
-            teacherCode: data.teacher_code,
-            department: data.department,
-            position: data.position,
-            specialization: data.specialization,
+            email: data.email,
+            passwordHash,
+            fullName: data.fullName,
+            role: {
+                connect: { name: "teacher" }, // 👈 role teacher phải có sẵn trong DB
+            },
+            teacher: {
+                create: {
+                    teacherCode: data.teacherCode,
+                    department: data.department,
+                    position: data.position,
+                    specialization: data.specialization,
+                },
+            },
+        },
+        include: {
+            teacher: true,
+            role: true,
         },
     });
-    return teacher;
+
+    return {
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role?.name,
+        teacher: user.teacher,
+    };
 };
+
 
 export const listTeachers = async (params: {
     page: number;
@@ -188,10 +223,11 @@ export const listTeachers = async (params: {
     if (params.position)
         where.position = { contains: params.position, mode: "insensitive" };
     if (params.q) {
-        where.OR = [
-            { teacher_code: { contains: params.q, mode: "insensitive" } },
-            { specialization: { contains: params.q, mode: "insensitive" } },
-        ];
+       where.OR = [
+           { teacherCode: { contains: params.q, mode: "insensitive" } },
+           { specialization: { contains: params.q, mode: "insensitive" } },
+       ];
+
     }
 
     const [items, total] = await Promise.all([

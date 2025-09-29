@@ -2,9 +2,6 @@ import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import axios from "axios";
 
-import LayoutDefault from "../layouts/LayoutDefault";
-import LayoutTeacher from "../layouts/LayoutTeacher";
-import LayoutAdmin from "../layouts/LayoutAdmin";
 import type { JSX } from "react/jsx-runtime";
 
 type User = {

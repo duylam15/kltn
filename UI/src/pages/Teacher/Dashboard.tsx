@@ -1,18 +1,21 @@
 import { useEffect, useState } from "react";
 import { Card, Spin, Typography, Row, Col } from "antd";
 import { create } from './../../../../myapp/src/modules/term/term.controller';
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
 const { Title, Text } = Typography;
 
 export default function Dashboard() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch("http://localhost:4000/api/v1/teachers/100/groups");
-        const json = await res.json();
+        const res = await axios.get("http://localhost:4000/api/v1/teachers/100/groups");
+        const json = await res.data;
         if (json.success) {
           setData(json.data);
         }
@@ -45,6 +48,7 @@ export default function Dashboard() {
                   title={section.sectionName}
                   bordered
                   style={{ height: "100%" }}
+                  onClick={() => navigate(`/teacher/courses/${section.sectionId}`)} // Chuyển hướng khi click
                 >
                   <p>
                     <Text strong>Tên lớp:</Text> {section.sectionName}
@@ -53,7 +57,7 @@ export default function Dashboard() {
                     <Text strong>Kỳ học:</Text> {section.term?.code} - {section.term?.name}
                   </p>
                   <p>
-                    <Text strong>Trạng thái:</Text> {section.createdAt}
+                    <Text strong>Id:</Text> {section.sectionId}
                   </p>
                 </Card>
               </Col>

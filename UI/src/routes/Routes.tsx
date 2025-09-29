@@ -12,7 +12,7 @@ import Login from "../pages/Auth/Login";
 import Register from "../pages/Auth/Register";
 
 // Student pages
-import Dashboard from "../pages/Student/Dashboard";
+import Dashboard from "../pages/Teacher/Dashboard";
 import Courses from "../pages/Student/Courses";
 import CourseDetail from "../pages/Student/CourseDetail";
 
@@ -29,7 +29,6 @@ import AdminQuestions from "../pages/Admin/AdminQuestions";
 import Notifications from "../pages/Admin/Notifications";
 import Reports from "../pages/Admin/Reports";
 import Roles from "../pages/Admin/Roles";
-import Users from "../pages/Admin/Users";
 
 // Route guards
 import PublicRoute from "./PublicRoute";
@@ -37,6 +36,12 @@ import StudentRoute from "./StudentRoute";
 import TeacherRoute from "./TeacherRoute";
 import AdminRoute from "./AdminRoute";
 import Error from "./Error";
+import { requirePermission } from './../../../myapp/src/middlewares/requirePermission';
+import RequirePermission from "./RequirePermission";
+import Students from "../pages/Admin/Students";
+import Teachers from "../pages/Admin/Teachers";
+import DashboardStudent from "../pages/Student/DashboardStudent";
+import CourseLayoutStudent from "../layouts/CourseLayoutStudent";
 
 export const router = createBrowserRouter([
   // ========== Root check auth ==========
@@ -93,11 +98,11 @@ export const router = createBrowserRouter([
     ),
     errorElement: <Error />,
     children: [
-      { index: true, element: <Dashboard /> },
+      { index: true, element: <DashboardStudent /> },
       { path: "courses", element: <Courses /> },
       {
         path: "courses/:courseId",
-        element: <CourseLayout />,
+        element: <CourseLayoutStudent />,
         children: [
           { index: true, loader: () => redirect("overview") },
           { path: "overview", element: <Overview /> },
@@ -119,11 +124,19 @@ export const router = createBrowserRouter([
     ),
     errorElement: <Error />,
     children: [
-      { index: true, element: <TeacherDashboard /> },
-      { path: "overview", element: <Overview /> },
-      { path: "materials", element: <Materials /> },
-      { path: "roll-call", element: <RollCall /> },
-      { path: "students", element: <StudentList /> },
+      { index: true, element: <Dashboard /> },
+      { path: "courses", element: <Courses /> },
+      {
+        path: "courses/:courseId",
+        element: <CourseLayout />,
+        children: [
+          { index: true, loader: () => redirect("overview") },
+          { path: "overview", element: <Overview /> },
+          { path: "friend", element: <StudentList /> },
+          { path: "materials", element: <Materials /> },
+          { path: "roll-call", element: <RollCall /> },
+        ],
+      },
     ],
   },
 
@@ -142,7 +155,15 @@ export const router = createBrowserRouter([
       { path: "notifications", element: <Notifications /> },
       { path: "reports", element: <Reports /> },
       { path: "roles", element: <Roles /> },
-      { path: "users", element: <Users /> },
+      {
+        path: "students",
+        element: (
+          <RequirePermission permission="user:view">
+            <Students />
+          </RequirePermission>
+        )
+      },
+      { path: "teachers", element: <Teachers /> },
     ],
   },
 

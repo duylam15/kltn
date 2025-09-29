@@ -8,58 +8,80 @@ import bcrypt from "bcrypt";
 const SALT_ROUNDS = 10;
 
 export const createStudent = async (data: {
-  studentCode: string;
-  password: string;
-  fullName: string;
-  email?: string;
-  className?: string;
-  major?: string;
-  academicYear?: string;
-  enrollmentYear?: number;
+    studentCode: string;
+    password: string;
+    fullName: string;
+    email?: string;
+    className?: string;
+    major?: string;
+    academicYear?: string;
+    enrollmentYear?: number;
 }) => {
-  // Check trùng studentCode
-  const existingStudent = await prisma.student.findUnique({
-    where: { studentCode: data.studentCode },
-  });
-  if (existingStudent) throw new ApiError(409, "Student code already exists");
+    // Validate input
+    if (!data.studentCode) {
+        throw new ApiError(400, "studentCode is required");
+    }
+    if (!data.password) {
+        throw new ApiError(400, "password is required");
+    }
+    if (!data.fullName) {
+        throw new ApiError(400, "fullName is required");
+    }
 
-  // Check trùng email (nếu có)
-  if (data.email) {
-    const existingEmail = await prisma.user.findUnique({
-      where: { email: data.email },
+    // Check trùng studentCode
+    const existingStudent = await prisma.student.findFirst({
+        where: { studentCode: data.studentCode },
     });
-    if (existingEmail) throw new ApiError(409, "Email already exists");
-  }
+    if (existingStudent) {
+        throw new ApiError(409, "Student code already exists");
+    }
 
-  // Hash password
-  const passwordHash = await bcrypt.hash(data.password, SALT_ROUNDS);
+    // Check trùng email (nếu có)
+    if (data.email) {
+        const existingEmail = await prisma.user.findUnique({
+            where: { email: data.email },
+        });
+        if (existingEmail) {
+            throw new ApiError(409, "Email already exists");
+        }
+    }
 
-  // Tạo user + student cùng lúc
-  const user = await prisma.user.create({
-    data: {
-      studentCode: data.studentCode,
-      email: data.email,
-      passwordHash,
-      fullName: data.fullName,
-      role: {
-        connect: { name: "student" }, // 👈 giả sử Role có sẵn record name="student"
-      },
-      student: {
-        create: {
-          studentCode: data.studentCode,
-          className: data.className,
-          major: data.major,
-          academicYear: data.academicYear,
-          enrollmentYear: data.enrollmentYear,
+    // Hash password
+    const passwordHash = await bcrypt.hash(data.password, SALT_ROUNDS);
+
+    // Tạo user + student
+    const user = await prisma.user.create({
+        data: {
+            studentCode: data.studentCode, // nếu user có field này
+            email: data.email,
+            passwordHash,
+            fullName: data.fullName,
+            role: {
+                connect: { name: "student" }, // đảm bảo role "student" có sẵn
+            },
+            student: {
+                create: {
+                    studentCode: data.studentCode,
+                    className: data.className,
+                    major: data.major,
+                    academicYear: data.academicYear,
+                    enrollmentYear: data.enrollmentYear,
+                },
+            },
         },
-      },
-    },
-    include: {
-      student: true,
-    },
-  });
+        include: {
+            student: true,
+            role: true,
+        },
+    });
 
-  return user;
+    return {
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role?.name,
+        student: user.student,
+    };
 };
 
 

@@ -10,22 +10,24 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
 	const { user, loading } = useAuth();
 	const location = useLocation();
 
-	if (loading) return <p>Đang kiểm tra đăng nhập...</p>;
+	if (loading) return <p>⏳ Đang kiểm tra đăng nhập...</p>;
 
 	// Nếu chưa đăng nhập
 	if (!user) {
 		return <Navigate to="/login" replace />;
 	}
 
+	const roleId = user.role?.id; // 👈 lấy từ user.role.id
+
 	// Nếu role hợp lệ → cho vào
-	if (allowedRoles.includes(user.roleId)) {
+	if (roleId && allowedRoles.includes(roleId)) {
 		return <>{children}</>;
 	}
 
-	// Nếu role không hợp lệ → đưa về trang đúng role
-	if (user.roleId === 100) return <Navigate to="/student" state={{ from: location }} replace />;
-	if (user.roleId === 101) return <Navigate to="/teacher" state={{ from: location }} replace />;
-	if (user.roleId === 102) return <Navigate to="/admin" state={{ from: location }} replace />;
+	// Nếu role không hợp lệ → đưa về đúng trang role
+	if (roleId === 100) return <Navigate to="/student" state={{ from: location }} replace />;
+	if (roleId === 101) return <Navigate to="/teacher" state={{ from: location }} replace />;
+	if (roleId === 102) return <Navigate to="/admin" state={{ from: location }} replace />;
 
 	// fallback
 	return <Navigate to="/login" replace />;

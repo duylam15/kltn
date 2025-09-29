@@ -1,13 +1,23 @@
-// hooks/useAuth.ts
 import { useEffect, useState } from "react";
 import axios from "axios";
 
-interface User {
-	id: string;
-	email: string;
-	role?: "student" | "teacher" | "admin";
+interface Permission {
+	id: number;
+	name: string; // ví dụ: "user:create"
+}
+
+interface Role {
+	id: number;
 	name: string;
-	roleId: number;
+	permissions: Permission[];
+}
+
+interface User {
+	id: number;
+	email: string;
+	fullName: string;
+	studentCode?: string;
+	role: Role;
 }
 
 export function useAuth() {
@@ -20,16 +30,20 @@ export function useAuth() {
 				const res = await axios.get("http://localhost:4000/api/v1/auths/me", {
 					withCredentials: true,
 				});
+				console.log("📌 [ME RESPONSE]", res.data);
+				console.log("📌 [useAuth setUser]", res.data.user);
+
 				setUser(res.data.user);
-			} catch {
+			} catch (err: any) {
+				console.error("❌ [ME ERROR]", err.response?.data || err.message);
 				setUser(null);
 			} finally {
 				setLoading(false);
 			}
 		}
-
 		fetchUser();
 	}, []);
+
 
 	return { user, loading };
 }

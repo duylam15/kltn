@@ -12,9 +12,10 @@ const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
 
 	// Nếu đã đăng nhập thì không cho vào public routes nữa
 	if (user) {
-		if (user.roleId === 100) return <Navigate to="/student" replace />;
-		if (user.roleId === 101) return <Navigate to="/teacher" replace />;
-		if (user.roleId === 102) return <Navigate to="/admin" replace />;
+		const roleId = user.role?.id;
+		if (roleId === 100) return <Navigate to="/student" replace />;
+		if (roleId === 101) return <Navigate to="/teacher" replace />;
+		if (roleId === 102) return <Navigate to="/admin" replace />;
 	}
 
 	// Nếu chưa đăng nhập thì cho vào public route (login, register)

@@ -1,9 +1,9 @@
 import { Suspense } from "react";
 import { RouterProvider } from "react-router-dom";
 import { router } from "./routes/Routes";
-import { AuthProvider } from "./hooks/AuthProvider";
 import "./App.css"; 
 import { Toaster } from "react-hot-toast";
+import { AuthProvider } from "./context/authContext";
 /**
  * App gọn nhẹ dùng RouterProvider với router đã có sẵn.
  * - Hỗ trợ lazy routes qua <Suspense>.

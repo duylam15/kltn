@@ -15,31 +15,38 @@ export default function Login() {
 		setError("");
 		setLoading(true);
 		const payload = { studentCode, password };
-		console.log(payload);
+		console.log("Payload:", payload);
+
 		try {
 			const res = await axios.post(
-				"http://localhost:4000/api/v1/auths/login/",
+				"http://localhost:4000/api/v1/auths/login", // ❌ bỏ dấu "/" cuối
 				payload,
-				{ withCredentials: true } // 👈 để nhận cookie từ server
+				{ withCredentials: true } // để nhận cookie HttpOnly
 			);
+
+			console.log("Login response:", res.data);
 
 			const data = res.data;
 			if (!data.success) {
 				throw new Error(data.message || "Đăng nhập thất bại");
 			}
-			console.log(res);
 
-			// điều hướng theo roleId
-			const roleId = data.data.roleId;
-			if (roleId === 2) navigate("/teacher");
-			else if (roleId === 3) navigate("/admin");
+			// lấy roleId đúng
+			const roleId = data.data.roleId ?? data.data.role?.id;
+			console.log("roleId:", roleId);
+
+			if (roleId === 100) navigate("/student");
+			else if (roleId === 101) navigate("/teacher");
+			else if (roleId === 102) navigate("/admin");
 			else navigate("/");
 		} catch (err: any) {
+			console.error("Login error:", err.response?.data || err.message);
 			setError(err.response?.data?.message || err.message || "Có lỗi xảy ra");
 		} finally {
 			setLoading(false);
 		}
 	};
+
 
 	return (
 		<div className="min-h-screen grid place-items-center bg-gradient-to-br from-indigo-50 to-white p-4">

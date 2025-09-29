@@ -25,6 +25,7 @@ import {
 import axios from "axios";
 import dayjs from "dayjs";
 import { toast } from 'react-hot-toast';
+import { useAuth } from "../../context/authContext";
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -155,6 +156,7 @@ export default function Roles() {
 
 	// Custom state for permission selection
 	const [selectedPermissions, setSelectedPermissions] = useState<number[]>([]);
+	const { hasPermission } = useAuth(); // ✅ thêm dòng này
 
 	useEffect(() => {
 		fetchRoles();
@@ -319,34 +321,39 @@ export default function Roles() {
 							}}
 						/>
 					</Tooltip>
-					<Tooltip title="Sửa">
-						<Button
-							icon={<EditOutlined />}
-							size="small"
-							onClick={() => {
-								setEditing(record);
-								form.setFieldsValue({
-									...record,
-								});
-								// FIX: Đúng cách map permissions từ API response
-								const currentPermissionIds = record.permissions?.map(p => p.permission.id) || [];
-								setSelectedPermissions(currentPermissionIds);
-								setModalOpen(true);
-							}}
-						/>
-					</Tooltip>
-					<Tooltip title="Xóa">
-						<Popconfirm
-							title="Xóa vai trò"
-							description="Bạn có chắc muốn xóa vai trò này?"
-							okText="Xóa"
-							cancelText="Hủy"
-							okButtonProps={{ danger: true }}
-							onConfirm={() => handleDelete(record.id)}
-						>
-							<Button danger size="small" icon={<DeleteOutlined />} />
-						</Popconfirm>
-					</Tooltip>
+					{hasPermission("role:update") && (
+						<Tooltip title="Sửa">
+							<Tooltip title="Sửa">
+								<Button
+									icon={<EditOutlined />}
+									size="small"
+									onClick={() => {
+										setEditing(record);
+										form.setFieldsValue({
+											...record,
+										});
+										const currentPermissionIds = record.permissions?.map(p => p.permission.id) || [];
+										setSelectedPermissions(currentPermissionIds);
+										setModalOpen(true);
+									}}
+								/>
+							</Tooltip>
+						</Tooltip>
+					)}
+					{hasPermission("role:delete") && (
+						<Tooltip title="Xóa">
+							<Popconfirm
+								title="Xóa vai trò"
+								description="Bạn có chắc muốn xóa vai trò này?"
+								okText="Xóa"
+								cancelText="Hủy"
+								okButtonProps={{ danger: true }}
+								onConfirm={() => handleDelete(record.id)}
+							>
+								<Button danger size="small" icon={<DeleteOutlined />} />
+							</Popconfirm>
+						</Tooltip>
+					)}
 				</div>
 			),
 		},
@@ -382,18 +389,21 @@ export default function Roles() {
 					<Button icon={<ReloadOutlined />} onClick={fetchRoles}>
 						Refresh
 					</Button>
-					<Button
-						type="primary"
-						icon={<PlusOutlined />}
-						onClick={() => {
-							setEditing(null);
-							form.resetFields();
-							setSelectedPermissions([]);
-							setModalOpen(true);
-						}}
-					>
-						Thêm vai trò
-					</Button>
+					{hasPermission("role:create") && (
+						<Button
+							type="primary"
+							icon={<PlusOutlined />}
+							onClick={() => {
+								setEditing(null);
+								form.resetFields();
+								setSelectedPermissions([]);
+								setModalOpen(true);
+							}}
+						>
+							Thêm vai trò
+						</Button>
+					)}
+
 				</div>
 			</div>
 

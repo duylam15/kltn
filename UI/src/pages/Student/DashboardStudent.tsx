@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Card, Spin, Typography, Row, Col } from "antd";
-import { create } from './../../../../myapp/src/modules/term/term.controller';
+import { create } from '../../../../myapp/src/modules/term/term.controller';
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 

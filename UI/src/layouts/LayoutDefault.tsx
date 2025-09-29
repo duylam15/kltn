@@ -40,6 +40,7 @@ export default function LayoutDefault() {
   const handleLogout = async () => {
     try {
       await api.post("/auths/logout"); // BE clearCookie
+      navigate("/login");
     } catch (err) {
       console.error("Logout failed:", err);
     }
@@ -86,7 +87,7 @@ export default function LayoutDefault() {
   return (
     <div className="h-screen  flex flex-col">
       {/* Header - Exact Google Classroom Style */}
-      <header className="h-16 bg-[#f8fafd] flex-shrink-0 z-40">
+      <header className="h-16 bg-[#edf3fc] flex-shrink-0 z-40">
         <div className="h-full flex items-center px-6">
           {/* Left Section */}
           <div className="flex items-center gap-4 flex-1">
@@ -171,7 +172,7 @@ export default function LayoutDefault() {
         <aside className={`
           fixed lg:static inset-y-0 left-0 z-50 
           ${sidebarCollapsed ? 'w-20 lg:w-20' : 'w-60 lg:w-60'}
-          bg-[#f8fafd] flex-shrink-0
+          bg-[#e7effc] flex-shrink-0
           transform transition-all duration-300 ease-in-out overflow-hidden
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}>
@@ -201,8 +202,8 @@ export default function LayoutDefault() {
                 onClick={() => setSidebarOpen(false)}
                 className={({ isActive }) =>
                   `flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-4'} py-3 rounded-lg text-sm font-medium transition-all duration-300 group overflow-x-hidden ${isActive
-                    ? "bg-blue-100 text-blue-700"
-                    : "text-gray-700 hover:bg-gray-100"
+                    ? "bg-blue-200 text-blue-700"
+                    : "text-gray-700 hover:bg-blue-200"
                   }`
                 }
                 title={sidebarCollapsed ? item.label : ''}
@@ -222,9 +223,9 @@ export default function LayoutDefault() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 bg-gray-50 flex flex-col overflow-hidden">
+        <main className="flex-1 bg-[#e7effc] flex flex-col overflow-hidden">
           {/* Sub Navigation Tabs */}
-          <div className="flex-1 overflow-y-auto p-3 bg-white rounded-tl-3xl ">
+          <div className="flex-1 overflow-y-auto p-3 bg-[#fff] rounded-tl-3xl ">
             <Outlet />
           </div>
         </main>

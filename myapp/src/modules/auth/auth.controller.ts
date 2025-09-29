@@ -158,8 +158,6 @@ export async function logout(req: Request, res: Response) {
   }
 }
 
-
-
 export async function me(req: AuthRequest, res: Response) {
     if (!req.user) {
         return res
@@ -174,8 +172,20 @@ export async function me(req: AuthRequest, res: Response) {
                 id: true,
                 email: true,
                 fullName: true,
-                roleId: true,
                 studentCode: true,
+                role: {
+                    select: {
+                        id: true,
+                        name: true,
+                        permissions: {
+                            select: {
+                                permission: {
+                                    select: { id: true, name: true },
+                                },
+                            },
+                        },
+                    },
+                },
             },
         });
 
@@ -185,10 +195,27 @@ export async function me(req: AuthRequest, res: Response) {
                 .json({ success: false, message: "User not found" });
         }
 
-        return res.json({ success: true, user });
+        return res.json({
+            success: true,
+            user: {
+                id: user.id,
+                email: user.email,
+                fullName: user.fullName,
+                studentCode: user.studentCode,
+                role: {
+                    id: user.role.id,
+                    name: user.role.name,
+                    permissions: user.role.permissions.map(
+                        (rp) => rp.permission
+                    ),
+                },
+            },
+        });
     } catch (e) {
+        console.error("Me error:", e);
         return res
             .status(500)
             .json({ success: false, message: "Error fetching user" });
     }
 }
+
