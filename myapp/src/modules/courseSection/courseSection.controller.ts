@@ -25,8 +25,6 @@ export const list = catchAsync(async (req: Request, res: Response) => {
     const { status, subject_id, term_id, q } = req.query as any;
 
     const result = await courseSectionService.listCourseSections({
-        page,
-        limit,
         status,
         subjectId: subject_id ? Number(subject_id) : undefined,
         termId: term_id ? Number(term_id) : undefined,

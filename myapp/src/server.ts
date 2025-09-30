@@ -1,4 +1,4 @@
-import env from "./config/env";
+import env, { buildDbUrl } from "./config/env";
 import app from "./app";
 import { prisma } from "./prisma/client";
 
@@ -6,6 +6,7 @@ const start = async () => {
     try {
         await prisma.$connect();
         app.listen(env.port, () => {
+            console.log("Database url ",buildDbUrl());
             console.log(`Server running at http://localhost:${env.port}`);
         });
     } catch (err) {

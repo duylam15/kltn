@@ -5,7 +5,8 @@ import type { CourseSectionStatus } from "@prisma/client";
 export const createCourseSection = async (data: {
     subjectId: number;
     termId: number;
-    sectionCode: string;
+    sectionCode?: string;
+    sectionName: string;
     schedule?: any;
     maxStudents?: number;
     status?: CourseSectionStatus;
@@ -18,16 +19,12 @@ export const createCourseSection = async (data: {
     const term = await prisma.term.findUnique({ where: { id: data.termId } });
     if (!term) throw new ApiError(400, "Term not found");
 
-    const existingSection = await prisma.courseSection.findUnique({
-        where: { sectionCode: data.sectionCode },
-    });
-    if (existingSection) throw new ApiError(409, "Section code already exists");
-
     return prisma.courseSection.create({
         data: {
             subjectId: data.subjectId,
             termId: data.termId,
-            sectionCode: data.sectionCode,
+            sectionCode: data.sectionCode || "",
+            sectionName: data.sectionName,
             schedule: data.schedule,
             maxStudents: data.maxStudents || 50,
             status: data.status || "planned",
@@ -40,8 +37,6 @@ export const createCourseSection = async (data: {
 };
 
 export const listCourseSections = async (params: {
-    page: number;
-    limit: number;
     status?: CourseSectionStatus;
     subjectId?: number;
     termId?: number;
@@ -67,28 +62,37 @@ export const listCourseSections = async (params: {
         ];
     }
 
-    const [items, total] = await Promise.all([
-        prisma.courseSection.findMany({
-            where,
-            include: {
-                subject: true,
-                term: true,
-                _count: {
-                    select: {
-                        instructors: true,
-                        groups: true,
-                        enrollments: true,
+    const items = await prisma.courseSection.findMany({
+        where,
+        include: {
+            subject: true,
+            term: true,
+            instructors: {
+                include: {
+                    teacher: {
+                        select: {
+                            id: true,
+                            user: {
+                                select: {
+                                    fullName: true,
+                                },
+                            },
+                        },
                     },
                 },
             },
-            orderBy: { createdAt: "desc" },
-            skip: (params.page - 1) * params.limit,
-            take: params.limit,
-        }),
-        prisma.courseSection.count({ where }),
-    ]);
+            _count: {
+                select: {
+                    instructors: true,
+                    groups: true,
+                    enrollments: true,
+                },
+            },
+        },
+        orderBy: { createdAt: "desc" },
+    });
 
-    return { items, total };
+    return { items, total: items.length };
 };
 
 export const getCourseSection = (id: number) =>

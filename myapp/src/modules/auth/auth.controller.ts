@@ -186,6 +186,26 @@ export async function me(req: AuthRequest, res: Response) {
                         },
                     },
                 },
+                // lấy thêm thông tin teacher & student
+                teacher: {
+                    select: {
+                        id: true,
+                        teacherCode: true,
+                        department: true,
+                        position: true,
+                        specialization: true,
+                    },
+                },
+                student: {
+                    select: {
+                        id: true,
+                        className: true,
+                        major: true,
+                        academicYear: true,
+                        enrollmentYear: true,
+                        status: true,
+                    },
+                },
             },
         });
 
@@ -209,6 +229,8 @@ export async function me(req: AuthRequest, res: Response) {
                         (rp) => rp.permission
                     ),
                 },
+                teacher: user.teacher || null,
+                student: user.student || null,
             },
         });
     } catch (e) {
@@ -218,4 +240,5 @@ export async function me(req: AuthRequest, res: Response) {
             .json({ success: false, message: "Error fetching user" });
     }
 }
+
 

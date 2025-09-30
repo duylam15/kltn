@@ -29,6 +29,8 @@ import AdminQuestions from "../pages/Admin/AdminQuestions";
 import Notifications from "../pages/Admin/Notifications";
 import Reports from "../pages/Admin/Reports";
 import Roles from "../pages/Admin/Roles";
+import CoursesAdmin from "../pages/Admin/CoursesAdmin";
+
 
 // Route guards
 import PublicRoute from "./PublicRoute";
@@ -42,6 +44,8 @@ import Students from "../pages/Admin/Students";
 import Teachers from "../pages/Admin/Teachers";
 import DashboardStudent from "../pages/Student/DashboardStudent";
 import CourseLayoutStudent from "../layouts/CourseLayoutStudent";
+import OverviewAdmin from "../pages/Admin/OverviewAdmin";
+import Instructors from "../pages/Admin/Instructors";
 
 export const router = createBrowserRouter([
   // ========== Root check auth ==========
@@ -155,13 +159,32 @@ export const router = createBrowserRouter([
       { path: "notifications", element: <Notifications /> },
       { path: "reports", element: <Reports /> },
       { path: "roles", element: <Roles /> },
+      { path: "instructors", element: <Instructors /> },
+
+      // Admin courses
+      {
+        path: "courses",
+        element: <CoursesAdmin />, // Trang danh sách courses
+      },
+      {
+        path: "courses/:courseId",
+        element: <CourseLayout />, // Layout chi tiết 1 course
+        children: [
+          { index: true, loader: () => redirect("overview") },
+          { path: "overview", element: <OverviewAdmin /> },
+          { path: "friend", element: <StudentList /> },
+          { path: "materials", element: <Materials /> },
+          { path: "roll-call", element: <RollCall /> },
+        ],
+      },
+
       {
         path: "students",
         element: (
           <RequirePermission permission="user:view">
             <Students />
           </RequirePermission>
-        )
+        ),
       },
       { path: "teachers", element: <Teachers /> },
     ],
