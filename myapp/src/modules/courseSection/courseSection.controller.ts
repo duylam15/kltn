@@ -4,6 +4,7 @@ import { sendResponse } from "../../utils/response";
 import ApiError from "../../utils/ApiError";
 import * as courseSectionService from "./courseSection.service";
 
+
 export const create = catchAsync(async (req: Request, res: Response) => {
     const courseSection = await courseSectionService.createCourseSection(
         req.body
@@ -77,3 +78,6 @@ export const remove = catchAsync(
         sendResponse(res, { success: true, message: "Course section deleted" });
     }
 );
+
+
+

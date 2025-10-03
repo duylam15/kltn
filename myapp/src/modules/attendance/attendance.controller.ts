@@ -1,9 +1,14 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction  } from "express";
 import * as attendanceService from "./attendance.service";
 import { prisma } from "../../prisma/client";
 import QRCode from "qrcode";
 import path from "path";
 import fs from "fs";
+
+import { catchAsync } from "../../utils/catchAsync";
+import { sendResponse } from "../../utils/response";
+import ApiError from "../../utils/ApiError";
+import { listStudentAttendance } from "./attendance.service";
 
 // Tạo session + QR code
 export async function createSession(req: Request, res: Response) {
@@ -300,3 +305,20 @@ export async function deleteSession(req: Request, res: Response) {
         res.status(400).json({ success: false, message: err.message });
     }
 }
+
+// Danh sách điểm danh của 1 sinh viên trong 1 lớp học phần
+export const listBySection = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+  const sectionId = Number(req.params.sectionId);
+  const studentId = Number(req.params.studentId);
+
+  if (isNaN(sectionId) || isNaN(studentId)) {
+    return next(new ApiError(400, "Invalid params"));
+  }
+
+  const items = await listStudentAttendance(sectionId, studentId);
+
+  return sendResponse(res, {
+    success: true,
+    data: items,
+  });
+});

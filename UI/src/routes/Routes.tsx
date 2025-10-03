@@ -14,6 +14,9 @@ import Register from "../pages/Auth/Register";
 // Student pages
 import Dashboard from "../pages/Teacher/Dashboard";
 import Courses from "../pages/Student/Courses";
+import ClassList from "../pages/Student/ClassList";
+import MaterialsStudent from "../pages/Student/MaterialsStudent";
+import AttendanceStudent from "../pages/Student/AttendanceStudent";
 import CourseDetail from "../pages/Student/CourseDetail";
 
 // Teacher pages
@@ -106,9 +109,9 @@ export const router = createBrowserRouter([
         children: [
           { index: true, loader: () => redirect("overview") },
           { path: "overview", element: <Overview /> },
-          { path: "friend", element: <StudentList /> },
+          { path: "friend", element: <ClassList /> },
           { path: "materials", element: <Materials /> },
-          { path: "roll-call", element: <RollCall /> },
+          { path: "roll-call", element: < AttendanceStudent />},
         ],
       },
     ],
