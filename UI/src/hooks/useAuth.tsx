@@ -11,14 +11,41 @@ interface Role {
 	name: string;
 	permissions: Permission[];
 }
+interface Teacher {
+	id: number;
+	teacherCode: string;
+	department: string;
+	position: string;
+	specialization: string;
+}
 
-interface User {
+interface Student {
+	id: number;
+	className?: string;
+	major?: string;
+	academicYear?: string;
+	enrollmentYear?: number;
+	status?: string;
+}
+
+interface Role {
+	id: number;
+	name: string;
+	permissions: { id: number; name: string }[];
+}
+
+export interface User {
 	id: number;
 	email: string;
 	fullName: string;
 	studentCode?: string;
 	role: Role;
+
+	// thêm 2 field này
+	teacher?: Teacher | null;
+	student?: Student | null;
 }
+
 
 export function useAuth() {
 	const [user, setUser] = useState<User | null>(null);

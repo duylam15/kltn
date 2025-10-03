@@ -31,6 +31,8 @@ export default function LayoutAdmin() {
 		{ to: "/admin/questions", label: "Câu hỏi", icon: BookOpen },
 		{ to: "/admin/notifications", label: "Thông báo", icon: Bell },
 		{ to: "/admin/reports", label: "Thống kê", icon: ClipboardList },
+		{ to: "/admin/courses", label: "Khóa học", icon: ClipboardList },
+		{ to: "/admin/instructors", label: "Phân công", icon: ClipboardList },
 		{ to: "/admin/roles", label: "Vai trò", icon: User, required: "role:view" },
 		{ to: "/admin/teachers", label: "Giáo viên", icon: GraduationCap, required: "user:view" },
 		{ to: "/admin/students", label: "Sinh viên", icon: Users, required: "user:view" },

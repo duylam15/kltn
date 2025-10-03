@@ -1,7 +1,7 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-const buildDbUrl = () => {
+export const buildDbUrl = () => {
   // Ưu tiên dùng trực tiếp DATABASE_URL
   if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
   const {
