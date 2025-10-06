@@ -16,6 +16,9 @@ router.get("/class/:courseSectionId", controller.getMaterialsByClass);
 router.patch("/visibility", controller.updateMaterialVisibility);
 router.get("/teacher/:teacherId", controller.getMaterialsByTeacher);
 
+// chỉ lấy tài liệu mở cho SV theo section
+router.get("/class/:sectionId/open", controller.listOpenBySection);
+
 // CRUD tài liệu
 router.get("/", controller.getMaterials);
 router.get("/:id", controller.getMaterial);

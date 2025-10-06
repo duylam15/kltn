@@ -15,6 +15,8 @@ router.get("/:id", validate(courseSectionIdParamSchema), controller.detail);
 router.patch("/:id", validate(updateCourseSectionSchema), controller.update);
 router.delete("/:id", validate(courseSectionIdParamSchema), controller.remove);
 
+// Join by code
+router.post("/join", controller.joinByCode);
 
 
 export default router;
