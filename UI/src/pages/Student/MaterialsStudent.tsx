@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { Typography, List, Card, Space, Empty, Spin, Tag } from "antd";
+import { Typography, List, Card, Space, Empty, Spin, Tag, Select } from "antd";
 import { FilePdfOutlined, FileTextOutlined, FileImageOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 
 const { Title, Text } = Typography;
 
 const API_BASE = "http://localhost:4000/api/v1";
-const FILE_HOST = "http://localhost:4000";           // serve static
-const PREVIEW_HOST = `${FILE_HOST}/uploads`;         // nơi chứa ảnh đại diện
+const FILE_HOST = "http://localhost:4000";
+const PREVIEW_HOST = `${FILE_HOST}/uploads`;
 
 type Material = {
   id: number;
@@ -27,6 +27,7 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
   const [loading, setLoading] = useState(false);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [openId, setOpenId] = useState<number | null>(null);
+  const [selectedTopic, setSelectedTopic] = useState<string>("Tất cả");
 
   useEffect(() => {
     if (!sectionId) return;
@@ -34,7 +35,7 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
       try {
         setLoading(true);
         const res = await axios.get<{ success: boolean; data: Material[] }>(
-          `${API_BASE}/materials/class/${sectionId}`,
+          `${API_BASE}/materials/class/${sectionId}/open`,
           { withCredentials: true }
         );
         if (res.data?.success) {
@@ -49,7 +50,20 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
     })();
   }, [sectionId]);
 
-  // --- helpers ---
+  // ==== Topics từ title (frontend) ====
+  const topics = useMemo(() => {
+    const set = new Set<string>();
+    materials.forEach((m) => set.add(m.title?.trim() || "Khác"));
+    return ["Tất cả", ...Array.from(set)];
+  }, [materials]);
+
+  // Lọc theo topic đang chọn
+  const filteredMaterials = useMemo(() => {
+    if (selectedTopic === "Tất cả") return materials;
+    return materials.filter((m) => (m.title?.trim() || "Khác") === selectedTopic);
+  }, [materials, selectedTopic]);
+
+  // === helpers ===
   const buildFileUrl = (m: Material) => {
     if (m.filePath) {
       if (/^https?:\/\//i.test(m.filePath)) return m.filePath;
@@ -59,13 +73,12 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
     return "";
   };
 
-  // Icon nhỏ ở header
   const iconFor = (m: Material) => {
     const mt = (m.fileType || "").toLowerCase();
     const fn = (m.fileName || "").toLowerCase();
-    if (mt.startsWith("image/")) return <FileImageOutlined />;
-    if (mt.includes("pdf") || fn.endsWith(".pdf")) return <FilePdfOutlined />;
-    return <FileTextOutlined />;
+    if (mt.startsWith("image/")) return <FileImageOutlined style={{ marginRight: 10, fontSize: 22, color: "#1677ff" }} />;
+    if (mt.includes("pdf") || fn.endsWith(".pdf")) return <FilePdfOutlined style={{ marginRight: 10, fontSize: 22, color: "#1677ff" }} />;
+    return <FileTextOutlined style={{ marginRight: 10, fontSize: 22, color: "#1677ff" }} />;
   };
 
   const fileTypeLabel = (m: Material) => {
@@ -80,7 +93,6 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
     return mt || "FILE";
   };
 
-  // ẢNH ĐẠI DIỆN theo loại file (lấy từ /uploads)
   const previewImageFor = (m: Material) => {
     const fn = (m.fileName || "").toLowerCase();
     const mt = (m.fileType || "").toLowerCase();
@@ -92,24 +104,29 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
     if (mt.startsWith("audio/") || /\.(mp3|wav|m4a|ogg)$/i.test(fn)) return `${PREVIEW_HOST}/imageAudio.png`;
     if (mt.startsWith("video/") || /\.(mp4|mkv|avi|mov|webm)$/i.test(fn)) return `${PREVIEW_HOST}/imageVideo.png`;
     if (mt.startsWith("image/") || /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(fn)) {
-      // Nếu chính tài liệu là ảnh → có thể dùng ảnh thật luôn
       const url = buildFileUrl(m);
       return url || `${PREVIEW_HOST}/imageTemp.jpg`;
     }
     return `${PREVIEW_HOST}/imageTemp.jpg`;
   };
 
-  // group theo title
-  const groups = materials.reduce<Record<string, Material[]>>((acc, m) => {
-    const key = (m.title || "Khác").trim().toLowerCase();
-    (acc[key] ||= []).push(m);
-    return acc;
-  }, {});
-  const titleLabel: Record<string, string> = {};
-  materials.forEach((m) => {
-    const key = (m.title || "Khác").trim().toLowerCase();
-    if (!titleLabel[key]) titleLabel[key] = m.title || "Khác";
-  });
+  // ==== Group theo title nhưng dùng filteredMaterials (đã lọc) ====
+  const groups = useMemo(() => {
+    return filteredMaterials.reduce<Record<string, Material[]>>((acc, m) => {
+      const key = (m.title || "Khác").trim().toLowerCase();
+      (acc[key] ||= []).push(m);
+      return acc;
+    }, {});
+  }, [filteredMaterials]);
+
+  const titleLabel = useMemo(() => {
+    const map: Record<string, string> = {};
+    filteredMaterials.forEach((m) => {
+      const key = (m.title || "Khác").trim().toLowerCase();
+      if (!map[key]) map[key] = m.title || "Khác";
+    });
+    return map;
+  }, [filteredMaterials]);
 
   const GroupBlock = ({ gkey, items }: { gkey: string; items: Material[] }) => (
     <div style={{ marginBottom: 28 }}>
@@ -127,7 +144,6 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
 
           return (
             <List.Item key={m.id} style={{ display: "block" }}>
-              {/* CARD CHÍNH — mô tả & ngày đăng */}
               <Card
                 hoverable
                 onClick={toggle}
@@ -143,9 +159,8 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
                   }}
                 >
                   <Space direction="vertical" size={4} style={{ flex: 1 }}>
-                    {/* CARD CHÍNH */}
                     <Text strong style={{ whiteSpace: "pre-wrap", fontSize: 16 }}>
-                      {React.cloneElement(iconFor(m), { style: { marginRight: 10, fontSize: 22, color: "#1677ff" } })}{" "}
+                      {iconFor(m)}
                       {m.description || m.fileName || "(Không có mô tả)"}
                     </Text>
                   </Space>
@@ -155,7 +170,6 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
                   </Text>
                 </div>
 
-                {/* SUB-CARD — hình + tên file + loại file (click mở tab mới) */}
                 {isOpen && (
                   <div style={{ marginTop: 12 }}>
                     <Card
@@ -168,7 +182,6 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
                       bodyStyle={{ padding: 12 }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        {/* hình đại diện */}
                         <img
                           src={previewImageFor(m)}
                           alt="preview"
@@ -180,8 +193,6 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
                             background: "#f0f0f0",
                           }}
                         />
-
-                        {/* tên file + loại file */}
                         <Space direction="vertical" size={2}>
                           <a
                             href={url || "#"}
@@ -219,15 +230,30 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
     </div>
   );
 
-  const orderedGroups = Object.entries(groups).sort(
-    (a, b) =>
-      +new Date(b[1][0]?.uploadedAt || 0) - +new Date(a[1][0]?.uploadedAt || 0)
+  const orderedGroups = useMemo(
+    () =>
+      Object.entries(groups).sort(
+        (a, b) =>
+          +new Date(b[1][0]?.uploadedAt || 0) - +new Date(a[1][0]?.uploadedAt || 0)
+      ),
+    [groups]
   );
 
   return (
     <Spin spinning={loading}>
       <div style={{ padding: 16 }}>
-        {materials.length === 0 ? (
+        {/* Bộ lọc chủ đề */}
+        <div style={{ marginBottom: 16, display: "flex", gap: 12, alignItems: "center" }}>
+          <Text strong>Chủ đề:</Text>
+          <Select
+            style={{ minWidth: 240 }}
+            value={selectedTopic}
+            onChange={setSelectedTopic}
+            options={topics.map((t) => ({ value: t, label: t }))}
+          />
+        </div>
+
+        {filteredMaterials.length === 0 ? (
           <Empty description="Chưa có tài liệu" />
         ) : (
           orderedGroups.map(([gkey, items]) => (
