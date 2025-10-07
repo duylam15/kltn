@@ -13,7 +13,11 @@ import Register from "../pages/Auth/Register";
 
 // Student pages
 import Dashboard from "../pages/Teacher/Dashboard";
+import StudentDashboard from "../pages/Student/StudentDashboard";
 import Courses from "../pages/Student/Courses";
+import ClassList from "../pages/Student/ClassList";
+import MaterialsStudent from "../pages/Student/MaterialsStudent";
+import AttendanceStudent from "../pages/Student/AttendanceStudent";
 import CourseDetail from "../pages/Student/CourseDetail";
 
 // Teacher pages
@@ -29,8 +33,6 @@ import AssignmentsTeacher from "../pages/Teacher/AssignmentsTeacher";
 import Notifications from "../pages/Admin/Notifications";
 import Reports from "../pages/Admin/Reports";
 import Roles from "../pages/Admin/Roles";
-import CoursesAdmin from "../pages/Admin/CoursesAdmin";
-
 
 // Route guards
 import PublicRoute from "./PublicRoute";
@@ -51,6 +53,7 @@ import Subjects from "../pages/Admin/Subjects";
 import Chat from "../pages/Teacher/Chat";
 import GradesTeacher from "../pages/Teacher/GradesTeacher";
 import GroupList from "../pages/Teacher/GroupList";
+import CoursesAdmin from "../pages/Admin/CoursesAdmin";
 
 export const router = createBrowserRouter([
   // ========== Root check auth ==========
@@ -107,7 +110,7 @@ export const router = createBrowserRouter([
     ),
     errorElement: <Error />,
     children: [
-      { index: true, element: <DashboardStudent /> },
+      { index: true, element: <StudentDashboard /> },
       { path: "courses", element: <Courses /> },
       {
         path: "courses/:courseId",
@@ -115,9 +118,9 @@ export const router = createBrowserRouter([
         children: [
           { index: true, loader: () => redirect("overview") },
           { path: "overview", element: <Overview /> },
-          { path: "friend", element: <StudentList /> },
-          { path: "materials", element: <Materials /> },
-          { path: "roll-call", element: <RollCall /> },
+          { path: "friend", element: <ClassList /> },
+          { path: "materials", element: <MaterialsStudent /> },
+          { path: "roll-call", element: < AttendanceStudent />},
         ],
       },
     ],
@@ -133,7 +136,7 @@ export const router = createBrowserRouter([
     ),
     errorElement: <Error />,
     children: [
-      { index: true, element: <Dashboard /> },
+      { index: true, element: <DashboardStudent /> },
       { path: "courses", element: <Courses /> },
       {
         path: "courses/:courseId",
