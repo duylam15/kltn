@@ -1,114 +1,86 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Card,
   Table,
   Button,
+  Tag,
   Modal,
   Form,
+  Input,
   Select,
   InputNumber,
-  message,
-  Tabs,
-  Space,
-  Tag,
-  Checkbox,
-  Divider,
-  Tooltip,
-  Empty,
   Alert,
+  Spin,
+  Checkbox,
+  Dropdown,
+  Space,
+  Typography,
+  Divider,
+  List,
+  Card,
   Row,
   Col,
-  Statistic,
-  Input,
-  Typography,
-  Badge,
-  List,
-  Popover,
+  Tooltip,
+  Collapse,
+  Switch,
 } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   CalculatorOutlined,
-  FileExcelOutlined,
-  ReloadOutlined,
+  DownloadOutlined,
+  MoreOutlined,
+  EyeOutlined,
+  EyeInvisibleOutlined,
   CheckCircleOutlined,
-  ClockCircleOutlined,
-  SaveOutlined,
-  SettingOutlined,
-  CloseOutlined,
-  CheckOutlined,
+  DownOutlined,
+  BookOutlined,
+  BarChartOutlined,
+  ReloadOutlined,
+  UserOutlined,
+  LineChartOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
+import type { MenuProps, TableColumnsType } from 'antd';
 import axios from 'axios';
-import type { ColumnsType } from 'antd/es/table';
+import toast from 'react-hot-toast';
 
-const { TabPane } = Tabs;
-const { Option } = Select;
-const { TextArea } = Input;
 const { Title, Text } = Typography;
+const { TextArea } = Input;
+const { Option } = Select;
+const { Panel } = Collapse;
 
 const API_BASE_URL = 'http://localhost:4000/api/v1';
-
-// ==================== INTERFACES ====================
-interface Assignment {
-  id: number;
-  title: string;
-  description: string;
-  type: string;
-  dueDate: string;
-  maxScore: number;
-  sectionLinks: {
-    sectionId: number;
-    isOpen: boolean;
-  }[];
-}
 
 interface AttendanceSession {
   id: number;
   name: string;
   sessionCode: string;
   createdAt: string;
-  expiresAt: string;
-  attendances: {
-    studentId: number;
-    status: string;
-  }[];
+  attendances: any[];
+}
+
+interface Assignment {
+  id: number;
+  title: string;
+  maxScore: number;
+  dueDate: string;
+  submissions: any[];
 }
 
 interface GradeColumn {
-  id?: number;
+  id: number;
   name: string;
   type: string;
-  weight: number;
   maxScore: number;
-  order: number;
-  isAutoCalculated: boolean;
-  attendanceScoreMethod?: string;
-  assignmentScoreMethod?: string;
-  attendanceConfig?: any;
-  assignmentConfig?: any;
-  description?: string;
-  attendanceSessions?: {
-    id: number;
-    sessionId: number;
-    session: {
-      id: number;
-      name: string;
-      sessionCode: string;
-    };
-  }[];
-  assignments?: {
-    id: number;
-    assignmentId: number;
-    assignment: {
-      id: number;
-      title: string;
-      type: string;
-    };
-  }[];
-  _count?: {
-    grades: number;
-  };
+  weight: number | null;
+  calculationMethod: string;
+  isPublished: boolean;
+  displayOrder: number;
+  attendanceSessions?: any[];
+  assignments?: any[];
+  parentLinks?: any[];
+  studentGrades?: any[];
 }
 
 interface Student {
@@ -116,1131 +88,1198 @@ interface Student {
   studentCode: string;
   fullName: string;
   email: string;
-  grades: {
-    columnId: number;
-    score: number | null;
-    maxScore: number;
-    isAutoCalculated: boolean;
-  }[];
-  summary: {
-    totalScore: number | null;
-    finalGrade: string | null;
-    rank: number | null;
-    isPassed: boolean;
+  columns: {
+    [key: string]: {
+      columnId: number;
+      score: number | null;
+      maxScore: number;
+      percentage: number | null;
+      isOverridden: boolean;
+      note: string | null;
+    };
   };
 }
 
-interface GradeData {
+interface GradeBook {
   columns: GradeColumn[];
   students: Student[];
 }
 
-// ==================== MAIN COMPONENT ====================
 export default function GradesTeacher() {
-  const [loading, setLoading] = useState(false);
   const [sectionId] = useState(100);
+  const [loading, setLoading] = useState(false);
 
-  // State cho Grade Columns
-  const [gradeColumns, setGradeColumns] = useState<GradeColumn[]>([]);
-  const [editingColumns, setEditingColumns] = useState<GradeColumn[]>([]);
-
-  // State cho Assignments và Attendance
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  // Data states
+  const [gradeBook, setGradeBook] = useState<GradeBook | null>(null);
   const [attendanceSessions, setAttendanceSessions] = useState<AttendanceSession[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [availableColumns, setAvailableColumns] = useState<GradeColumn[]>([]);
 
-  // State cho Grades
-  const [gradeData, setGradeData] = useState<GradeData | null>(null);
-
-  // Modal states
-  const [configModalVisible, setConfigModalVisible] = useState(false);
-  const [selectModalVisible, setSelectModalVisible] = useState(false);
+  // Dialog states
+  const [openColumnDialog, setOpenColumnDialog] = useState(false);
   const [selectedColumn, setSelectedColumn] = useState<GradeColumn | null>(null);
-  const [saveTemplateModalVisible, setSaveTemplateModalVisible] = useState(false);
 
-  // Form instances
-  const [saveTemplateForm] = Form.useForm();
+  // Form
+  const [form] = Form.useForm();
 
-  // Temp state for selection
-  const [tempSelectedItems, setTempSelectedItems] = useState<number[]>([]);
+  // Form states
+  const [columnForm, setColumnForm] = useState({
+    name: '',
+    type: 'attendance',
+    description: '',
+    maxScore: 10,
+    weight: 10,
+    calculationMethod: 'average',
+    bestNCount: null as number | null,
+    dropLowest: 0,
+    isPublished: false,
+    displayOrder: 0,
+  });
 
-  // ==================== FETCH DATA ====================
-  useEffect(() => {
-    initializeGradeColumns();
-    fetchGrades();
-  }, [sectionId]);
+  const [selectedSessions, setSelectedSessions] = useState<number[]>([]);
+  const [selectedAssignments, setSelectedAssignments] = useState<number[]>([]);
+  const [selectedColumns, setSelectedColumns] = useState<number[]>([]);
+  const [originalSessions, setOriginalSessions] = useState<number[]>([]);
+  const [originalAssignments, setOriginalAssignments] = useState<number[]>([]);
+  const [originalColumns, setOriginalColumns] = useState<number[]>([]);
+  const [itemWeight, setItemWeight] = useState(1);
+  const [keyword, setKeyword] = useState("");
 
-  const initializeGradeColumns = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}/sections/${sectionId}/grade-columns`);
-
-      if (response.data.success && response.data.data.length > 0) {
-        setGradeColumns(response.data.data);
-      } else {
-        await applyDefaultTemplate();
-      }
-    } catch (error: any) {
-      message.error('Không thể tải cấu hình điểm: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const applyDefaultTemplate = async () => {
-    try {
-      const response = await axios.post(`${API_BASE_URL}/grade-templates/1/apply`, {
-        sectionId,
-      });
-
-      if (response.data.success) {
-        message.success('Đã áp dụng cấu hình mặc định');
-        const columnsResponse = await axios.get(
-          `${API_BASE_URL}/sections/${sectionId}/grade-columns`
-        );
-        if (columnsResponse.data.success) {
-          setGradeColumns(columnsResponse.data.data);
-        }
-      }
-    } catch (error: any) {
-      console.error('Error applying default template:', error);
-    }
-  };
-
-  const fetchGrades = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}/grades/sections/${sectionId}/grades`);
-      if (response.data.success) {
-        setGradeData(response.data.data);
-      }
-    } catch (error: any) {
-      message.error('Không thể tải bảng điểm: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchAssignmentsAndSessions = async () => {
-    try {
-      const [assignmentsRes, attendanceRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/assignments/`),
-        axios.get(`${API_BASE_URL}/attendance/sections/${sectionId}/sessions`),
-      ]);
-
-      if (assignmentsRes.data.success) {
-        const filteredAssignments = assignmentsRes.data.data.filter((assignment: any) =>
-          assignment.sectionLinks.some((link: any) => link.sectionId === sectionId)
-        );
-        setAssignments(filteredAssignments);
-      }
-
-      if (attendanceRes.data.success) {
-        setAttendanceSessions(attendanceRes.data.data);
-      }
-    } catch (error: any) {
-      message.error('Không thể tải dữ liệu: ' + error.message);
-    }
-  };
-
-  // ==================== HANDLE OPEN SELECT MODAL ====================
-  const handleOpenSelectModal = async (column: GradeColumn) => {
-    setSelectedColumn(column);
-    await fetchAssignmentsAndSessions();
-
-    // Get current selections
-    if (column.type === 'attendance') {
-      const currentSessions = column.attendanceSessions?.map((s) => s.sessionId) || [];
-      setTempSelectedItems(currentSessions);
-    } else if (['assignment', 'quiz', 'midterm', 'final', 'project'].includes(column.type)) {
-      const currentAssignments = column.assignments?.map((a) => a.assignmentId) || [];
-      setTempSelectedItems(currentAssignments);
-    }
-
-    setSelectModalVisible(true);
-  };
-
-  // ==================== HANDLE SAVE SELECTION ====================
-  const handleSaveSelection = async () => {
-    if (!selectedColumn || !selectedColumn.id) return;
-    console.log(selectedColumn.id)
-    try {
-      setLoading(true);
-
-      if (selectedColumn.type === 'attendance') {
-        // Assign attendance sessions
-        const sessionIds = tempSelectedItems.map((sessionId, index) => ({
-          sessionId,
-          weight: 1,
-          isRequired: true,
-          order: index,
-        }));
-
-        await axios.post(
-          `${API_BASE_URL}/grade-columns/${selectedColumn.id}/attendance-sessions`,
-          { sessionIds }
-        );
-
-        message.success('Gán buổi điểm danh thành công!');
-      } else if (['assignment', 'quiz', 'midterm', 'final', 'project'].includes(selectedColumn.type)) {
-        // Assign assignments
-        const assignmentIds = tempSelectedItems.map((assignmentId, index) => ({
-          assignmentId,
-          weight: 1,
-          isRequired: true,
-          isExtraCredit: false,
-          order: index,
-        }));
-
-        await axios.post(
-          `${API_BASE_URL}/grade-columns/${selectedColumn.id}/assignments`,
-          { assignmentIds }
-        );
-
-        message.success('Gán bài tập thành công!');
-      }
-
-      // Recalculate if auto
-      if (selectedColumn.isAutoCalculated) {
-        await axios.post(`${API_BASE_URL}/grade-columns/${selectedColumn.id}/recalculate`);
-      }
-
-      // Reload
-      await initializeGradeColumns();
-      await fetchGrades();
-
-      setSelectModalVisible(false);
-      setTempSelectedItems([]);
-    } catch (error: any) {
-      message.error('Lưu thất bại: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ==================== HANDLE EDIT CONFIGURATION ====================
-  const handleOpenConfigModal = async () => {
-    await fetchAssignmentsAndSessions();
-    setEditingColumns(
-      gradeColumns.map((col) => ({
-        ...col,
-      }))
-    );
-    setConfigModalVisible(true);
-  };
-
-  const handleAddColumn = () => {
-    const newColumn: GradeColumn = {
-      name: '',
-      type: 'custom',
-      weight: 0,
-      maxScore: 10,
-      order: editingColumns.length,
-      isAutoCalculated: false,
+  const sortColumns = (columns: GradeColumn[]) => {
+    const typeOrder: { [key: string]: number } = {
+      attendance: 1,
+      assignment: 2,
+      midterm: 3,
+      final: 4,
+      project: 5,
+      participation: 6,
+      custom: 7,
     };
-    setEditingColumns([...editingColumns, newColumn]);
+
+    return [...columns].sort((a, b) => {
+      const typeComparison = (typeOrder[a.type] || 999) - (typeOrder[b.type] || 999);
+      if (typeComparison !== 0) return typeComparison;
+      if (a.displayOrder !== b.displayOrder) {
+        return a.displayOrder - b.displayOrder;
+      }
+      return a.name.localeCompare(b.name, 'vi');
+    });
   };
 
-  const handleRemoveColumn = (index: number) => {
-    const newColumns = editingColumns.filter((_, i) => i !== index);
-    setEditingColumns(newColumns);
-  };
+  // Load data on mount
+  useEffect(() => {
+    loadGradeBook();
+    loadAttendanceSessions();
+    loadAssignments();
+  }, []);
 
-  const handleUpdateColumn = (index: number, field: string, value: any) => {
-    const newColumns = [...editingColumns];
-    newColumns[index] = { ...newColumns[index], [field]: value };
-    setEditingColumns(newColumns);
-  };
-
-  // ==================== HANDLE SAVE CONFIGURATION ====================
-  const handleSaveConfiguration = () => {
-    const totalWeight = editingColumns.reduce((sum, col) => sum + col.weight, 0);
-    if (totalWeight !== 100) {
-      message.error(`Tổng trọng số phải bằng 100% (hiện tại: ${totalWeight}%)`);
-      return;
+  // Update available columns when gradeBook changes
+  useEffect(() => {
+    if (gradeBook) {
+      const available = gradeBook.columns.filter(
+        col => !selectedColumn || col.id !== selectedColumn.id
+      );
+      setAvailableColumns(sortColumns(available));
     }
+  }, [gradeBook, selectedColumn]);
 
-    const hasEmptyName = editingColumns.some((col) => !col.name.trim());
-    if (hasEmptyName) {
-      message.error('Vui lòng nhập tên cho tất cả các cột');
-      return;
-    }
-
-    setSaveTemplateModalVisible(true);
-  };
-
-  const handleSaveAsNewTemplate = async (values: any) => {
+  // API Calls
+  const loadGradeBook = async () => {
     try {
       setLoading(true);
-
-      const columnsData = editingColumns.map((col, index) => ({
-        name: col.name,
-        type: col.type,
-        weight: col.weight,
-        maxScore: col.maxScore,
-        order: index,
-        isVisible: true,
-        isEditable: true,
-        isAutoCalculated: col.isAutoCalculated,
-        autoUpdate: true,
-        attendanceScoreMethod:
-          col.type === 'attendance' ? (col.attendanceScoreMethod || 'percentage') : undefined,
-        attendanceConfig:
-          col.type === 'attendance'
-            ? {
-              statusWeights: {
-                present: 1.0,
-                late: 0.5,
-                absent: 0,
-                warning: 0.3,
-              },
-              roundingRule: 'round',
-              minScore: 0,
-            }
-            : undefined,
-        assignmentScoreMethod: ['assignment', 'quiz', 'midterm', 'final', 'project'].includes(
-          col.type
-        )
-          ? col.assignmentScoreMethod || 'average'
-          : undefined,
-        assignmentConfig: ['assignment', 'quiz', 'midterm', 'final', 'project'].includes(col.type)
-          ? {
-            roundingRule: 'round',
-            minScore: 0,
-            dropLowest: 0,
-          }
-          : undefined,
-        description: col.description,
-      }));
-
-      const formula: any = {};
-      editingColumns.forEach((col) => {
-        if (col.type === 'attendance') formula.attendance = col.weight;
-        if (col.type === 'assignment') formula.assignment = col.weight;
-        if (col.type === 'quiz') formula.quiz = col.weight;
-        if (col.type === 'midterm') formula.midterm = col.weight;
-        if (col.type === 'final') formula.final = col.weight;
-        if (col.type === 'project') formula.project = col.weight;
-      });
-
-      const templateData = {
-        name: values.templateName,
-        description: values.description || `Cấu hình tùy chỉnh - ${new Date().toLocaleDateString()}`,
-        department: values.department,
-        subjectCode: values.subjectCode,
-        isPublic: values.isPublic || false,
-        columns: columnsData,
-        formula: {
-          formula,
-          gradeScale: {
-            A: 8.5,
-            'B+': 8.0,
-            B: 7.0,
-            'C+': 6.5,
-            C: 5.5,
-            'D+': 5.0,
-            D: 4.0,
-            F: 0,
-          },
-          passingScore: 5.0,
-        },
-      };
-
-      const createResponse = await axios.post(`${API_BASE_URL}/grade-templates`, templateData);
-
-      if (createResponse.data.success) {
-        const newTemplateId = createResponse.data.data.id;
-        message.success('Tạo cấu hình mới thành công!');
-
-        const applyResponse = await axios.post(
-          `${API_BASE_URL}/grade-templates/${newTemplateId}/apply`,
-          { sectionId }
-        );
-
-        if (applyResponse.data.success) {
-          message.success('Áp dụng cấu hình mới thành công!');
-          await initializeGradeColumns();
-          await fetchGrades();
-
-          setSaveTemplateModalVisible(false);
-          setConfigModalVisible(false);
-          saveTemplateForm.resetFields();
-        }
+      const response = await axios.get(
+        `${API_BASE_URL}/grades/sections/${sectionId}/gradebook?includeUnpublished=true`
+      );
+      if (response.data.success) {
+        setGradeBook(response.data.data);
       }
-    } catch (error: any) {
-      message.error('Lưu cấu hình thất bại: ' + error.message);
+    } catch (err: any) {
+      toast.error('Không thể tải bảng điểm');
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  // ==================== UPDATE MANUAL GRADE ====================
-  const handleUpdateGrade = async (columnId: number, studentId: number, score: number) => {
+  const loadAttendanceSessions = async () => {
     try {
-      const response = await axios.put(`${API_BASE_URL}/grades`, {
-        columnId,
-        studentId,
-        score,
-      });
-
+      const response = await axios.get(`${API_BASE_URL}/attendance/sections/${sectionId}/sessions`);
       if (response.data.success) {
-        message.success('Cập nhật điểm thành công!');
-        fetchGrades();
+        setAttendanceSessions(response.data.data);
       }
-    } catch (error: any) {
-      message.error('Cập nhật điểm thất bại: ' + error.message);
+    } catch (err: any) {
+      console.error('Không thể tải danh sách điểm danh:', err);
     }
   };
 
-  // ==================== EXPORT GRADES ====================
-  const handleExportGrades = async () => {
+  const loadAssignments = async () => {
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/sections/${sectionId}/grades/export?format=csv`,
-        { responseType: 'blob' }
+        `${API_BASE_URL}/assignments/sections/${sectionId}/assignments`
+      );
+      if (response.data.success) {
+        setAssignments(response.data.data);
+      }
+    } catch (err: any) {
+      console.error('Không thể tải danh sách bài tập:', err);
+    }
+  };
+
+  const handleCreateColumn = async () => {
+    try {
+      setLoading(true);
+
+      // Validation
+      if (columnForm.type === 'attendance' && selectedSessions.length === 0) {
+        toast.error('Vui lòng chọn ít nhất một buổi điểm danh');
+        setLoading(false);
+        return;
+      }
+
+      if (columnForm.type === 'assignment' && selectedAssignments.length === 0) {
+        toast.error('Vui lòng chọn ít nhất một bài tập');
+        setLoading(false);
+        return;
+      }
+
+      if ((columnForm.type === 'midterm' || columnForm.type === 'final' || columnForm.type === 'custom')
+        && selectedColumns.length === 0) {
+        toast.error('Vui lòng chọn ít nhất một cột điểm để tính toán');
+        setLoading(false);
+        return;
+      }
+
+      const response = await axios.post(`${API_BASE_URL}/grades/columns`, {
+        sectionId,
+        ...columnForm,
+      });
+
+      if (response.data.success) {
+        const newColumnId = response.data.data.id;
+        console.log('Created column:', newColumnId);
+
+        if (columnForm.type === 'attendance' && selectedSessions.length > 0) {
+          console.log('Adding attendance sessions:', selectedSessions);
+          await axios.post(`${API_BASE_URL}/grades/columns/${newColumnId}/attendance-sessions`, {
+            sessionIds: selectedSessions,
+            weight: itemWeight,
+          });
+        } else if (columnForm.type === 'assignment' && selectedAssignments.length > 0) {
+          console.log('Adding assignments:', selectedAssignments);
+          await axios.post(`${API_BASE_URL}/grades/columns/${newColumnId}/assignments`, {
+            assignmentIds: selectedAssignments,
+            weight: itemWeight,
+          });
+        } else if (
+          (columnForm.type === 'midterm' || columnForm.type === 'final' || columnForm.type === 'custom') &&
+          selectedColumns.length > 0
+        ) {
+          console.log('Adding linked columns:', selectedColumns);
+          const linkResponse = await axios.post(`${API_BASE_URL}/grades/columns/${newColumnId}/linked-columns`, {
+            childColumnIds: selectedColumns,
+            weight: itemWeight,
+          });
+          console.log('Link response:', linkResponse.data);
+        }
+
+        console.log('Calculating grades for column:', newColumnId);
+        const calculateResponse = await axios.post(`${API_BASE_URL}/grades/columns/${newColumnId}/calculate`);
+        console.log('Calculate response:', calculateResponse.data);
+
+        toast.success('Tạo cột điểm thành công');
+        setOpenColumnDialog(false);
+        resetColumnForm();
+
+        setTimeout(() => {
+          loadGradeBook();
+        }, 1000);
+      }
+    } catch (err: any) {
+      console.error('Error creating column:', err);
+      toast.error(err.response?.data?.message || 'Không thể tạo cột điểm');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateColumn = async () => {
+    if (!selectedColumn) return;
+    try {
+      setLoading(true);
+
+      const response = await axios.put(
+        `${API_BASE_URL}/grades/columns/${selectedColumn.id}`,
+        columnForm
       );
 
+      if (response.data.success) {
+        if (columnForm.type === 'attendance') {
+          const sessionsToRemove = originalSessions.filter(
+            id => !selectedSessions.includes(id)
+          );
+          const sessionsToAdd = selectedSessions.filter(
+            id => !originalSessions.includes(id)
+          );
+
+          for (const sessionId of sessionsToRemove) {
+            await axios.delete(
+              `${API_BASE_URL}/grades/columns/${selectedColumn.id}/attendance-sessions/${sessionId}`
+            );
+          }
+
+          if (sessionsToAdd.length > 0) {
+            await axios.post(
+              `${API_BASE_URL}/grades/columns/${selectedColumn.id}/attendance-sessions`,
+              { sessionIds: sessionsToAdd, weight: itemWeight }
+            );
+          }
+        }
+        else if (columnForm.type === 'assignment') {
+          const assignmentsToRemove = originalAssignments.filter(
+            id => !selectedAssignments.includes(id)
+          );
+          const assignmentsToAdd = selectedAssignments.filter(
+            id => !originalAssignments.includes(id)
+          );
+
+          for (const assignmentId of assignmentsToRemove) {
+            await axios.delete(
+              `${API_BASE_URL}/grades/columns/${selectedColumn.id}/assignments/${assignmentId}`
+            );
+          }
+
+          if (assignmentsToAdd.length > 0) {
+            await axios.post(
+              `${API_BASE_URL}/grades/columns/${selectedColumn.id}/assignments`,
+              { assignmentIds: assignmentsToAdd, weight: itemWeight }
+            );
+          }
+        }
+        else if (columnForm.type === 'midterm' || columnForm.type === 'final' || columnForm.type === 'custom') {
+          const columnsToRemove = originalColumns.filter(
+            id => !selectedColumns.includes(id)
+          );
+          const columnsToAdd = selectedColumns.filter(
+            id => !originalColumns.includes(id)
+          );
+
+          for (const columnId of columnsToRemove) {
+            await axios.delete(
+              `${API_BASE_URL}/grades/columns/${selectedColumn.id}/linked-columns/${columnId}`
+            );
+          }
+
+          if (columnsToAdd.length > 0) {
+            await axios.post(
+              `${API_BASE_URL}/grades/columns/${selectedColumn.id}/linked-columns`,
+              { childColumnIds: columnsToAdd, weight: itemWeight }
+            );
+          }
+        }
+
+        await axios.post(`${API_BASE_URL}/grades/columns/${selectedColumn.id}/calculate`);
+
+        toast.success('Cập nhật cột điểm thành công');
+        setOpenColumnDialog(false);
+        resetColumnForm();
+        loadGradeBook();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Không thể cập nhật cột điểm');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteColumn = async (columnId: number) => {
+
+    try {
+      setLoading(true);
+      await axios.delete(`${API_BASE_URL}/grades/columns/${columnId}`);
+      toast.success('Xóa cột điểm thành công');
+      loadGradeBook();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Không thể xóa cột điểm');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTogglePublish = async (column: GradeColumn) => {
+    try {
+      setLoading(true);
+      await axios.patch(`${API_BASE_URL}/grades/columns/${column.id}/publish`, {
+        isPublished: !column.isPublished,
+      });
+      toast.success(`${column.isPublished ? 'Ẩn' : 'Công bố'} điểm thành công`);
+      loadGradeBook();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Không thể thay đổi trạng thái công bố');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCalculateGrades = async (columnId: number) => {
+    try {
+      setLoading(true);
+      const response = await axios.post(`${API_BASE_URL}/grades/columns/${columnId}/calculate`);
+      if (response.data.success) {
+        toast.success('Tính điểm thành công');
+        loadGradeBook();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Không thể tính điểm');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportGrades = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/grades/sections/${sectionId}/export`, {
+        responseType: 'blob',
+      });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute(
-        'download',
-        `grades-section${sectionId}-${new Date().toISOString().split('T')[0]}.csv`
-      );
+      link.setAttribute('download', `grades-section-${sectionId}.csv`);
       document.body.appendChild(link);
       link.click();
       link.remove();
-      message.success('Xuất file thành công!');
-    } catch (error: any) {
-      message.error('Xuất file thất bại: ' + error.message);
+      toast.success('Xuất điểm thành công');
+    } catch (err: any) {
+      toast.error('Không thể xuất điểm');
     }
   };
 
-  // ==================== RENDER COLUMN HEADER WITH SELECTION ====================
-  const renderColumnHeader = (col: GradeColumn) => {
-    const canSelect =
-      col.type === 'attendance' ||
-      ['assignment', 'quiz', 'midterm', 'final', 'project'].includes(col.type);
+  const resetColumnForm = () => {
+    setColumnForm({
+      name: '',
+      type: 'attendance',
+      description: '',
+      maxScore: 100,
+      weight: 0,
+      calculationMethod: 'average',
+      bestNCount: null,
+      dropLowest: 0,
+      isPublished: false,
+      displayOrder: 0,
+    });
+    form.resetFields();
+    setSelectedColumn(null);
+    setSelectedSessions([]);
+    setSelectedAssignments([]);
+    setSelectedColumns([]);
+    setOriginalSessions([]);
+    setOriginalAssignments([]);
+    setOriginalColumns([]);
+    setItemWeight(1);
+  };
 
-    const selectedCount =
-      col.type === 'attendance'
-        ? col.attendanceSessions?.length || 0
-        : col.assignments?.length || 0;
+  const openEditDialog = async (column: GradeColumn) => {
+    setSelectedColumn(column);
+    const formValues = {
+      name: column.name,
+      type: column.type,
+      description: '',
+      maxScore: column.maxScore,
+      weight: column.weight || 0,
+      calculationMethod: column.calculationMethod,
+      bestNCount: null,
+      dropLowest: 0,
+      isPublished: column.isPublished,
+      displayOrder: column.displayOrder,
+    };
+    setColumnForm(formValues);
+    form.setFieldsValue(formValues);
 
-    return (
-      <div style={{ textAlign: 'center' }}>
-        <Space direction="vertical" size={4}>
-          <strong>{col.name}</strong>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            ({col.weight}%)
-          </Text>
+    try {
+      if (column.type === 'attendance') {
+        const response = await axios.get(
+          `${API_BASE_URL}/grades/columns/${column.id}/attendance-sessions`
+        );
+        if (response.data.success) {
+          const sessionIds = response.data.data.map((item: any) => item.sessionId);
+          setSelectedSessions(sessionIds);
+          setOriginalSessions(sessionIds);
+        }
+      } else if (column.type === 'assignment') {
+        const response = await axios.get(
+          `${API_BASE_URL}/grades/columns/${column.id}/assignments`
+        );
+        if (response.data.success) {
+          const assignmentIds = response.data.data.map((item: any) => item.assignmentId);
+          setSelectedAssignments(assignmentIds);
+          setOriginalAssignments(assignmentIds);
+        }
+      } else if (column.type === 'midterm' || column.type === 'final' || column.type === 'custom') {
+        const response = await axios.get(
+          `${API_BASE_URL}/grades/columns/${column.id}/linked-columns`
+        );
+        if (response.data.success) {
+          const columnIds = response.data.data.map((item: any) => item.childColumnId);
+          setSelectedColumns(columnIds);
+          setOriginalColumns(columnIds);
+        }
+      }
+    } catch (err) {
+      console.error('Không thể load nguồn điểm:', err);
+    }
 
-          {canSelect && (
-            <Button
-              type="link"
-              size="small"
-              icon={<SettingOutlined />}
-              onClick={() => handleOpenSelectModal(col)}
-              style={{ padding: 0, height: 'auto' }}
-            >
-              {selectedCount > 0 ? (
-                <Badge count={selectedCount} showZero>
-                  <Text style={{ fontSize: 11 }}>
-                    {col.type === 'attendance' ? 'Chọn điểm danh' : 'Chọn bài tập'}
-                  </Text>
-                </Badge>
-              ) : (
-                <Text type="danger" style={{ fontSize: 11 }}>
-                  {col.type === 'attendance' ? 'Chọn điểm danh' : 'Chọn bài tập'}
-                </Text>
-              )}
-            </Button>
-          )}
+    setOpenColumnDialog(true);
+  };
 
-          {col.isAutoCalculated && (
-            <Tag color="green" style={{ fontSize: 10 }}>
-              Tự động
-            </Tag>
-          )}
-        </Space>
-      </div>
+  const getColumnTypeColor = (type: string) => {
+    const colors: { [key: string]: string } = {
+      attendance: 'blue',
+      assignment: 'purple',
+      midterm: 'orange',
+      final: 'red',
+      project: 'cyan',
+      participation: 'green',
+      custom: 'default',
+    };
+    return colors[type] || 'default';
+  };
+
+  const getColumnTypeLabel = (type: string) => {
+    const labels: { [key: string]: string } = {
+      attendance: 'Điểm danh',
+      assignment: 'Bài tập',
+      midterm: 'Giữa kì',
+      final: 'Cuối kì',
+      project: 'Dự án',
+      participation: 'Tham gia',
+      custom: 'Tùy chỉnh',
+    };
+    return labels[type] || type;
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const handleToggleSession = (sessionId: number) => {
+    setSelectedSessions((prev) =>
+      prev.includes(sessionId)
+        ? prev.filter((id) => id !== sessionId)
+        : [...prev, sessionId]
     );
   };
 
-  // ==================== RENDER GRADE TABLE ====================
-  const gradeTableColumns: ColumnsType<Student> = [
+  const handleToggleAssignment = (assignmentId: number) => {
+    setSelectedAssignments((prev) =>
+      prev.includes(assignmentId)
+        ? prev.filter((id) => id !== assignmentId)
+        : [...prev, assignmentId]
+    );
+  };
+
+  const handleToggleColumn = (columnId: number) => {
+    setSelectedColumns((prev) =>
+      prev.includes(columnId)
+        ? prev.filter((id) => id !== columnId)
+        : [...prev, columnId]
+    );
+  };
+
+  const getSelectionChanges = () => {
+    if (columnForm.type === 'attendance') {
+      const added = selectedSessions.filter(id => !originalSessions.includes(id));
+      const removed = originalSessions.filter(id => !selectedSessions.includes(id));
+      return { added, removed, hasChanges: added.length > 0 || removed.length > 0 };
+    } else if (columnForm.type === 'assignment') {
+      const added = selectedAssignments.filter(id => !originalAssignments.includes(id));
+      const removed = originalAssignments.filter(id => !selectedAssignments.includes(id));
+      return { added, removed, hasChanges: added.length > 0 || removed.length > 0 };
+    } else if (columnForm.type === 'midterm' || columnForm.type === 'final' || columnForm.type === 'custom') {
+      const added = selectedColumns.filter(id => !originalColumns.includes(id));
+      const removed = originalColumns.filter(id => !selectedColumns.includes(id));
+      return { added, removed, hasChanges: added.length > 0 || removed.length > 0 };
+    }
+    return { added: [], removed: [], hasChanges: false };
+  };
+
+  const shouldShowSourceSelection = () => {
+    return ['attendance', 'assignment', 'midterm', 'final', 'custom'].includes(columnForm.type);
+  };
+
+  const getColumnMenuItems = (column: GradeColumn): MenuProps['items'] => [
     {
-      title: 'MSSV',
-      dataIndex: 'studentCode',
-      key: 'studentCode',
-      width: 120,
-      fixed: 'left',
+      key: 'publish',
+      label: column.isPublished ? 'Ẩn điểm' : 'Công bố điểm',
+      icon: column.isPublished ? <EyeInvisibleOutlined /> : <EyeOutlined />,
+      onClick: () => handleTogglePublish(column),
     },
     {
-      title: 'Họ tên',
-      dataIndex: 'fullName',
-      key: 'fullName',
-      width: 200,
-      fixed: 'left',
-    },
-    ...(gradeData?.columns || []).map((col) => ({
-      title: renderColumnHeader(col),
-      key: `col-${col.id}`,
-      width: 150,
-      align: 'center' as const,
-      render: (student: Student) => {
-        const grade = student.grades.find((g) => g.columnId === col.id);
-        return (
-          <div>
-            {!grade?.isAutoCalculated && col.id ? (
-              <InputNumber
-                size="small"
-                min={0}
-                max={col.maxScore}
-                step={0.1}
-                value={grade?.score ?? undefined}
-                placeholder="-"
-                onChange={(value) => {
-                  if (value !== null) {
-                    handleUpdateGrade(col.id!, student.studentId, value);
-                  }
-                }}
-                style={{ width: '100%' }}
-              />
-            ) : (
-              <Space direction="vertical" size={0}>
-                <span style={{ fontWeight: 'bold', fontSize: 16 }}>
-                  {grade?.score?.toFixed(1) ?? '-'}
-                </span>
-                <Tag color="green" style={{ fontSize: 10 }}>
-                  Auto
-                </Tag>
-              </Space>
-            )}
-          </div>
-        );
-      },
-    })),
-    {
-      title: 'Tổng điểm',
-      key: 'totalScore',
-      width: 100,
-      fixed: 'right',
-      align: 'center' as const,
-      render: (student: Student) => (
-        <strong style={{ color: '#1890ff', fontSize: 18 }}>
-          {student.summary.totalScore?.toFixed(2) ?? '-'}
-        </strong>
-      ),
+      key: 'edit',
+      label: 'Chỉnh sửa',
+      icon: <EditOutlined />,
+      onClick: () => openEditDialog(column),
     },
     {
-      title: 'Xếp loại',
-      key: 'finalGrade',
-      width: 100,
-      fixed: 'right',
-      align: 'center' as const,
-      render: (student: Student) => (
-        <Tag
-          color={
-            student.summary.finalGrade === 'A'
-              ? 'green'
-              : student.summary.finalGrade?.startsWith('B')
-                ? 'blue'
-                : student.summary.finalGrade?.startsWith('C')
-                  ? 'orange'
-                  : 'red'
-          }
-          style={{ fontSize: 16, fontWeight: 'bold' }}
-        >
-          {student.summary.finalGrade ?? '-'}
-        </Tag>
-      ),
+      key: 'calculate',
+      label: 'Tính điểm lại',
+      icon: <CalculatorOutlined />,
+      onClick: () => handleCalculateGrades(column.id),
     },
+    { type: 'divider' },
     {
-      title: 'Hạng',
-      key: 'rank',
-      width: 80,
-      fixed: 'right',
-      align: 'center' as const,
-      render: (student: Student) => (
-        <Tag color="cyan" style={{ fontSize: 14 }}>
-          #{student.summary.rank ?? '-'}
-        </Tag>
-      ),
+      key: 'delete',
+      label: 'Xóa cột',
+      icon: <DeleteOutlined />,
+      danger: true,
+      onClick: () => handleDeleteColumn(column.id),
     },
   ];
 
-  // ==================== RENDER ====================
-  return (
-    <div style={{ minHeight: '100vh' }}>
-      <Card
-        title={
-          <Space>
-            <span style={{ fontSize: 20, fontWeight: 'bold' }}>
-              📊 Quản lý điểm - Section {sectionId}
-            </span>
+  // Table columns configuration
+  const getTableColumns = (): TableColumnsType<Student> => {
+    const fixedColumns: TableColumnsType<Student> = [
+      {
+        title: "STT",
+        key: "stt",
+        width: 80,
+        fixed: "left",
+        align: "center",
+        render: (_: any, __: Student, index: number) => index + 1,
+      },
+      {
+        title: "Mã SV",
+        dataIndex: "studentCode",
+        key: "studentCode",
+        width: 120,
+        fixed: "left",
+        ellipsis: true,
+        render: (text: string) => (
+          <Tooltip title={text}>
+            <Text strong>{text}</Text>
+          </Tooltip>
+        ),
+      },
+      {
+        title: "Họ và tên",
+        dataIndex: "fullName",
+        key: "fullName",
+        width: 200,
+        fixed: "left",
+        ellipsis: true,
+        render: (text: string) => (
+          <Tooltip title={text}>
+            <Text strong>{text}</Text>
+          </Tooltip>
+        ),
+      },
+      {
+        title: "Email",
+        dataIndex: "email",
+        key: "email",
+        width: 100,
+        fixed: "left",
+        ellipsis: true,
+        render: (text: string) => (
+          <Tooltip title={text}>
+            <Text type="secondary">{text}</Text>
+          </Tooltip>
+        ),
+      },
+    ];
+
+    const gradeColumns: TableColumnsType<Student> = sortColumns(
+      gradeBook?.columns || []
+    ).map((col) => ({
+      title: (
+        <div style={{ textAlign: "center" }}>
+          <Space direction="vertical" size={0}>
+            <Space>
+              <Text strong>{col.name}</Text>
+              <Dropdown
+                menu={{ items: getColumnMenuItems(col) }}
+                trigger={["click"]}
+              >
+                <Button type="text" size="small" icon={<MoreOutlined />} />
+              </Dropdown>
+            </Space>
           </Space>
-        }
-        extra={
-          <Space>
-            <Button
-              type="primary"
-              icon={<EditOutlined />}
-              onClick={handleOpenConfigModal}
-              loading={loading}
+        </div>
+      ),
+      key: `grade-${col.id}`,
+      width: 150,
+      align: "center" as const,
+      ellipsis: true,
+      render: (_: any, student: Student) => {
+        const grade = student.columns[col.name];
+        return grade && grade.score !== null && grade.score !== undefined ? (
+          <Space direction="vertical" size={4} style={{ width: "100%" }}>
+            <Text
+              strong={grade.isOverridden}
+              style={{
+                color: grade.isOverridden
+                  ? "#fa8c16"
+                  : grade.percentage && grade.percentage >= 50
+                    ? "#52c41a"
+                    : "#f5222d",
+              }}
             >
-              Sửa cấu hình
-            </Button>
-
-            <Button icon={<ReloadOutlined />} onClick={() => fetchGrades()}>
-              Làm mới
-            </Button>
-
-            <Button icon={<FileExcelOutlined />} onClick={handleExportGrades}>
-              Xuất Excel
-            </Button>
-          </Space>
-        }
-      >
-        <Tabs defaultActiveKey="1">
-          <TabPane tab="📊 Bảng điểm" key="1">
-            <Alert
-              message="💡 Hướng dẫn"
-              description={
-                <ul style={{ marginBottom: 0, paddingLeft: 20 }}>
-                  <li>
-                    Click <strong>"Chọn điểm danh"</strong> hoặc <strong>"Chọn bài tập"</strong> ở
-                    header cột để chọn buổi/bài tập nào được tính vào cột đó
-                  </li>
-                  <li>Cột có tag "Tự động" sẽ tự tính điểm khi gán xong</li>
-                  <li>Cột không có tag "Tự động" có thể nhập điểm thủ công</li>
-                  <li>
-                    Click <strong>"Sửa cấu hình"</strong> để thay đổi số cột, trọng số, thêm/xóa cột
-                  </li>
-                </ul>
-              }
-              type="info"
-              showIcon
-              style={{ marginBottom: 16 }}
-            />
-
-            {/* Statistics */}
-            <Row gutter={16} style={{ marginBottom: 16 }}>
-              <Col span={6}>
-                <Card>
-                  <Statistic
-                    title="Tổng sinh viên"
-                    value={gradeData?.students.length || 0}
-                    prefix={<CheckCircleOutlined />}
-                  />
-                </Card>
-              </Col>
-              <Col span={6}>
-                <Card>
-                  <Statistic
-                    title="Số cột điểm"
-                    value={gradeColumns.length}
-                    valueStyle={{ color: '#3f8600' }}
-                  />
-                </Card>
-              </Col>
-              <Col span={6}>
-                <Card>
-                  <Statistic
-                    title="Điểm TB cao nhất"
-                    value={
-                      gradeData && gradeData.students.length > 0
-                        ? Math.max(
-                          ...gradeData.students.map((s) => s.summary.totalScore || 0)
-                        ).toFixed(2)
-                        : '-'
-                    }
-                    valueStyle={{ color: '#1890ff' }}
-                  />
-                </Card>
-              </Col>
-              <Col span={6}>
-                <Card>
-                  <Statistic
-                    title="Tỷ lệ đạt"
-                    value={
-                      gradeData && gradeData.students.length > 0
-                        ? (
-                          (gradeData.students.filter((s) => s.summary.isPassed).length /
-                            gradeData.students.length) *
-                          100
-                        ).toFixed(1)
-                        : '0'
-                    }
-                    suffix="%"
-                    valueStyle={{ color: '#52c41a' }}
-                  />
-                </Card>
-              </Col>
-            </Row>
-
-            {gradeData ? (
-              <Table
-                columns={gradeTableColumns}
-                dataSource={gradeData.students}
-                rowKey="studentId"
-                loading={loading}
-                scroll={{ x: 1500, y: 600 }}
-                pagination={{
-                  pageSize: 20,
-                  showTotal: (total) => `Tổng ${total} sinh viên`,
-                  showSizeChanger: true,
-                  showQuickJumper: true,
-                }}
-                bordered
-                size="middle"
-              />
-            ) : (
-              <Empty description="Chưa có dữ liệu điểm" />
+              {grade.score.toFixed(1)}/{grade.maxScore}
+            </Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              ({grade.percentage?.toFixed(1)}%)
+            </Text>
+            {col.weight && col.weight > 0 && (
+              <Tag color="blue" style={{ fontSize: 10 }}>
+                Trọng số: {col.weight}%
+              </Tag>
             )}
-          </TabPane>
-
-          <TabPane tab="⚙️ Cấu hình hiện tại" key="2">
-            <Alert
-              message="Cấu hình cột điểm"
-              description="Hiển thị cấu hình điểm hiện tại của lớp học. Click 'Sửa cấu hình' để thay đổi."
-              type="info"
-              showIcon
-              style={{ marginBottom: 16 }}
-            />
-
-            <Table
-              dataSource={gradeColumns}
-              rowKey={(record) => record.id || record.name}
-              pagination={false}
-              bordered
-              columns={[
-                {
-                  title: 'STT',
-                  key: 'order',
-                  width: 60,
-                  render: (_, __, index) => index + 1,
-                },
-                {
-                  title: 'Tên cột',
-                  dataIndex: 'name',
-                  key: 'name',
-                  render: (text, record: any) => (
-                    <Space direction="vertical" size={0}>
-                      <strong>{text}</strong>
-                      <Tag color="blue">{record.type}</Tag>
-                    </Space>
-                  ),
-                },
-                {
-                  title: 'Trọng số (%)',
-                  dataIndex: 'weight',
-                  key: 'weight',
-                  width: 120,
-                  render: (weight) => <strong style={{ color: '#1890ff' }}>{weight}%</strong>,
-                },
-                {
-                  title: 'Đã gán',
-                  key: 'assigned',
-                  width: 200,
-                  render: (_, record) => {
-                    if (record.type === 'attendance') {
-                      return (
-                        <Badge count={record.attendanceSessions?.length || 0} showZero>
-                          <Tag color="blue">Buổi điểm danh</Tag>
-                        </Badge>
-                      );
-                    }
-                    if (['assignment', 'quiz', 'midterm', 'final', 'project'].includes(record.type)) {
-                      return (
-                        <Badge count={record.assignments?.length || 0} showZero>
-                          <Tag color="green">Bài tập</Tag>
-                        </Badge>
-                      );
-                    }
-                    return '-';
-                  },
-                },
-                {
-                  title: 'Tự động tính',
-                  dataIndex: 'isAutoCalculated',
-                  key: 'isAutoCalculated',
-                  width: 120,
-                  render: (isAuto) => (
-                    <Tag color={isAuto ? 'green' : 'default'}>
-                      {isAuto ? 'Tự động' : 'Thủ công'}
-                    </Tag>
-                  ),
-                },
-              ]}
-            />
-
-            <Divider />
-
-            <Alert
-              message="Tổng trọng số"
-              description={
-                <Space>
-                  <span>
-                    Tổng:{' '}
-                    <strong style={{ fontSize: 18, color: '#1890ff' }}>
-                      {gradeColumns.reduce((sum, col) => sum + col.weight, 0)}%
-                    </strong>
-                  </span>
-                  {gradeColumns.reduce((sum, col) => sum + col.weight, 0) === 100 ? (
-                    <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 20 }} />
-                  ) : (
-                    <CloseOutlined style={{ color: '#ff4d4f', fontSize: 20 }} />
-                  )}
-                </Space>
-              }
-              type={
-                gradeColumns.reduce((sum, col) => sum + col.weight, 0) === 100
-                  ? 'success'
-                  : 'warning'
-              }
-              showIcon
-            />
-          </TabPane>
-        </Tabs>
-      </Card>
-
-      {/* ==================== MODAL: SELECT SESSIONS/ASSIGNMENTS ==================== */}
-      <Modal
-        title={
-          selectedColumn
-            ? `Chọn ${selectedColumn.type === 'attendance' ? 'buổi điểm danh' : 'bài tập'
-            } cho cột: ${selectedColumn.name}`
-            : ''
-        }
-        open={selectModalVisible}
-        onCancel={() => {
-          setSelectModalVisible(false);
-          setTempSelectedItems([]);
-        }}
-        onOk={handleSaveSelection}
-        width={700}
-        okText="Lưu"
-        cancelText="Hủy"
-      >
-        <Alert
-          message={`Chọn các ${selectedColumn?.type === 'attendance' ? 'buổi điểm danh' : 'bài tập'
-            } muốn tính vào cột này`}
-          description={
-            selectedColumn?.isAutoCalculated
-              ? 'Sau khi lưu, hệ thống sẽ tự động tính điểm cho cột này.'
-              : 'Cột này cần nhập điểm thủ công.'
-          }
-          type="info"
-          showIcon
-          style={{ marginBottom: 16 }}
-        />
-
-        {selectedColumn?.type === 'attendance' ? (
-          // Attendance Sessions List
-          <Checkbox.Group
-            value={tempSelectedItems}
-            onChange={(values) => setTempSelectedItems(values as number[])}
-            style={{ width: '100%' }}
-          >
-            <List
-              dataSource={attendanceSessions}
-              renderItem={(session) => (
-                <List.Item>
-                  <Checkbox value={session.id} style={{ width: '100%' }}>
-                    <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                      <Space>
-                        <Tag color="blue">{session.sessionCode}</Tag>
-                        <strong>{session.name}</strong>
-                      </Space>
-                      <Text type="secondary">
-                        {session.attendances.length} SV đã điểm danh
-                      </Text>
-                    </Space>
-                  </Checkbox>
-                </List.Item>
-              )}
-              bordered
-            />
-          </Checkbox.Group>
+            {grade.isOverridden && (
+              <Tag color="warning" style={{ fontSize: 10 }}>
+                Ghi đè
+              </Tag>
+            )}
+          </Space>
         ) : (
-          // Assignments List
-          <Checkbox.Group
-            value={tempSelectedItems}
-            onChange={(values) => setTempSelectedItems(values as number[])}
-            style={{ width: '100%' }}
+          <Text type="secondary">-</Text>
+        );
+      },
+    }));
+
+    return [...fixedColumns, ...gradeColumns];
+  };
+
+  if (loading && !gradeBook) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+        <Spin size="large" tip="Đang tải..." />
+      </div>
+    );
+  }
+
+  // Thêm đoạn code này sau các useEffect, trước phần return
+
+  // Calculate statistics
+  const getStatistics = () => {
+    if (!gradeBook) {
+      return {
+        totalStudents: 0,
+        totalColumns: 0,
+        publishedColumns: 0,
+        averageScore: 0,
+        completionRate: 0,
+      };
+    }
+
+    const totalStudents = gradeBook.students.length;
+    const totalColumns = gradeBook.columns.length;
+    const publishedColumns = gradeBook.columns.filter(col => col.isPublished).length;
+
+    // Tính điểm trung bình của tất cả sinh viên trên tất cả các cột
+    let totalScores = 0;
+    let totalGrades = 0;
+
+    gradeBook.students.forEach(student => {
+      Object.values(student.columns).forEach(grade => {
+        if (grade.score !== null && grade.score !== undefined) {
+          totalScores += grade.percentage || 0;
+          totalGrades++;
+        }
+      });
+    });
+
+    const averageScore = totalGrades > 0 ? totalScores / totalGrades : 0;
+
+    // Tính tỷ lệ hoàn thành (có bao nhiêu % ô điểm đã được điền)
+    const totalCells = totalStudents * totalColumns;
+    const filledCells = totalGrades;
+    const completionRate = totalCells > 0 ? (filledCells / totalCells) * 100 : 0;
+
+    return {
+      totalStudents,
+      totalColumns,
+      publishedColumns,
+      averageScore,
+      completionRate,
+    };
+  };
+
+  const stats = getStatistics();
+
+  return (
+    <div
+      style={{
+        paddingLeft: 16,
+        paddingRight: 16,
+        height: "79vh",        // chiếm full chiều cao viewport
+        overflow: "hidden",     // chặn cả scroll ngang + dọc
+        display: "flex",
+        flexDirection: "column"
+      }}
+    >
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+        gap: 16,
+      }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "#000",
+              border: "1px solid #ddd",
+              borderRadius: 6,
+              padding: "6px 10px",
+              background: "#fff",
+            }}
           >
-            <List
-              dataSource={assignments}
-              renderItem={(assignment) => (
-                <List.Item>
-                  <Checkbox value={assignment.id} style={{ width: '100%' }}>
-                    <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                      <Space>
-                        <Tag color="green">{assignment.type}</Tag>
-                        <strong>{assignment.title}</strong>
-                      </Space>
-                      <Text type="secondary">Điểm tối đa: {assignment.maxScore}</Text>
-                    </Space>
-                  </Checkbox>
-                </List.Item>
-              )}
-              bordered
+            <BarChartOutlined style={{ fontSize: 14, color: "#52c41a" }} />
+            <span>Cột điểm:</span>
+            <strong>{stats.totalColumns}</strong>
+            <span style={{ fontSize: 11, color: "#888" }}>
+              ({stats.publishedColumns} công bố)
+            </span>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "#000",
+              border: "1px solid #ddd",
+              borderRadius: 6,
+              padding: "6px 10px",
+              background: "#fff",
+            }}
+          >
+            <LineChartOutlined
+              style={{
+                fontSize: 14,
+                color: stats.averageScore >= 50 ? "#52c41a" : "#ff4d4f",
+              }}
             />
-          </Checkbox.Group>
-        )}
+            <span>Điểm TB:</span>
+            <strong
+              style={{
+                color: stats.averageScore >= 50 ? "#52c41a" : "#ff4d4f",
+              }}
+            >
+              {stats.averageScore.toFixed(1)}%
+            </strong>
+          </div>
+        </div>
 
-        <Divider />
-
-        <Alert
-          message="Đã chọn"
-          description={`${tempSelectedItems.length} ${selectedColumn?.type === 'attendance' ? 'buổi điểm danh' : 'bài tập'
-            }`}
-          type="success"
-          showIcon
-        />
-      </Modal>
-
-      {/* ==================== MODAL: EDIT CONFIGURATION ==================== */}
-      <Modal
-        title="⚙️ Sửa cấu hình điểm"
-        open={configModalVisible}
-        onCancel={() => setConfigModalVisible(false)}
-        width={1000}
-        footer={[
-          <Button key="cancel" onClick={() => setConfigModalVisible(false)}>
-            Hủy
-          </Button>,
+        <Space>
+          <Input
+            allowClear
+            prefix={<SearchOutlined />}
+            placeholder="Tìm theo mã SV, tên, email..."
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            style={{ width: 200 }}
+          />
           <Button
-            key="save"
-            type="primary"
-            icon={<SaveOutlined />}
-            onClick={handleSaveConfiguration}
+            icon={<ReloadOutlined />}
+            onClick={loadGradeBook}
             loading={loading}
           >
-            Lưu cấu hình mới
-          </Button>,
-        ]}
-      >
-        <Alert
-          message="Chỉnh sửa cấu hình"
-          description="Thêm, xóa, sửa các cột điểm. Sau khi lưu, hệ thống sẽ tạo template mới và áp dụng cho lớp này."
-          type="info"
-          showIcon
-          style={{ marginBottom: 16 }}
-        />
-
-        <Space direction="vertical" style={{ width: '100%' }} size="large">
-          {editingColumns.map((col, index) => (
-            <Card
-              key={index}
-              size="small"
-              title={
-                <Space>
-                  <Tag color="blue">Cột {index + 1}</Tag>
-                  <Input
-                    placeholder="Tên cột"
-                    value={col.name}
-                    onChange={(e) => handleUpdateColumn(index, 'name', e.target.value)}
-                    style={{ width: 200 }}
-                  />
-                </Space>
-              }
-              extra={
-                <Button
-                  danger
-                  size="small"
-                  icon={<DeleteOutlined />}
-                  onClick={() => handleRemoveColumn(index)}
-                >
-                  Xóa
-                </Button>
-              }
-            >
-              <Row gutter={16}>
-                <Col span={8}>
-                  <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                    <Text strong>Loại cột:</Text>
-                    <Select
-                      value={col.type}
-                      onChange={(value) => handleUpdateColumn(index, 'type', value)}
-                      style={{ width: '100%' }}
-                    >
-                      <Option value="attendance">📋 Điểm danh</Option>
-                      <Option value="assignment">📝 Bài tập</Option>
-                      <Option value="quiz">📄 Kiểm tra</Option>
-                      <Option value="midterm">📘 Giữa kỳ</Option>
-                      <Option value="final">📕 Cuối kỳ</Option>
-                      <Option value="project">💼 Đồ án</Option>
-                      <Option value="participation">🙋 Tham gia</Option>
-                      <Option value="custom">⚙️ Tùy chỉnh</Option>
-                    </Select>
-                  </Space>
-                </Col>
-
-                <Col span={6}>
-                  <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                    <Text strong>Trọng số (%):</Text>
-                    <InputNumber
-                      min={0}
-                      max={100}
-                      value={col.weight}
-                      onChange={(value) => handleUpdateColumn(index, 'weight', value || 0)}
-                      style={{ width: '100%' }}
-                    />
-                  </Space>
-                </Col>
-
-                <Col span={6}>
-                  <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                    <Text strong>Điểm tối đa:</Text>
-                    <InputNumber
-                      min={0}
-                      max={100}
-                      value={col.maxScore}
-                      onChange={(value) => handleUpdateColumn(index, 'maxScore', value || 10)}
-                      style={{ width: '100%' }}
-                    />
-                  </Space>
-                </Col>
-
-                <Col span={4}>
-                  <Space direction="vertical" size={4}>
-                    <Text strong>Tự động:</Text>
-                    <Checkbox
-                      checked={col.isAutoCalculated}
-                      onChange={(e) =>
-                        handleUpdateColumn(index, 'isAutoCalculated', e.target.checked)
-                      }
-                    >
-                      Tự động
-                    </Checkbox>
-                  </Space>
-                </Col>
-              </Row>
-            </Card>
-          ))}
-
+            Làm mới
+          </Button>
           <Button
-            type="dashed"
-            block
+            type="default"
+            icon={<DownloadOutlined />}
+            onClick={handleExportGrades}
+            style={{ borderColor: '#52c41a', color: '#52c41a' }}
+          >
+            Xuất CSV
+          </Button>
+          <Button
+            type="primary"
             icon={<PlusOutlined />}
-            onClick={handleAddColumn}
-            style={{ height: 50 }}
+            onClick={() => {
+              resetColumnForm();
+              setOpenColumnDialog(true);
+            }}
           >
             Thêm cột điểm
           </Button>
-
-          <Alert
-            message="Tổng trọng số"
-            description={
-              <Space>
-                <span style={{ fontSize: 16 }}>
-                  Tổng:{' '}
-                  <strong style={{ fontSize: 20, color: '#1890ff' }}>
-                    {editingColumns.reduce((sum, col) => sum + col.weight, 0)}%
-                  </strong>
-                </span>
-                {editingColumns.reduce((sum, col) => sum + col.weight, 0) === 100 ? (
-                  <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 24 }} />
-                ) : (
-                  <CloseOutlined style={{ color: '#ff4d4f', fontSize: 24 }} />
-                )}
-              </Space>
-            }
-            type={
-              editingColumns.reduce((sum, col) => sum + col.weight, 0) === 100
-                ? 'success'
-                : 'warning'
-            }
-            showIcon
-          />
         </Space>
-      </Modal>
+      </div>
 
-      {/* ==================== MODAL: SAVE TEMPLATE ==================== */}
-      <Modal
-        title="💾 Lưu cấu hình mới"
-        open={saveTemplateModalVisible}
-        onCancel={() => {
-          setSaveTemplateModalVisible(false);
-          saveTemplateForm.resetFields();
-        }}
-        onOk={() => saveTemplateForm.submit()}
-        okText="Lưu và áp dụng"
-        cancelText="Hủy"
-        width={600}
-      >
-        <Alert
-          message="Tạo template mới"
-          description="Hệ thống sẽ tạo template mới từ cấu hình và tự động áp dụng cho lớp học này."
-          type="success"
-          showIcon
-          style={{ marginBottom: 16 }}
-        />
+      {/* Grade Table */}
+      {gradeBook && (() => {
+        const filteredStudents = gradeBook.students.filter((student) => {
+          if (!keyword) return true;
+          const searchText = keyword.toLowerCase();
+          return (
+            student.studentCode?.toLowerCase().includes(searchText) ||
+            student.fullName?.toLowerCase().includes(searchText) ||
+            student.email?.toLowerCase().includes(searchText)
+          );
+        });
 
-        <Form
-          form={saveTemplateForm}
-          layout="vertical"
-          onFinish={handleSaveAsNewTemplate}
-          initialValues={{
-            templateName: `Cấu hình duylam15 - ${new Date().toLocaleDateString()}`,
-            isPublic: false,
-          }}
-        >
-          <Form.Item
-            name="templateName"
-            label="Tên cấu hình"
-            rules={[{ required: true, message: 'Vui lòng nhập tên cấu hình' }]}
-          >
-            <Input placeholder="VD: Mẫu CNTT 4 cột" prefix="📋" />
-          </Form.Item>
-
-          <Form.Item name="description" label="Mô tả">
-            <TextArea rows={3} placeholder="Mô tả chi tiết về cấu hình này..." />
-          </Form.Item>
-
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="department" label="Khoa">
-                <Input placeholder="VD: CNTT" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="subjectCode" label="Mã môn">
-                <Input placeholder="VD: IT101" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Form.Item name="isPublic" valuePropName="checked">
-            <Checkbox>Công khai cấu hình (Cho phép GV khác sử dụng)</Checkbox>
-          </Form.Item>
-
-          <Divider />
-
-          <Alert
-            message="Xem trước cấu hình"
-            description={
-              <div>
-                <p>
-                  <strong>Số cột:</strong> {editingColumns.length}
-                </p>
-                <p>
-                  <strong>Tổng trọng số:</strong>{' '}
-                  {editingColumns.reduce((sum, col) => sum + col.weight, 0)}%
-                </p>
-                <ul style={{ paddingLeft: 20, marginBottom: 0 }}>
-                  {editingColumns.map((col, i) => (
-                    <li key={i}>
-                      {col.name} ({col.type}) - {col.weight}%
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            }
-            type="info"
-            showIcon
+        return (
+          <Table<Student>
+            dataSource={filteredStudents}
+            columns={getTableColumns()}
+            rowKey="studentId"
+            bordered
+            scroll={{ y: 'calc(100vh - 330px)' }}
+            pagination={{
+              pageSize: 50,
+              showSizeChanger: true,
+              showTotal: (total) => `Tổng ${total} sinh viên`,
+            }}
+            locale={{
+              emptyText: keyword
+                ? 'Không tìm thấy sinh viên nào'
+                : 'Chưa có sinh viên nào trong lớp',
+            }}
           />
+        );
+      })()}
+
+
+      {/* Create/Edit Column Modal */}
+      <Modal
+        title={
+          <Space>
+            <BarChartOutlined />
+            <span>{selectedColumn ? 'Chỉnh sửa cột điểm' : 'Tạo cột điểm mới'}</span>
+          </Space>
+        }
+        open={openColumnDialog}
+        onCancel={() => {
+          setOpenColumnDialog(false);
+          resetColumnForm();
+        }}
+        width={shouldShowSourceSelection() ? 1000 : 600}
+        footer={[
+          <Button key="cancel" onClick={() => {
+            setOpenColumnDialog(false);
+            resetColumnForm();
+          }}>
+            Hủy
+          </Button>,
+          <Button
+            key="submit"
+            type="primary"
+            loading={loading}
+            onClick={selectedColumn ? handleUpdateColumn : handleCreateColumn}
+            disabled={!columnForm.name}
+          >
+            {loading ? 'Đang xử lý...' : (selectedColumn ? 'Cập nhật & Tính lại' : 'Tạo mới')}
+          </Button>,
+        ]}
+      >
+        <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+          <Row gutter={24}>
+            {/* Left Column - Basic Info */}
+            <Col xs={24} md={shouldShowSourceSelection() ? 10 : 24}>
+              <Title level={5} style={{ color: '#1890ff', marginBottom: 16 }}>
+                Thông tin cơ bản
+              </Title>
+              <Divider style={{ marginTop: 8, marginBottom: 16 }} />
+
+              <Form.Item
+                label="Tên cột điểm"
+                required
+                tooltip="VD: Điểm danh, Bài tập, Giữa kì..."
+              >
+                <Input
+                  value={columnForm.name}
+                  onChange={(e) => setColumnForm({ ...columnForm, name: e.target.value })}
+                  placeholder="Nhập tên cột điểm"
+                />
+              </Form.Item>
+
+              <Form.Item label="Loại cột điểm" required>
+                <Select
+                  value={columnForm.type}
+                  onChange={(value) => {
+                    setColumnForm({ ...columnForm, type: value });
+                    setSelectedSessions([]);
+                    setSelectedAssignments([]);
+                    setSelectedColumns([]);
+                  }}
+                  disabled={!!selectedColumn}
+                >
+                  <Option value="attendance">Điểm danh</Option>
+                  <Option value="assignment">Bài tập</Option>
+                  <Option value="midterm">Giữa kì</Option>
+                  <Option value="final">Cuối kì</Option>
+                  <Option value="project">Dự án</Option>
+                  <Option value="participation">Tham gia</Option>
+                  <Option value="custom">Tùy chỉnh</Option>
+                </Select>
+              </Form.Item>
+
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item label="Điểm tối đa">
+                    <InputNumber
+                      value={columnForm.maxScore}
+                      onChange={(value) => setColumnForm({ ...columnForm, maxScore: value || 0 })}
+                      min={0}
+                      step={0.1}
+                      style={{ width: '100%' }}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="Trọng số (%)" tooltip="Tỷ trọng trong điểm tổng kết">
+                    <InputNumber
+                      value={columnForm.weight}
+                      onChange={(value) => setColumnForm({ ...columnForm, weight: value || 0 })}
+                      min={0}
+                      max={100}
+                      step={0.1}
+                      style={{ width: '100%' }}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </Col>
+
+            {/* Right Column - Source Selection */}
+            {shouldShowSourceSelection() && (
+              <Col xs={24} md={14}>
+                <Title level={5} style={{ color: '#1890ff', marginBottom: 16 }}>
+                  {columnForm.type === 'attendance' && 'Chọn buổi điểm danh'}
+                  {columnForm.type === 'assignment' && 'Chọn bài tập'}
+                  {(columnForm.type === 'midterm' || columnForm.type === 'final' || columnForm.type === 'custom') && 'Chọn các cột điểm'}
+                </Title>
+                <Divider style={{ marginTop: 8, marginBottom: 16 }} />
+
+                {/* Attendance Sessions Selection */}
+                {columnForm.type === 'attendance' && (
+                  <div>
+                    <Alert
+                      message={
+                        <span>
+                          Chọn các buổi điểm danh để tính vào cột điểm này.
+                          <br />
+                          Đã chọn: <Text strong>{selectedSessions.length}/{attendanceSessions.length}</Text>
+                          {selectedColumn && getSelectionChanges().hasChanges && (
+                            <div style={{ marginTop: 8, color: '#fa8c16', fontSize: 12 }}>
+                              ⚠️ Có thay đổi: +{getSelectionChanges().added.length} thêm,
+                              -{getSelectionChanges().removed.length} xóa
+                            </div>
+                          )}
+                        </span>
+                      }
+                      type="info"
+                      icon={<BarChartOutlined />}
+                      style={{ marginBottom: 16 }}
+                    />
+
+                    {attendanceSessions.length === 0 ? (
+                      <Alert message="Chưa có buổi điểm danh nào trong lớp học này" type="warning" />
+                    ) : (
+                      <Card
+                        bordered
+                        size="small"
+                        style={{ maxHeight: 400, overflow: 'auto' }}
+                        bodyStyle={{ padding: 0 }}
+                      >
+                        <List
+                          dataSource={attendanceSessions}
+                          renderItem={(session) => (
+                            <List.Item
+                              style={{ padding: '12px 16px', cursor: 'pointer' }}
+                              onClick={() => handleToggleSession(session.id)}
+                            >
+                              <Checkbox
+                                checked={selectedSessions.includes(session.id)}
+                                onChange={() => handleToggleSession(session.id)}
+                              />
+                              <List.Item.Meta
+                                title={
+                                  <Space>
+                                    <Text strong>{session.name || `Buổi ${session.sessionCode}`}</Text>
+                                    {selectedSessions.includes(session.id) && (
+                                      <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                                    )}
+                                  </Space>
+                                }
+                                description={
+                                  <Space direction="vertical" size={4}>
+                                    <Text type="secondary">
+                                      Mã: {session.sessionCode} • {formatDate(session.createdAt)}
+                                    </Text>
+                                    <Tag color="blue" style={{ width: 'fit-content' }}>
+                                      {session.attendances.length} sinh viên đã điểm danh
+                                    </Tag>
+                                  </Space>
+                                }
+                              />
+                            </List.Item>
+                          )}
+                        />
+                      </Card>
+                    )}
+                  </div>
+                )}
+
+                {/* Assignments Selection */}
+                {columnForm.type === 'assignment' && (
+                  <div>
+                    <Alert
+                      message={
+                        <span>
+                          Chọn các bài tập để tính vào cột điểm này.
+                          <br />
+                          Đã chọn: <Text strong>{selectedAssignments.length}/{assignments.length}</Text>
+                          {selectedColumn && getSelectionChanges().hasChanges && (
+                            <div style={{ marginTop: 8, color: '#fa8c16', fontSize: 12 }}>
+                              ⚠️ Có thay đổi: +{getSelectionChanges().added.length} thêm,
+                              -{getSelectionChanges().removed.length} xóa
+                            </div>
+                          )}
+                        </span>
+                      }
+                      type="info"
+                      icon={<BarChartOutlined />}
+                      style={{ marginBottom: 16 }}
+                    />
+
+                    {assignments.length === 0 ? (
+                      <Alert message="Chưa có bài tập nào trong lớp học này" type="warning" />
+                    ) : (
+                      <Card
+                        bordered
+                        size="small"
+                        style={{ maxHeight: 400, overflow: 'auto' }}
+                        bodyStyle={{ padding: 0 }}
+                      >
+                        <List
+                          dataSource={assignments}
+                          renderItem={(assignment) => (
+                            <List.Item
+                              style={{ padding: '12px 16px', cursor: 'pointer' }}
+                              onClick={() => handleToggleAssignment(assignment.id)}
+                            >
+                              <Checkbox
+                                checked={selectedAssignments.includes(assignment.id)}
+                                onChange={() => handleToggleAssignment(assignment.id)}
+                              />
+                              <List.Item.Meta
+                                title={
+                                  <Space>
+                                    <Text strong>{assignment.title}</Text>
+                                    {selectedAssignments.includes(assignment.id) && (
+                                      <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                                    )}
+                                  </Space>
+                                }
+                                description={
+                                  <Space direction="vertical" size={4}>
+                                    <Text type="secondary">
+                                      Điểm tối đa: {assignment.maxScore} • Hạn: {formatDate(assignment.dueDate)}
+                                    </Text>
+                                    <Tag color="purple" style={{ width: 'fit-content' }}>
+                                      {assignment.submissions.length} bài nộp
+                                    </Tag>
+                                  </Space>
+                                }
+                              />
+                            </List.Item>
+                          )}
+                        />
+                      </Card>
+                    )}
+                  </div>
+                )}
+
+                {/* Grade Columns Selection */}
+                {(columnForm.type === 'midterm' || columnForm.type === 'final' || columnForm.type === 'custom') && (
+                  <div>
+                    <Alert
+                      message={
+                        <span>
+                          Chọn các cột điểm để tính vào cột này.
+                          <br />
+                          Đã chọn: <Text strong>{selectedColumns.length}/{availableColumns.length}</Text>
+                          {selectedColumn && getSelectionChanges().hasChanges && (
+                            <div style={{ marginTop: 8, color: '#fa8c16', fontSize: 12 }}>
+                              ⚠️ Có thay đổi: +{getSelectionChanges().added.length} thêm,
+                              -{getSelectionChanges().removed.length} xóa
+                            </div>
+                          )}
+                        </span>
+                      }
+                      type="info"
+                      icon={<BarChartOutlined />}
+                      style={{ marginBottom: 16 }}
+                    />
+
+                    {availableColumns.length === 0 ? (
+                      <Alert message="Chưa có cột điểm nào khác trong lớp học này" type="warning" />
+                    ) : (
+                      <Card
+                        bordered
+                        size="small"
+                        style={{ maxHeight: 400, overflow: 'auto' }}
+                        bodyStyle={{ padding: 0 }}
+                      >
+                        <List
+                          dataSource={availableColumns}
+                          renderItem={(col) => (
+                            <List.Item
+                              style={{ padding: '12px 16px', cursor: 'pointer' }}
+                              onClick={() => handleToggleColumn(col.id)}
+                            >
+                              <Checkbox
+                                checked={selectedColumns.includes(col.id)}
+                                onChange={() => handleToggleColumn(col.id)}
+                              />
+                              <List.Item.Meta
+                                title={
+                                  <Space>
+                                    <Text strong>{col.name}</Text>
+                                    <Tag color={getColumnTypeColor(col.type)}>
+                                      {getColumnTypeLabel(col.type)}
+                                    </Tag>
+                                    {selectedColumns.includes(col.id) && (
+                                      <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                                    )}
+                                  </Space>
+                                }
+                                description={
+                                  <Space direction="vertical" size={4}>
+                                    <Text type="secondary">
+                                      Điểm tối đa: {col.maxScore}
+                                      {col.weight && ` • Trọng số: ${col.weight}%`}
+                                    </Text>
+                                    <Tag color="cyan" style={{ width: 'fit-content' }}>
+                                      {col.studentGrades?.length || 0} sinh viên có điểm
+                                    </Tag>
+                                  </Space>
+                                }
+                              />
+                            </List.Item>
+                          )}
+                        />
+                      </Card>
+                    )}
+                  </div>
+                )}
+              </Col>
+            )}
+          </Row>
         </Form>
       </Modal>
     </div>

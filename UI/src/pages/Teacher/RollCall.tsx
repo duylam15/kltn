@@ -26,6 +26,10 @@ import {
   PlusOutlined,
   TeamOutlined,
   QrcodeOutlined,
+  WarningOutlined,
+  CalendarOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
@@ -454,6 +458,31 @@ export default function RollCall() {
       s.sessionCode?.toLowerCase().includes(keyword.toLowerCase())
   );
 
+  const getStatistics = () => {
+    const totalSessions = sessions.length;
+    const activeSessions = sessions.filter((s) => {
+      if (!s.expiresAt) return true;
+      const expireTime = typeof s.expiresAt === 'string' ? s.expiresAt : s.expiresAt.toISOString();
+      return dayjs(expireTime).isAfter(dayjs());
+    }).length;
+    const expiredSessions = totalSessions - activeSessions;
+    const totalAttendances = sessions.reduce(
+      (sum, s) => sum + (s.attendances?.length || 0),
+      0
+    );
+    const avgAttendancePerSession = totalSessions > 0 ? totalAttendances / totalSessions : 0;
+
+    return {
+      totalSessions,
+      activeSessions,
+      expiredSessions,
+      totalAttendances,
+      avgAttendancePerSession,
+    };
+  };
+
+  const stats = getStatistics();
+
   if (loading) return <Spin tip="Đang tải..." />;
 
   return (
@@ -461,12 +490,69 @@ export default function RollCall() {
       <div
         style={{
           display: "flex",
-          justifyContent: "flex-end",
+          justifyContent: "space-between",
           alignItems: "center",
           marginBottom: 16,
           marginTop: -16,
         }}
       >
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "#000",
+              border: "1px solid #ddd",
+              borderRadius: 6,
+              padding: "6px 10px",
+              background: "#fff",
+            }}
+          >
+            <CalendarOutlined style={{ fontSize: 14, color: "#1890ff" }} />
+            <span>Tổng phiên:</span>
+            <strong>{stats.totalSessions}</strong>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "#000",
+              border: "1px solid #ddd",
+              borderRadius: 6,
+              padding: "6px 10px",
+              background: "#fff",
+            }}
+          >
+            <CheckCircleOutlined style={{ fontSize: 14, color: "#52c41a" }} />
+            <span>Đang hoạt động:</span>
+            <strong style={{ color: "#52c41a" }}>{stats.activeSessions}</strong>
+          </div>
+
+          {stats.expiredSessions > 0 && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 12,
+                color: "#000",
+                border: "1px solid #ddd",
+                borderRadius: 6,
+                padding: "6px 10px",
+                background: "#fff",
+              }}
+            >
+              <ClockCircleOutlined style={{ fontSize: 14, color: "#ff4d4f" }} />
+              <span>Đã hết hạn:</span>
+              <strong style={{ color: "#ff4d4f" }}>{stats.expiredSessions}</strong>
+            </div>
+          )}
+        </div>
         <div style={{ display: "flex", gap: 8 }}>
           <Input
             allowClear
@@ -474,7 +560,7 @@ export default function RollCall() {
             placeholder="Tìm theo tên/mã phiên..."
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            style={{ width: 260 }}
+            style={{ width: 200 }}
           />
           <Button icon={<ReloadOutlined />} onClick={fetchSessions}>
             Refresh

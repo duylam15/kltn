@@ -50,6 +50,7 @@ import Questions from "../pages/Admin/Questions";
 import Subjects from "../pages/Admin/Subjects";
 import Chat from "../pages/Teacher/Chat";
 import GradesTeacher from "../pages/Teacher/GradesTeacher";
+import GroupList from "../pages/Teacher/GroupList";
 
 export const router = createBrowserRouter([
   // ========== Root check auth ==========
@@ -140,7 +141,8 @@ export const router = createBrowserRouter([
         children: [
           { index: true, loader: () => redirect("overview") },
           { path: "overview", element: <Overview /> },
-          { path: "friend", element: <StudentList /> },
+          { path: "groups", element: <GroupList /> },
+          { path: "students", element: <StudentList /> },
           { path: "materials", element: <Materials /> },
           { path: "roll-call", element: <RollCall /> },
           { path: "chat", element: <Chat /> },

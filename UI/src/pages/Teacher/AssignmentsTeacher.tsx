@@ -27,6 +27,10 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
+  EyeInvisibleOutlined,
+  QuestionCircleOutlined,
+  CheckCircleOutlined,
+  CalendarOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -506,6 +510,35 @@ export default function AssignmentTeacher() {
     );
   });
 
+  const getStatistics = () => {
+    const totalAssignments = assignments.length;
+    const assignedAssignments = Object.keys(assignedIds).length;
+    const unassignedAssignments = totalAssignments - assignedAssignments;
+    const visibleAssignments = Object.values(visibility).filter(v => v === true).length;
+    const hiddenAssignments = assignedAssignments - visibleAssignments;
+
+    // Thống kê theo loại
+    const byType = assignments.reduce((acc, a) => {
+      acc[a.type] = (acc[a.type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Tổng số câu hỏi trong tất cả bài tập (nếu có)
+    const totalQuestions = questions.length;
+
+    return {
+      totalAssignments,
+      assignedAssignments,
+      unassignedAssignments,
+      visibleAssignments,
+      hiddenAssignments,
+      byType,
+      totalQuestions,
+    };
+  };
+
+  const stats = getStatistics();
+
   if (loading) {
     return (
       <div style={{ textAlign: "center", padding: 60 }}>
@@ -522,14 +555,124 @@ export default function AssignmentTeacher() {
           justifyContent: "space-between",
           alignItems: "center",
           marginBottom: 16,
+          marginTop: -16,
+          flexWrap: "wrap",
+          gap: 12,
         }}
       >
-        <Title level={3} style={{ margin: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <FileQuestion size={28} />
-            Bài tập
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "#000",
+              border: "1px solid #ddd",
+              borderRadius: 6,
+              padding: "6px 10px",
+              background: "#fff",
+            }}
+          >
+            <FileTextOutlined style={{ fontSize: 14, color: "#1890ff" }} />
+            <span>Tổng bài tập:</span>
+            <strong>{stats.totalAssignments}</strong>
           </div>
-        </Title>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "#000",
+              border: "1px solid #ddd",
+              borderRadius: 6,
+              padding: "6px 10px",
+              background: "#fff",
+            }}
+          >
+            <CloudUploadOutlined style={{ fontSize: 14, color: "#52c41a" }} />
+            <span>Đã gán vào lớp:</span>
+            <strong style={{ color: "#52c41a" }}>{stats.assignedAssignments}</strong>
+          </div>
+
+          {stats.unassignedAssignments > 0 && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 12,
+                color: "#000",
+                border: "1px solid #ddd",
+                borderRadius: 6,
+                padding: "6px 10px",
+                background: "#fff",
+              }}
+            >
+              <CalendarOutlined style={{ fontSize: 14, color: "#faad14" }} />
+              <span>Chưa gán:</span>
+              <strong style={{ color: "#faad14" }}>{stats.unassignedAssignments}</strong>
+            </div>
+          )}
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "#000",
+              border: "1px solid #ddd",
+              borderRadius: 6,
+              padding: "6px 10px",
+              background: "#fff",
+            }}
+          >
+            <CheckCircleOutlined style={{ fontSize: 14, color: "#722ed1" }} />
+            <span>Hiển thị:</span>
+            <strong style={{ color: "#722ed1" }}>{stats.visibleAssignments}</strong>
+          </div>
+
+          {stats.hiddenAssignments > 0 && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 12,
+                color: "#000",
+                border: "1px solid #ddd",
+                borderRadius: 6,
+                padding: "6px 10px",
+                background: "#fff",
+              }}
+            >
+              <EyeInvisibleOutlined style={{ fontSize: 14, color: "#ff4d4f" }} />
+              <span>Đã ẩn:</span>
+              <strong style={{ color: "#ff4d4f" }}>{stats.hiddenAssignments}</strong>
+            </div>
+          )}
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "#000",
+              border: "1px solid #ddd",
+              borderRadius: 6,
+              padding: "6px 10px",
+              background: "#fff",
+            }}
+          >
+            <QuestionCircleOutlined style={{ fontSize: 14, color: "#1890ff" }} />
+            <span>Tổng câu hỏi:</span>
+            <strong>{stats.totalQuestions}</strong>
+          </div>
+        </div>
         <div style={{ display: "flex", gap: 8 }}>
           <Input
             allowClear
@@ -537,7 +680,7 @@ export default function AssignmentTeacher() {
             placeholder="Tìm theo tiêu đề, mô tả, loại..."
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            style={{ width: 320 }}
+            style={{ width: 200 }}
           />
           <Button icon={<ReloadOutlined />} onClick={fetchData}>
             Làm mới

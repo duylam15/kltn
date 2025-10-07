@@ -24,6 +24,9 @@ import {
 	SearchOutlined,
 	FileOutlined,
 	CloudUploadOutlined,
+	EyeInvisibleOutlined,
+	CheckCircleOutlined,
+	FolderOpenOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -380,6 +383,26 @@ export default function Materials() {
 			m.fileName?.toLowerCase().includes(keyword.toLowerCase())
 	);
 
+	const getStatistics = () => {
+		const totalMaterials = materials.length;
+		const assignedMaterials = Object.keys(assignedIds).length;
+		const unassignedMaterials = totalMaterials - assignedMaterials;
+		const visibleMaterials = Object.values(visibility).filter(v => v === true).length;
+		const hiddenMaterials = assignedMaterials - visibleMaterials;
+		const totalFileSize = materials.reduce((sum, m) => sum + (m.fileSize || 0), 0);
+
+		return {
+			totalMaterials,
+			assignedMaterials,
+			unassignedMaterials,
+			visibleMaterials,
+			hiddenMaterials,
+			totalFileSize,
+		};
+	};
+
+	const stats = getStatistics();
+
 	if (loading) return <Spin tip="Đang tải..." />;
 
 	return (
@@ -388,12 +411,107 @@ export default function Materials() {
 			<div
 				style={{
 					display: "flex",
-					justifyContent: "flex-end",
+					justifyContent: "space-between",
 					alignItems: "center",
 					marginBottom: 16,
 					marginTop: -16,
 				}}
 			>
+				<div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 12,
+							color: "#000",
+							border: "1px solid #ddd",
+							borderRadius: 6,
+							padding: "6px 10px",
+							background: "#fff",
+						}}
+					>
+						<FolderOpenOutlined style={{ fontSize: 14, color: "#1890ff" }} />
+						<span>Tổng tài liệu:</span>
+						<strong>{stats.totalMaterials}</strong>
+					</div>
+
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 12,
+							color: "#000",
+							border: "1px solid #ddd",
+							borderRadius: 6,
+							padding: "6px 10px",
+							background: "#fff",
+						}}
+					>
+						<CloudUploadOutlined style={{ fontSize: 14, color: "#52c41a" }} />
+						<span>Đã gán vào lớp:</span>
+						<strong style={{ color: "#52c41a" }}>{stats.assignedMaterials}</strong>
+					</div>
+
+					{stats.unassignedMaterials > 0 && (
+						<div
+							style={{
+								display: "flex",
+								alignItems: "center",
+								gap: 6,
+								fontSize: 12,
+								color: "#000",
+								border: "1px solid #ddd",
+								borderRadius: 6,
+								padding: "6px 10px",
+								background: "#fff",
+							}}
+						>
+							<FileOutlined style={{ fontSize: 14, color: "#faad14" }} />
+							<span>Chưa gán:</span>
+							<strong style={{ color: "#faad14" }}>{stats.unassignedMaterials}</strong>
+						</div>
+					)}
+
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 12,
+							color: "#000",
+							border: "1px solid #ddd",
+							borderRadius: 6,
+							padding: "6px 10px",
+							background: "#fff",
+						}}
+					>
+						<CheckCircleOutlined style={{ fontSize: 14, color: "#722ed1" }} />
+						<span>Hiển thị:</span>
+						<strong style={{ color: "#722ed1" }}>{stats.visibleMaterials}</strong>
+					</div>
+
+					{stats.hiddenMaterials > 0 && (
+						<div
+							style={{
+								display: "flex",
+								alignItems: "center",
+								gap: 6,
+								fontSize: 12,
+								color: "#000",
+								border: "1px solid #ddd",
+								borderRadius: 6,
+								padding: "6px 10px",
+								background: "#fff",
+							}}
+						>
+							<EyeInvisibleOutlined style={{ fontSize: 14, color: "#ff4d4f" }} />
+							<span>Đã ẩn:</span>
+							<strong style={{ color: "#ff4d4f" }}>{stats.hiddenMaterials}</strong>
+						</div>
+					)}
+				</div>
 				<div style={{ display: "flex", gap: 8 }}>
 					<Input
 						allowClear
@@ -401,7 +519,7 @@ export default function Materials() {
 						placeholder="Tìm theo tiêu đề, mô tả, tên file..."
 						value={keyword}
 						onChange={(e) => setKeyword(e.target.value)}
-						style={{ width: 280 }}
+						style={{ width: 200 }}
 					/>
 					<Button icon={<ReloadOutlined />} onClick={fetchData}>
 						Refresh
@@ -479,7 +597,7 @@ export default function Materials() {
 					)}
 				</Form>
 			</Modal>
-
+			
 			{/* Modal thêm tài liệu */}
 			<Modal
 				title="Thêm tài liệu mới"

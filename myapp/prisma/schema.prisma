@@ -74,6 +74,7 @@ model User {
   auditLogs         AuditLog[]
   chatMessages      ChatMessage[]
   chatParticipants  ChatParticipant[]
+  overriddenGrades  StudentGrade[]    @relation("GradeOverriddenBy")
 
   @@index([roleId])
   @@index([isActive])
@@ -98,6 +99,7 @@ model Student {
   submissions    Submission[]
   learningPaths  LearningPath[]
   attendances    Attendance[]
+  studentGrades  StudentGrade[]
 
   @@index([status])
   @@index([className])
@@ -187,14 +189,9 @@ model CourseSection {
   maxStudents     Int                 @default(50)
   currentStudents Int                 @default(0)
   status          CourseSectionStatus @default(planned)
-  
-  // ===== LIÊN KẾT VỚI TEMPLATE =====
-  gradeTemplateId Int?                            // Template đang sử dụng (nullable)
-  
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
-  
   subject            Subject             @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   term               Term                @relation(fields: [termId], references: [id], onDelete: Cascade)
   instructors        SectionInstructor[]
@@ -206,11 +203,11 @@ model CourseSection {
   assignments        SectionAssignment[]
   notifications      Notification[]
   chatRooms          ChatRoom[]
+  gradeColumns       GradeColumn[]
 
   @@index([subjectId])
   @@index([termId])
   @@index([sectionCode])
-  @@index([gradeTemplateId])
 }
 
 model SectionInstructor {
@@ -407,6 +404,8 @@ model AuditLog {
   admin User @relation(fields: [adminId], references: [id], onDelete: Cascade)
 }
 
+// ===== HỆ THỐNG ĐIỂM DANH =====
+
 model AttendanceSession {
   id          Int       @id @default(autoincrement())
   sectionId   Int
@@ -418,10 +417,10 @@ model AttendanceSession {
   radius      Float?    @default(50)
   createdAt   DateTime  @default(now())
   expiresAt   DateTime?
-  
 
-  section     CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  attendances Attendance[]
+  section      CourseSection                  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  attendances  Attendance[]
+  gradeColumns GradeColumnAttendanceSession[]
 }
 
 model Attendance {
@@ -434,7 +433,7 @@ model Attendance {
   longitude   Float?
   distance    Float?
   score       Float?
-  
+
   session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   student Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
@@ -447,6 +446,8 @@ enum AttendanceStatus {
   absent
   warning
 }
+
+// ===== HỆ THỐNG BÀI TẬP =====
 
 enum AssignmentType {
   exercise
@@ -582,7 +583,6 @@ model Assignment {
   title       String         @db.VarChar(200)
   description String?        @db.Text
   type        AssignmentType @default(exercise)
-  
 
   dueDate                DateTime?
   maxScore               Float     @default(100)
@@ -600,8 +600,8 @@ model Assignment {
   submissions   Submission[]
   sectionLinks  SectionAssignment[]
   notifications Notification[]
-
-  ChatRoom ChatRoom[]
+  ChatRoom      ChatRoom[]
+  gradeColumns  GradeColumnAssignment[]
 }
 
 model SectionAssignment {
@@ -628,6 +628,8 @@ model AssignmentQuestion {
 
   @@id([assignmentId, questionId])
 }
+
+// ===== HỆ THỐNG CHAT =====
 
 model ChatRoom {
   id        Int          @id @default(autoincrement())
@@ -677,5 +679,128 @@ model ChatMessage {
   room          ChatRoom       @relation(fields: [roomId], references: [id], onDelete: Cascade)
   sender        User           @relation(fields: [senderId], references: [id], onDelete: Cascade)
   notifications Notification[]
+}
+
+// ===== HỆ THỐNG XEM ĐIỂM =====
+
+// Enum cho loại cột điểm
+enum GradeColumnType {
+  attendance    // Cột điểm danh
+  assignment    // Cột bài tập/assignment
+  midterm       // Cột giữa kì
+  final         // Cột cuối kì
+  participation // Cột tham gia
+  project       // Cột dự án
+  custom        // Cột tự định nghĩa
+}
+
+// Enum cho phương thức tính điểm
+enum GradeCalculationMethod {
+  average          // Trung bình cộng
+  weighted_average // Trung bình có trọng số
+  sum              // Tổng điểm
+  best_n           // Lấy N điểm cao nhất
+  latest           // Lấy điểm mới nhất
+  highest          // Lấy điểm cao nhất
+  percentage       // Tỷ lệ phần trăm
+}
+
+// Bảng chính: Cột điểm
+model GradeColumn {
+  id                    Int                     @id @default(autoincrement())
+  sectionId             Int
+  name                  String                  @db.VarChar(200)
+  type                  GradeColumnType
+  description           String?                 @db.Text
+  maxScore              Float                   @default(100)
+  weight                Float?
+  calculationMethod     GradeCalculationMethod  @default(average)
+  bestNCount            Int?
+  dropLowest            Int?                    @default(0)
+  isPublished           Boolean                 @default(false)
+  displayOrder          Int                     @default(0)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  section               CourseSection           @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  attendanceSessions    GradeColumnAttendanceSession[]
+  assignments           GradeColumnAssignment[]
+  studentGrades         StudentGrade[]
+  
+  // Quan hệ với các cột khác
+  parentLinks           GradeColumnLink[]       @relation("ParentColumn") // Các cột con của cột này
+  childLinks            GradeColumnLink[]       @relation("ChildColumn")  // Các cột cha chứa cột này
+  
+  @@index([sectionId])
+}
+
+// Bảng liên kết: Cột điểm - Buổi điểm danh
+model GradeColumnAttendanceSession {
+  id            Int      @id @default(autoincrement())
+  gradeColumnId Int
+  sessionId     Int
+  weight        Float?   @default(1) // Trọng số của buổi này trong cột
+  addedAt       DateTime @default(now())
+
+  gradeColumn GradeColumn       @relation(fields: [gradeColumnId], references: [id], onDelete: Cascade)
+  session     AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([gradeColumnId, sessionId])
+  @@index([sessionId])
+}
+
+// Bảng liên kết: Cột điểm - Assignment
+model GradeColumnAssignment {
+  id            Int      @id @default(autoincrement())
+  gradeColumnId Int
+  assignmentId  Int
+  weight        Float?   @default(1) // Trọng số của assignment này trong cột
+  addedAt       DateTime @default(now())
+
+  gradeColumn GradeColumn @relation(fields: [gradeColumnId], references: [id], onDelete: Cascade)
+  assignment  Assignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@unique([gradeColumnId, assignmentId])
+  @@index([assignmentId])
+}
+
+// Bảng lưu điểm của sinh viên cho từng cột
+model StudentGrade {
+  id              Int      @id @default(autoincrement())
+  gradeColumnId   Int
+  studentId       Int
+  score           Float?   // Điểm đã tính toán
+  maxScore        Float?   // Điểm tối đa
+  percentage      Float?   // Phần trăm (0-100)
+  note            String?  @db.Text
+  isOverridden    Boolean  @default(false) // Có ghi đè thủ công không
+  overriddenScore Float?   // Điểm ghi đè
+  overriddenAt    DateTime?
+  overriddenBy    Int?     // ID của giáo viên ghi đè
+  calculatedAt    DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  gradeColumn      GradeColumn @relation(fields: [gradeColumnId], references: [id], onDelete: Cascade)
+  student          Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  overriddenByUser User?       @relation("GradeOverriddenBy", fields: [overriddenBy], references: [id])
+
+  @@unique([gradeColumnId, studentId])
+  @@index([studentId])
+  @@index([gradeColumnId])
+}
+
+// Thêm model mới để liên kết cột điểm với nhau
+model GradeColumnLink {
+  id              Int         @id @default(autoincrement())
+  parentColumnId  Int         // Cột cha (giữa kì, cuối kì)
+  childColumnId   Int         // Cột con (điểm danh, bài tập, etc)
+  weight          Float?      @default(1)
+  addedAt         DateTime    @default(now())
+  
+  parentColumn    GradeColumn @relation("ParentColumn", fields: [parentColumnId], references: [id], onDelete: Cascade)
+  childColumn     GradeColumn @relation("ChildColumn", fields: [childColumnId], references: [id], onDelete: Cascade)
+  
+  @@unique([parentColumnId, childColumnId])
+  @@index([childColumnId])
 }
 

@@ -1,6 +1,19 @@
 import { Request, Response } from "express";
 import * as service from "./assignment.service";
 
+// assignment.controller.ts
+export async function bySection(req: Request, res: Response) {
+  const { sectionId } = req.params;
+  if (!sectionId) {
+    return res
+      .status(400)
+      .json({ success: false, message: "sectionId required" });
+  }
+  const data = await service.getAssignmentsBySection(Number(sectionId));
+  res.json({ success: true, data });
+}
+
+
 export async function create(req: Request, res: Response) {
     const { body } = (req as any).validated;
     const assignment = await service.createAssignment(body);

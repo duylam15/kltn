@@ -1,6 +1,24 @@
 import { prisma } from "../../prisma/client";
 import { AssignmentType } from "@prisma/client";
 
+export async function getAssignmentsBySection(sectionId: number) {
+  return prisma.assignment.findMany({
+    where: {
+      sectionLinks: {
+        some: { sectionId },
+      },
+    },
+    include: {
+      sectionLinks: {
+        include: { section: true },
+      },
+      questions: true,
+      submissions: true,
+    },
+  });
+}
+
+
 export async function createAssignment(data: any) {
     return prisma.assignment.create({ data });
 }

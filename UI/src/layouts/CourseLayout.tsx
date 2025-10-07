@@ -4,7 +4,8 @@ import { Card, Tabs, Tag, Skeleton, Typography } from "antd";
 
 const tabDefs = [
 	{ key: "overview", label: "Tổng quan" },
-	{ key: "friend", label: "Nhóm" },  // 👈 thêm
+	{ key: "groups", label: "Danh sách Nhóm" },  // 👈 thêm
+	{ key: "students", label: "Danh sách Sinh viên" },  // 👈 thêm
 	{ key: "roll-call", label: "Điểm danh" },
 	{ key: "materials", label: "Tài liệu" },
 	{ key: "chat", label: "Thảo luận" },

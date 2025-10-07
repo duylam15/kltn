@@ -1,327 +1,701 @@
 import React, { useEffect, useState } from "react";
 import {
-	Table,
-	Button,
-	Spin,
-	Typography,
-	message,
-	Tag,
-	Modal,
-	Input,
-	Tooltip,
-	Form,
-	InputNumber,
-	Switch,
-	Popconfirm,
+  Card,
+  Row,
+  Col,
+  Statistic,
+  Typography,
+  Spin,
+  Progress,
+  List,
+  Avatar,
+  Tag,
+  Timeline,
+  Empty,
+  Divider,
+  Space,
+  Button,
 } from "antd";
 import {
-	ReloadOutlined,
-	SearchOutlined,
-	TeamOutlined,
-	PlusOutlined,
-	EditOutlined,
-	DeleteOutlined,
+  UserOutlined,
+  BookOutlined,
+  FileTextOutlined,
+  CalendarOutlined,
+  TeamOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  TrophyOutlined,
+  FolderOpenOutlined,
+  BarChartOutlined,
+  RocketOutlined,
+  ArrowRightOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
+import "dayjs/locale/vi";
 import toast from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
 
-const { Title } = Typography;
+dayjs.extend(relativeTime);
+dayjs.locale("vi");
+
+const { Title, Text } = Typography;
 const API_BASE = "http://localhost:4000/api/v1";
 
-type Student = {
-	id: number;
-	studentCode: string;
-	className: string;
-	user: { fullName: string; email: string };
-};
+export default function Overview() {
+  const navigate = useNavigate();
+  const path = window.location.pathname;
+  const sectionId = Number(path.split("/")[3]);
 
-type Group = {
-	id: number;
-	sectionId: number;
-	groupCode?: string | null;
-	groupName?: string | null;
-	maxMembers?: number | null;
-	isActive?: boolean | null;
-	createdAt?: string;
-	updatedAt?: string;
-	enrollments?: { student: Student }[];
-};
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalStudents: 0,
+    totalGroups: 0,
+    studentsWithGroup: 0,
+    totalAssignments: 0,
+    visibleAssignments: 0,
+    totalMaterials: 0,
+    visibleMaterials: 0,
+    totalSessions: 0,
+    activeSessions: 0,
+    avgAttendanceRate: 0,
+    totalGradeColumns: 0,
+    publishedColumns: 0,
+  });
 
-export default function SectionGroups() {
-	const path = window.location.pathname;
-	const sectionId = Number(path.split("/")[3]);
+  const [recentActivities, setRecentActivities] = useState<any[]>([]);
+  const [upcomingDeadlines, setUpcomingDeadlines] = useState<any[]>([]);
+  const [topStudents, setTopStudents] = useState<any[]>([]);
 
-	const [loading, setLoading] = useState(true);
-	const [groups, setGroups] = useState<Group[]>([]);
-	const [keyword, setKeyword] = useState("");
+  useEffect(() => {
+    fetchOverviewData();
+  }, [sectionId]);
 
-	// modal chi tiết
-	const [detailOpen, setDetailOpen] = useState(false);
-	const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+  const fetchOverviewData = async () => {
+    try {
+      setLoading(true);
 
-	// modal thêm/sửa
-	const [form] = Form.useForm<Group>();
-	const [modalOpen, setModalOpen] = useState(false);
-	const [editing, setEditing] = useState<Group | null>(null);
+      const [
+        studentsRes,
+        groupsRes,
+        assignmentsRes,
+        materialsRes,
+        sessionsRes,
+        gradesRes,
+      ] = await Promise.all([
+        axios.get(`${API_BASE}/sections-enrollments/section/${sectionId}/students`),
+        axios.get(`${API_BASE}/sections-groups/sections/${sectionId}/groups`),
+        axios.get(`${API_BASE}/sections-assignments/sections/${sectionId}/assignments`),
+        axios.get(`${API_BASE}/materials/class/${sectionId}`),
+        axios.get(`${API_BASE}/attendance/sections/${sectionId}/sessions`),
+        axios.get(`${API_BASE}/grades/sections/${sectionId}/gradebook?includeUnpublished=true`),
+      ]);
 
-	useEffect(() => {
-		fetchGroups();
-	}, [sectionId]);
+      const students = studentsRes.data.data || [];
+      const groups = groupsRes.data.data || [];
+      const assignments = assignmentsRes.data.data || [];
+      const materials = materialsRes.data.data || [];
+      const sessions = sessionsRes.data.data || [];
+      const gradeBook = gradesRes.data.data;
 
-	async function fetchGroups() {
-		try {
-			setLoading(true);
-			const res = await axios.get<{ success: boolean; data: Group[] }>(
-				`${API_BASE}/sections-groups/sections/${sectionId}/groups`
-			);
-			if (res.data.success) {
-				setGroups(res.data.data || []);
-			}
-		} catch (err) {
-			toast.error("Không tải được danh sách nhóm");
-		} finally {
-			setLoading(false);
-		}
-	}
+      const studentsWithGroup = students.filter((s: any) => s.groupId).length;
+      const visibleAssignments = assignments.filter((a: any) => a.isOpen).length;
+      const visibleMaterials = materials.filter((m: any) => m.isOpen).length;
+      const activeSessions = sessions.filter((s: any) => {
+        if (!s.expiresAt) return true;
+        return dayjs(s.expiresAt).isAfter(dayjs());
+      }).length;
 
-	const handleDelete = async (id: number) => {
-		try {
-			await axios.delete(`${API_BASE}/sections-groups/${id}`);
-			toast.success("Đã xóa nhóm");
-			setGroups((prev) => prev.filter((g) => g.id !== id));
-		} catch (err) {
-			toast.error("Không thể xóa nhóm");
-		}
-	};
+      const totalAttendances = sessions.reduce(
+        (sum: number, s: any) => sum + (s.attendances?.length || 0),
+        0
+      );
+      const avgAttendanceRate =
+        sessions.length > 0 && students.length > 0
+          ? (totalAttendances / (sessions.length * students.length)) * 100
+          : 0;
 
-	const handleSubmit = async () => {
-		try {
-			const values = await form.validateFields();
-			const payload = {
-				sectionId,
-				groupCode: values.groupCode?.trim() || null,
-				groupName: values.groupName?.trim() || null,
-				maxMembers: values.maxMembers ?? 6,
-				isActive: values.isActive ?? true,
-			};
+      setStats({
+        totalStudents: students.length,
+        totalGroups: groups.length,
+        studentsWithGroup,
+        totalAssignments: assignments.length,
+        visibleAssignments,
+        totalMaterials: materials.length,
+        visibleMaterials,
+        totalSessions: sessions.length,
+        activeSessions,
+        avgAttendanceRate,
+        totalGradeColumns: gradeBook?.columns?.length || 0,
+        publishedColumns: gradeBook?.columns?.filter((c: any) => c.isPublished).length || 0,
+      });
 
-			if (editing) {
-				await axios.patch(`${API_BASE}/sections-groups/${editing.id}`, payload);
-				toast.success("Đã cập nhật nhóm");
-			} else {
-				await axios.post(`${API_BASE}/sections-groups`, payload);
-				toast.success("Đã thêm nhóm mới");
-			}
+      // Recent activities
+      const recentActs = [
+        ...sessions.slice(0, 5).map((s: any) => ({
+          type: "attendance",
+          title: `Điểm danh: ${s.name || `Phiên #${s.id}`}`,
+          time: s.createdAt,
+          icon: <CalendarOutlined />,
+          color: "blue",
+        })),
+        ...assignments.slice(0, 5).map((a: any) => ({
+          type: "assignment",
+          title: `Bài tập: ${a.title}`,
+          time: a.createdAt,
+          icon: <FileTextOutlined />,
+          color: "purple",
+        })),
+      ]
+        .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+        .slice(0, 8);
 
-			setModalOpen(false);
-			setEditing(null);
-			fetchGroups();
-		} catch (err: any) {
-			if (err?.errorFields) return; // lỗi validate form
-			toast.error("Không thể lưu nhóm");
-		}
-	};
+      setRecentActivities(recentActs);
 
-	const columns = [
-		{
-			title: "Mã nhóm",
-			dataIndex: "groupCode",
-			key: "groupCode",
-			sorter: (a: Group, b: Group) => (a.groupCode || "").localeCompare(b.groupCode || ""),
-			render: (text: string) => text || <Tag color="default">N/A</Tag>,
-		},
-		{
-			title: "Tên nhóm",
-			dataIndex: "groupName",
-			key: "groupName",
-			sorter: (a: Group, b: Group) => (a.groupName || "").localeCompare(b.groupName || ""),
-			render: (text: string) => text || <Tag color="default">Chưa đặt</Tag>,
-		},
-		{
-			title: "Số thành viên",
-			key: "membersCount",
-			align: "center" as const,
-			sorter: (a: Group, b: Group) =>
-				(a.enrollments?.length || 0) - (b.enrollments?.length || 0),
-			render: (_: any, record: Group) => record.enrollments?.length || 0,
-		},
-		{
-			title: "Tối đa thành viên",
-			dataIndex: "maxMembers",
-			key: "maxMembers",
-			align: "center" as const,
-			sorter: (a: Group, b: Group) => (a.maxMembers || 0) - (b.maxMembers || 0),
-			render: (num: number) => num || 6,
-		},
-		{
-			title: "Kích hoạt",
-			dataIndex: "isActive",
-			key: "isActive",
-			align: "center" as const,
-			sorter: (a: Group, b: Group) =>
-				Number(Boolean(a.isActive)) - Number(Boolean(b.isActive)),
-			render: (v: boolean) =>
-				v ? <Tag color="green">Active</Tag> : <Tag color="red">Inactive</Tag>,
-		},
-		{
-			title: "Ngày tạo",
-			dataIndex: "createdAt",
-			key: "createdAt",
-			sorter: (a: Group, b: Group) =>
-				new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(),
-			render: (v: string) => (v ? dayjs(v).format("DD/MM/YYYY HH:mm") : "—"),
-		},
-		{
-			title: "Hành động",
-			key: "actions",
-			render: (_: any, record: Group) => (
-				<div style={{ display: "flex", gap: 8 }}>
-					<Tooltip title="Xem chi tiết">
-						<Button
-							icon={<TeamOutlined />}
-							size="small"
-							onClick={() => {
-								setSelectedGroup(record);
-								setDetailOpen(true);
-							}}
-						/>
-					</Tooltip>
-					<Tooltip title="Sửa">
-						<Button
-							icon={<EditOutlined />}
-							size="small"
-							onClick={() => {
-								setEditing(record);
-								form.setFieldsValue(record);
-								setModalOpen(true);
-							}}
-						/>
-					</Tooltip>
-					<Tooltip title="Xóa">
-						<Popconfirm
-							title="Xóa nhóm"
-							description="Bạn có chắc muốn xóa nhóm này?"
-							okText="Xóa"
-							cancelText="Hủy"
-							okButtonProps={{ danger: true }}
-							onConfirm={() => handleDelete(record.id)}
-						>
-							<Button danger size="small" icon={<DeleteOutlined />} />
-						</Popconfirm>
-					</Tooltip>
-				</div>
-			),
-		},
-	];
+      // Upcoming deadlines
+      const upcoming = assignments
+        .filter((a: any) => a.dueDate && dayjs(a.dueDate).isAfter(dayjs()))
+        .sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+        .slice(0, 5);
 
+      setUpcomingDeadlines(upcoming);
 
-	const filteredGroups = groups.filter(
-		(g) =>
-			!keyword ||
-			g.groupName?.toLowerCase().includes(keyword.toLowerCase()) ||
-			g.groupCode?.toLowerCase().includes(keyword.toLowerCase())
-	);
+      // Top students
+      if (gradeBook?.students) {
+        const studentsWithScores = gradeBook.students
+          .map((s: any) => {
+            const scores = Object.values(s.columns).filter(
+              (col: any) => col.score !== null
+            );
+            const avgScore =
+              scores.length > 0
+                ? scores.reduce((sum: number, col: any) => sum + (col.percentage || 0), 0) /
+                scores.length
+                : 0;
+            return { ...s, avgScore };
+          })
+          .sort((a: any, b: any) => b.avgScore - a.avgScore)
+          .slice(0, 5);
 
-	return (
-		<div style={{ padding: 16 }}>
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "flex-end",
-					alignItems: "center",
-					marginBottom: 16,
-					marginTop: -16,
-				}}
-			>
-				<div style={{ display: "flex", gap: 8 }}>
-					<Input
-						allowClear
-						prefix={<SearchOutlined />}
-						placeholder="Tìm theo mã/tên nhóm..."
-						value={keyword}
-						onChange={(e) => setKeyword(e.target.value)}
-						style={{ width: 260 }}
-					/>
-					<Button icon={<ReloadOutlined />} onClick={fetchGroups}>
-						Refresh
-					</Button>
-					<Button
-						type="primary"
-						icon={<PlusOutlined />}
-						onClick={() => {
-							setEditing(null);
-							form.resetFields();
-							setModalOpen(true);
-						}}
-					>
-						Thêm nhóm
-					</Button>
-				</div>
-			</div>
+        setTopStudents(studentsWithScores);
+      }
+    } catch (err) {
+      console.error("Lỗi tải dữ liệu overview:", err);
+      toast.error("Không thể tải dữ liệu tổng quan");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-			{loading ? (
-				<Spin tip="Đang tải..." />
-			) : (
-				<Table<Group>
-					dataSource={filteredGroups}
-					columns={columns}
-					rowKey="id"
-					bordered
-					pagination={{ pageSize: 5 }}
-				/>
-			)}
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '80vh',
+        background: '#fff'
+      }}>
+        <Spin size="large" tip="Đang tải dữ liệu tổng quan..." />
+      </div>
+    );
+  }
 
-			{/* Modal chi tiết thành viên */}
-			<Modal
-				title={`Chi tiết nhóm ${selectedGroup?.groupName || selectedGroup?.groupCode
-					}`}
-				open={detailOpen}
-				onCancel={() => setDetailOpen(false)}
-				footer={null}
-				width={700}
-			>
-				<Table
-					dataSource={selectedGroup?.enrollments || []}
-					rowKey={(row) => row.student.id}
-					columns={[
-						{ title: "MSSV", dataIndex: ["student", "studentCode"], key: "code" },
-						{ title: "Họ tên", dataIndex: ["student", "user", "fullName"], key: "name" },
-						{ title: "Email", dataIndex: ["student", "user", "email"], key: "email" },
-						{ title: "Lớp", dataIndex: ["student", "className"], key: "class" },
-					]}
-					pagination={false}
-					bordered
-				/>
-			</Modal>
+  return (
+    <div style={{
+      paddingLeft: "24px", paddingRight: "24px",
+      background: "#fff",
+      minHeight: "100vh"
+    }}>
+      {/* Header */}
+      <div style={{
+        paddingBottom: 16,
+        borderBottom: '1px solid #f0f0f0'
+      }}>
+        <Space align="center" style={{ marginBottom: 8 }}>
+          <Title level={3} style={{ margin: 0, color: '#262626' }}>
+            📊 Tổng quan lớp học
+          </Title>
+        </Space>
+        <Text type="secondary" style={{ fontSize: 13, marginLeft: 12 }}>
+          Cập nhật lúc: {dayjs().format("DD/MM/YYYY HH:mm")}
+        </Text>
+      </div>
 
-			{/* Modal thêm/sửa */}
-			<Modal
-				title={editing ? "Sửa nhóm" : "Thêm nhóm"}
-				open={modalOpen}
-				onCancel={() => setModalOpen(false)}
-				onOk={handleSubmit}
-				okText={editing ? "Lưu" : "Tạo mới"}
-			>
-				<Form
-					form={form}
-					layout="vertical"
-					initialValues={{ maxMembers: 6, isActive: true }}
-				>
-					<Form.Item label="Mã nhóm" name="groupCode">
-						<Input placeholder="VD: G01" />
-					</Form.Item>
-					<Form.Item label="Tên nhóm" name="groupName">
-						<Input placeholder="VD: Nhóm thảo luận 1" />
-					</Form.Item>
-					<Form.Item label="Tối đa thành viên" name="maxMembers">
-						<InputNumber min={1} max={1000} style={{ width: "100%" }} />
-					</Form.Item>
-					<Form.Item label="Kích hoạt" name="isActive" valuePropName="checked">
-						<Switch />
-					</Form.Item>
-				</Form>
-			</Modal>
-		</div>
-	);
+      {/* Stats Cards - Simple Style */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Col xs={24} sm={12} lg={6}>
+          <Card
+            bordered={false}
+            style={{
+              background: '#fafafa',
+              borderRadius: 8,
+              border: '1px solid #f0f0f0',
+            }}
+          >
+            <Statistic
+              title={<Text type="secondary">Sinh viên</Text>}
+              value={stats.totalStudents}
+              prefix={<UserOutlined style={{ color: '#1890ff' }} />}
+              valueStyle={{ color: '#262626', fontSize: 28, fontWeight: 600 }}
+            />
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f0f0f0' }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                <CheckCircleOutlined style={{ color: '#52c41a', marginRight: 4 }} />
+                {stats.studentsWithGroup} đã có nhóm
+              </Text>
+            </div>
+          </Card>
+        </Col>
+
+        <Col xs={24} sm={12} lg={6}>
+          <Card
+            bordered={false}
+            style={{
+              background: '#fafafa',
+              borderRadius: 8,
+              border: '1px solid #f0f0f0',
+            }}
+          >
+            <Statistic
+              title={<Text type="secondary">Nhóm học tập</Text>}
+              value={stats.totalGroups}
+              prefix={<TeamOutlined style={{ color: '#52c41a' }} />}
+              valueStyle={{ color: '#262626', fontSize: 28, fontWeight: 600 }}
+            />
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f0f0f0' }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                Tỷ lệ: {Math.round((stats.studentsWithGroup / stats.totalStudents) * 100)}%
+              </Text>
+            </div>
+          </Card>
+        </Col>
+
+        <Col xs={24} sm={12} lg={6}>
+          <Card
+            bordered={false}
+            style={{
+              background: '#fafafa',
+              borderRadius: 8,
+              border: '1px solid #f0f0f0',
+            }}
+          >
+            <Statistic
+              title={<Text type="secondary">Bài tập</Text>}
+              value={stats.totalAssignments}
+              prefix={<FileTextOutlined style={{ color: '#722ed1' }} />}
+              valueStyle={{ color: '#262626', fontSize: 28, fontWeight: 600 }}
+            />
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f0f0f0' }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                <CheckCircleOutlined style={{ color: '#52c41a', marginRight: 4 }} />
+                {stats.visibleAssignments} đang hiển thị
+              </Text>
+            </div>
+          </Card>
+        </Col>
+
+        <Col xs={24} sm={12} lg={6}>
+          <Card
+            bordered={false}
+            style={{
+              background: '#fafafa',
+              borderRadius: 8,
+              border: '1px solid #f0f0f0',
+            }}
+          >
+            <Statistic
+              title={<Text type="secondary">Tài liệu</Text>}
+              value={stats.totalMaterials}
+              prefix={<FolderOpenOutlined style={{ color: '#fa8c16' }} />}
+              valueStyle={{ color: '#262626', fontSize: 28, fontWeight: 600 }}
+            />
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f0f0f0' }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                <CheckCircleOutlined style={{ color: '#52c41a', marginRight: 4 }} />
+                {stats.visibleMaterials} đang hiển thị
+              </Text>
+            </div>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Attendance & Grades */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Col xs={24} lg={12}>
+          <Card
+            bordered={false}
+            style={{
+              borderRadius: 8,
+              border: '1px solid #f0f0f0',
+            }}
+            title={
+              <Space>
+                <CalendarOutlined style={{ color: '#1890ff' }} />
+                <span style={{ fontWeight: 500, fontSize: 15 }}>Điểm danh</span>
+              </Space>
+            }
+            extra={
+              <Button
+                type="text"
+                size="small"
+                onClick={() => navigate(`/teacher/courses/${sectionId}/roll-call`)}
+                icon={<ArrowRightOutlined />}
+              >
+                Chi tiết
+              </Button>
+            }
+          >
+            <Row gutter={16} style={{ marginBottom: 20 }}>
+              <Col span={8}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{
+                    fontSize: 32,
+                    fontWeight: 600,
+                    color: '#262626',
+                    marginBottom: 4
+                  }}>
+                    {stats.totalSessions}
+                  </div>
+                  <Text type="secondary" style={{ fontSize: 13 }}>Tổng phiên</Text>
+                </div>
+              </Col>
+              <Col span={8}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{
+                    fontSize: 32,
+                    fontWeight: 600,
+                    color: '#52c41a',
+                    marginBottom: 4
+                  }}>
+                    {stats.activeSessions}
+                  </div>
+                  <Text type="secondary" style={{ fontSize: 13 }}>Đang hoạt động</Text>
+                </div>
+              </Col>
+              <Col span={8}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{
+                    fontSize: 32,
+                    fontWeight: 600,
+                    color: '#8c8c8c',
+                    marginBottom: 4
+                  }}>
+                    {stats.totalSessions - stats.activeSessions}
+                  </div>
+                  <Text type="secondary" style={{ fontSize: 13 }}>Đã kết thúc</Text>
+                </div>
+              </Col>
+            </Row>
+            <Divider style={{ margin: '16px 0' }} />
+            <div>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginBottom: 8
+              }}>
+                <Text style={{ fontSize: 13 }}>Tỷ lệ điểm danh trung bình</Text>
+                <Text strong style={{
+                  color: stats.avgAttendanceRate >= 75 ? '#52c41a' :
+                    stats.avgAttendanceRate >= 50 ? '#faad14' : '#ff4d4f'
+                }}>
+                  {stats.avgAttendanceRate.toFixed(1)}%
+                </Text>
+              </div>
+              <Progress
+                percent={Number(stats.avgAttendanceRate.toFixed(1))}
+                strokeColor={
+                  stats.avgAttendanceRate >= 75 ? '#52c41a' :
+                    stats.avgAttendanceRate >= 50 ? '#faad14' : '#ff4d4f'
+                }
+                strokeWidth={8}
+              />
+            </div>
+          </Card>
+        </Col>
+
+        <Col xs={24} lg={12}>
+          <Card
+            bordered={false}
+            style={{
+              borderRadius: 8,
+              border: '1px solid #f0f0f0',
+            }}
+            title={
+              <Space>
+                <BarChartOutlined style={{ color: '#722ed1' }} />
+                <span style={{ fontWeight: 500, fontSize: 15 }}>Điểm số</span>
+              </Space>
+            }
+            extra={
+              <Button
+                type="text"
+                size="small"
+                onClick={() => navigate(`/teacher/courses/${sectionId}/grades`)}
+                icon={<ArrowRightOutlined />}
+              >
+                Chi tiết
+              </Button>
+            }
+          >
+            <Row gutter={16} style={{ marginBottom: 20 }}>
+              <Col span={12}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{
+                    fontSize: 32,
+                    fontWeight: 600,
+                    color: '#262626',
+                    marginBottom: 4
+                  }}>
+                    {stats.totalGradeColumns}
+                  </div>
+                  <Text type="secondary" style={{ fontSize: 13 }}>Tổng cột điểm</Text>
+                </div>
+              </Col>
+              <Col span={12}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{
+                    fontSize: 32,
+                    fontWeight: 600,
+                    color: '#52c41a',
+                    marginBottom: 4
+                  }}>
+                    {stats.publishedColumns}
+                  </div>
+                  <Text type="secondary" style={{ fontSize: 13 }}>Đã công bố</Text>
+                </div>
+              </Col>
+            </Row>
+            <Divider style={{ margin: '16px 0' }} />
+            <div>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginBottom: 8
+              }}>
+                <Text style={{ fontSize: 13 }}>Tỷ lệ công bố điểm</Text>
+                <Text strong style={{ color: '#52c41a' }}>
+                  {stats.totalGradeColumns > 0
+                    ? Math.round((stats.publishedColumns / stats.totalGradeColumns) * 100)
+                    : 0}%
+                </Text>
+              </div>
+              <Progress
+                percent={stats.totalGradeColumns > 0
+                  ? Math.round((stats.publishedColumns / stats.totalGradeColumns) * 100)
+                  : 0}
+                strokeColor="#52c41a"
+                strokeWidth={8}
+              />
+            </div>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Bottom Section */}
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={8}>
+          <Card
+            bordered={false}
+            style={{
+              borderRadius: 8,
+              border: '1px solid #f0f0f0',
+              height: 450,
+            }}
+            title={
+              <Space>
+                <ClockCircleOutlined style={{ color: '#1890ff' }} />
+                <span style={{ fontWeight: 500, fontSize: 15 }}>Hoạt động gần đây</span>
+              </Space>
+            }
+            bodyStyle={{
+              padding: '16px 24px',
+              height: 'calc(100% - 57px)',
+              overflowY: 'auto'
+            }}
+          >
+            {recentActivities.length === 0 ? (
+              <Empty
+                description="Chưa có hoạt động nào"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
+            ) : (
+              <Timeline
+                items={recentActivities.map((act) => ({
+                  color: act.color,
+                  children: (
+                    <div style={{ marginBottom: 4 }}>
+                      <div style={{ fontSize: 13, marginBottom: 4 }}>
+                        {act.title}
+                      </div>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        {dayjs(act.time).fromNow()}
+                      </Text>
+                    </div>
+                  ),
+                }))}
+              />
+            )}
+          </Card>
+        </Col>
+
+        <Col xs={24} lg={8}>
+          <Card
+            bordered={false}
+            style={{
+              borderRadius: 8,
+              border: '1px solid #f0f0f0',
+              height: 450,
+            }}
+            title={
+              <Space>
+                <CalendarOutlined style={{ color: '#fa8c16' }} />
+                <span style={{ fontWeight: 500, fontSize: 15 }}>Deadline sắp tới</span>
+              </Space>
+            }
+            bodyStyle={{
+              padding: '12px 16px',
+              height: 'calc(100% - 57px)',
+              overflowY: 'auto'
+            }}
+          >
+            {upcomingDeadlines.length === 0 ? (
+              <Empty
+                description="Không có deadline nào"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
+            ) : (
+              <List
+                dataSource={upcomingDeadlines}
+                renderItem={(item: any) => {
+                  const daysLeft = dayjs(item.dueDate).diff(dayjs(), 'day');
+                  const isUrgent = daysLeft <= 3;
+
+                  return (
+                    <List.Item style={{ padding: '12px 8px', border: 'none' }}>
+                      <List.Item.Meta
+                        avatar={
+                          <div style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 8,
+                            background: isUrgent ? '#fff1f0' : '#f0f5ff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            border: `1px solid ${isUrgent ? '#ffccc7' : '#d6e4ff'}`,
+                          }}>
+                            <ClockCircleOutlined
+                              style={{
+                                fontSize: 20,
+                                color: isUrgent ? '#ff4d4f' : '#1890ff'
+                              }}
+                            />
+                          </div>
+                        }
+                        title={
+                          <div style={{ fontSize: 13, marginBottom: 4 }}>
+                            {item.title}
+                          </div>
+                        }
+                        description={
+                          <Space direction="vertical" size={2}>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              {dayjs(item.dueDate).format("DD/MM/YYYY HH:mm")}
+                            </Text>
+                            <Tag
+                              color={isUrgent ? 'red' : 'orange'}
+                              style={{ fontSize: 11, marginTop: 4 }}
+                            >
+                              {daysLeft === 0 ? 'Hôm nay' :
+                                daysLeft === 1 ? 'Ngày mai' :
+                                  `Còn ${daysLeft} ngày`}
+                            </Tag>
+                          </Space>
+                        }
+                      />
+                    </List.Item>
+                  );
+                }}
+              />
+            )}
+          </Card>
+        </Col>
+
+        <Col xs={24} lg={8}>
+          <Card
+            bordered={false}
+            style={{
+              borderRadius: 8,
+              border: '1px solid #f0f0f0',
+              height: 450,
+            }}
+            title={
+              <Space>
+                <TrophyOutlined style={{ color: '#faad14' }} />
+                <span style={{ fontWeight: 500, fontSize: 15 }}>Sinh viên xuất sắc</span>
+              </Space>
+            }
+            bodyStyle={{
+              padding: '12px 16px',
+              height: 'calc(100% - 57px)',
+              overflowY: 'auto'
+            }}
+          >
+            {topStudents.length === 0 ? (
+              <Empty
+                description="Chưa có dữ liệu điểm"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
+            ) : (
+              <List
+                dataSource={topStudents}
+                renderItem={(student: any, index: number) => {
+                  return (
+                    <List.Item style={{ padding: '12px 8px', border: 'none' }}>
+                      <List.Item.Meta
+                        avatar={
+                          <Avatar
+                            size={40}
+                            style={{
+                              background: index === 0 ? '#faad14' :
+                                index === 1 ? '#8c8c8c' :
+                                  index === 2 ? '#d4380d' : '#f0f0f0',
+                              color: index < 3 ? '#fff' : '#262626',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {index + 1}
+                          </Avatar>
+                        }
+                        title={
+                          <div style={{ fontSize: 13, marginBottom: 4 }}>
+                            {student.fullName}
+                          </div>
+                        }
+                        description={
+                          <Space>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              {student.studentCode}
+                            </Text>
+                            <Tag
+                              color={student.avgScore >= 80 ? 'green' :
+                                student.avgScore >= 70 ? 'blue' : 'orange'}
+                            >
+                              {student.avgScore.toFixed(1)}%
+                            </Tag>
+                          </Space>
+                        }
+                      />
+                    </List.Item>
+                  );
+                }}
+              />
+            )}
+          </Card>
+        </Col>
+      </Row>
+    </div>
+  );
 }

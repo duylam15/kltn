@@ -34,6 +34,8 @@ router.get(
     controller.submissions
 );
 
+router.get("/sections/:sectionId/assignments", controller.bySection);
+
 // Student
 router.get("/me/my-assignments", controller.myAssignments); // sẽ truyền studentId qua query
 

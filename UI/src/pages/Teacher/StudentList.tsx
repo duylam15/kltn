@@ -22,6 +22,9 @@ import {
 	SearchOutlined,
 	UserOutlined,
 	TeamOutlined,
+	CheckCircleOutlined,
+	WarningOutlined,
+	UsergroupAddOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -506,6 +509,26 @@ export default function StudentList() {
 		);
 	});
 
+	const getStatistics = () => {
+		const totalStudents = enrollments.length;
+		const studentsWithGroup = enrollments.filter((e) => e.groupId).length;
+		const studentsWithoutGroup = totalStudents - studentsWithGroup;
+		const totalGroups = groups.length;
+		const activeGroups = groups.filter((g) => g.isActive).length;
+		const groupUtilization = totalGroups > 0 ? (studentsWithGroup / totalStudents) * 100 : 0;
+
+		return {
+			totalStudents,
+			studentsWithGroup,
+			studentsWithoutGroup,
+			totalGroups,
+			activeGroups,
+			groupUtilization,
+		};
+	};
+
+	const stats = getStatistics();
+
 	if (loading) return <Spin tip="Đang tải..." />;
 
 	return (
@@ -514,12 +537,69 @@ export default function StudentList() {
 			<div
 				style={{
 					display: "flex",
-					justifyContent: "flex-end",
+					justifyContent: "space-between",
 					alignItems: "center",
 					marginBottom: 16,
 					marginTop: -16,
 				}}
 			>
+				<div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 12,
+							color: "#000",
+							border: "1px solid #ddd",
+							borderRadius: 6,
+							padding: "6px 10px",
+							background: "#fff",
+						}}
+					>
+						<UserOutlined style={{ fontSize: 14, color: "#1890ff" }} />
+						<span>Tổng SV:</span>
+						<strong>{stats.totalStudents}</strong>
+					</div>
+
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 12,
+							color: "#000",
+							border: "1px solid #ddd",
+							borderRadius: 6,
+							padding: "6px 10px",
+							background: "#fff",
+						}}
+					>
+						<CheckCircleOutlined style={{ fontSize: 14, color: "#52c41a" }} />
+						<span>Đã có nhóm:</span>
+						<strong style={{ color: "#52c41a" }}>{stats.studentsWithGroup}</strong>
+					</div>
+
+					{stats.studentsWithoutGroup > 0 && (
+						<div
+							style={{
+								display: "flex",
+								alignItems: "center",
+								gap: 6,
+								fontSize: 12,
+								color: "#000",
+								border: "1px solid #ddd",
+								borderRadius: 6,
+								padding: "6px 10px",
+								background: "#fff",
+							}}
+						>
+							<WarningOutlined style={{ fontSize: 14, color: "#ff4d4f" }} />
+							<span>Chưa có nhóm:</span>
+							<strong style={{ color: "#ff4d4f" }}>{stats.studentsWithoutGroup}</strong>
+						</div>
+					)}
+				</div>
 				<div style={{ display: "flex", justifyItems: "flex-end", gap: 8 }}>
 					<Input
 						allowClear
@@ -527,7 +607,7 @@ export default function StudentList() {
 						placeholder="Tìm theo MSSV, tên, email, lớp, nhóm..."
 						value={keyword}
 						onChange={(e) => setKeyword(e.target.value)}
-						style={{ width: 320 }}
+						style={{ width: 200 }}
 					/>
 					<Button icon={<ReloadOutlined />} onClick={fetchData}>
 						Refresh

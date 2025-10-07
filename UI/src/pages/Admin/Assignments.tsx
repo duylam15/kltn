@@ -561,7 +561,6 @@ export default function Assignments() {
 							<Form.Item
 								label="Loại bài tập"
 								name="type"
-								rules={[{ required: true }]}
 								className="mb-3"
 							>
 								<Select placeholder="Chọn loại bài tập" className="w-full" />
