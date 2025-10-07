@@ -136,7 +136,7 @@ export const router = createBrowserRouter([
     ),
     errorElement: <Error />,
     children: [
-      { index: true, element: <DashboardStudent /> },
+      { index: true, element: <Dashboard /> },
       { path: "courses", element: <Courses /> },
       {
         path: "courses/:courseId",

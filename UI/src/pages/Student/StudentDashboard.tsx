@@ -14,7 +14,7 @@ import {
 } from "antd";
 import type { MenuProps } from "antd";
 import { EllipsisOutlined, FolderOpenOutlined, PictureOutlined } from "@ant-design/icons";
-import { useAuth } from "../../hooks/useAuth";
+import { useAuth } from "../../context/authContext";
 
 const { Text, Title } = Typography;
 
@@ -23,8 +23,6 @@ const ORDER_KEY = "studentCourseOrder";
 const GRID_GUTTER = 24;
 const COL_SPAN = { xs: 24, sm: 12, md: 8, lg: 8, xl: 8 };
 
- const [joinOpen, setJoinOpen] = useState(false);
-  const [joinCode, setJoinCode] = useState("");
 
 /* ===== Types (align with your BE) ===== */
 type User = { id: number; fullName: string; email: string; avatar?: string };
