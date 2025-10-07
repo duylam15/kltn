@@ -4,6 +4,13 @@ import jwt, { SignOptions } from "jsonwebtoken";
 const privateKey = fs.readFileSync(process.env.JWT_PRIVATE_KEY_PATH!, "utf8");
 const publicKey  = fs.readFileSync(process.env.JWT_PUBLIC_KEY_PATH!, "utf8");
 
+
+interface TokenPayload {
+    userId: number;
+    email?: string;
+    role: string;
+}
+
 export function signJwt(
   payload: object,
   options: SignOptions = {}

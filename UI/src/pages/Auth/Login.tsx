@@ -2,9 +2,12 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock, LogIn, User } from "lucide-react";
 import axios from "axios";
+import { useAuth } from "../../context/authContext";
 
 export default function Login() {
 	const navigate = useNavigate();
+	const { user, login } = useAuth(); // 👈 lấy từ context
+
 	const [studentCode, setStudentCode] = useState("");
 	const [password, setPassword] = useState("");
 	const [loading, setLoading] = useState(false);
@@ -14,34 +17,18 @@ export default function Login() {
 		e.preventDefault();
 		setError("");
 		setLoading(true);
-		const payload = { studentCode, password };
-		console.log("Payload:", payload);
 
 		try {
-			const res = await axios.post(
-				"http://localhost:4000/api/v1/auths/login", // ❌ bỏ dấu "/" cuối
-				payload,
-				{ withCredentials: true } // để nhận cookie HttpOnly
-			);
-
-			console.log("Login response:", res.data);
-
-			const data = res.data;
-			if (!data.success) {
-				throw new Error(data.message || "Đăng nhập thất bại");
-			}
-
-			// lấy roleId đúng
-			const roleId = data.data.roleId ?? data.data.role?.id;
-			console.log("roleId:", roleId);
-
+			// gọi login từ context
+			await login(studentCode, password);
+			const roleId = user?.role?.id;
 			if (roleId === 100) navigate("/student");
 			else if (roleId === 101) navigate("/teacher");
 			else if (roleId === 102) navigate("/admin");
 			else navigate("/");
 		} catch (err: any) {
-			console.error("Login error:", err.response?.data || err.message);
-			setError(err.response?.data?.message || err.message || "Có lỗi xảy ra");
+			console.error("Login error:", err);
+			setError("Đăng nhập thất bại");
 		} finally {
 			setLoading(false);
 		}

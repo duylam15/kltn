@@ -13,6 +13,18 @@ import materialRoutes from "../modules/materials/materials.route";
 import attendanceRoute from "../modules/attendance/attendance.route";
 import roleRoute from "../modules/role/role.route";
 import permissionRoute from "../modules/permission/permission.route";
+import assignmentRoute from "../modules/assignment/assignment.route";
+import questionRoute from "../modules/questions/questions.route";
+import sectionAssignmentRoute from "../modules/sectionAssignment/sectionAssignment.route";
+import assignmentQuestionRoute from "../modules/assignmentQuestion/assignmentQuestion.route";
+import questionChoiceRoute from "../modules/questionChoice/questionChoice.route";
+import chatRoutes from "../modules/chat/chat.route";
+import notificationRoute from "../modules/notification/notification.route";
+import gradeColumnRoute from "../modules/gradeColumn/gradeColumn.route";
+import gradeSummaryRoute from "../modules/gradeSummary/gradeSummary.route";
+import gradeFormulaRoute from "../modules/gradeFormula/gradeFormula.route";
+import gradeRoute from "../modules/grade/grade.route";
+import gradeTemplateRoute from "../modules/gradeTemplate/gradeTemplate.route";
 
 
 const router = Router();
@@ -32,6 +44,18 @@ router.use("/materials", materialRoutes);
 router.use("/attendance", attendanceRoute);
 router.use("/roles", roleRoute);
 router.use("/permissions", permissionRoute);
+router.use("/assignments", assignmentRoute);
+router.use("/questions", questionRoute);
+router.use("/sections-assignments", sectionAssignmentRoute);
+router.use("/assignments-questions", assignmentQuestionRoute);
+router.use("/questions-choices", questionChoiceRoute);
+router.use("/chats", chatRoutes);
+router.use("/notifications", notificationRoute);
+router.use("/grade-columns", gradeColumnRoute);
+router.use("/grade-summary", gradeSummaryRoute);
+router.use("/grade-formulas", gradeFormulaRoute);
+router.use("/grade-template", gradeTemplateRoute);
+router.use("/grades", gradeRoute);
 
 
 export default router;

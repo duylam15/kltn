@@ -1,5 +1,5 @@
 import { Navigate } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../context/authContext";
 
 const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 	const { user, loading } = useAuth();

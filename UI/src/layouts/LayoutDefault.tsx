@@ -22,11 +22,13 @@ import {
 import { useEffect, useState } from "react";
 import api from "../utils/axiosInstance";
 import { Card, Skeleton } from "antd";
+import { useAuth } from "../context/authContext";
 
 export default function LayoutDefault() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { user,  logout } = useAuth();
 
   // Menu cho thanh navigation dọc (sidebar) - giống Google Classroom
   const sidebarMenu = [
@@ -37,13 +39,10 @@ export default function LayoutDefault() {
     { to: "/student/settings", label: "Cài đặt", icon: Settings },
   ];
 
+
   const handleLogout = async () => {
-    try {
-      await api.post("/auths/logout"); // BE clearCookie
-      navigate("/login");
-    } catch (err) {
-      console.error("Logout failed:", err);
-    }
+    await logout();
+    navigate("/login");
   };
 
   const { courseId } = useParams();

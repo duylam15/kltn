@@ -23,6 +23,7 @@ import {
 import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
+import { Users } from "lucide-react";
 
 const { Title } = Typography;
 const API_BASE = "http://localhost:4000/api/v1";
@@ -251,19 +252,19 @@ export default function Students() {
   );
 
   return (
-    <div style={{ padding: 24 }}>
-      <Title level={3} style={{ marginBottom: 24 }}>
-        <UserOutlined /> Quản lý Sinh viên
-      </Title>
-
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 16,
-        }}
-      >
+    <div className="pl-3 pr-3">
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+      }}>
+        
+        <Title level={3} className="mt-2">
+          <div className="flex items-center gap-2">
+            <div className="mt-1"><Users /></div> Quản lý Sinh viên
+          </div>
+        </Title>
+        <div style={{ display: "flex", gap: 8 }}>
         <Input
           allowClear
           prefix={<SearchOutlined />}
@@ -272,7 +273,6 @@ export default function Students() {
           onChange={(e) => setKeyword(e.target.value)}
           style={{ width: 400 }}
         />
-        <div style={{ display: "flex", gap: 8 }}>
           <Button icon={<ReloadOutlined />} onClick={fetchStudents}>
             Làm mới
           </Button>
@@ -321,6 +321,8 @@ export default function Students() {
         okText={editing ? "Lưu" : "Tạo mới"}
         cancelText="Hủy"
         width={600}
+        centered
+        bodyStyle={{ maxHeight: "70vh", overflowY: "auto", overflowX: "hidden" }}   
       >
         <Form form={form} layout="vertical">
           <Form.Item

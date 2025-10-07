@@ -7,7 +7,7 @@ const tabDefs = [
 	{ key: "friend", label: "Nhóm" },  // 👈 thêm
 	{ key: "roll-call", label: "Điểm danh" },
 	{ key: "materials", label: "Tài liệu" },
-	{ key: "qa", label: "Thảo luận" },
+	{ key: "chat", label: "Thảo luận" },
 	{ key: "assignments", label: "Bài kiểm tra" },
 	{ key: "grades", label: "Điểm số" },
 ];

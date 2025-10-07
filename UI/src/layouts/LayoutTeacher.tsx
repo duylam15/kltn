@@ -22,6 +22,7 @@ import {
 import { useEffect, useState } from "react";
 import api from "../utils/axiosInstance";
 import { Card, Skeleton } from "antd";
+import { useAuth } from "../context/authContext";
 
 export default function LayoutTeacher() {
   const navigate = useNavigate();
@@ -37,13 +38,12 @@ export default function LayoutTeacher() {
     { to: "/teacher/settings", label: "Cài đặt", icon: Settings },
   ];
 
+  const { user, logout } = useAuth();
+
+
   const handleLogout = async () => {
-    try {
-      await api.post("/auths/logout"); // BE clearCookie
-      navigate("/login");
-    } catch (err) {
-      console.error("Logout failed:", err);
-    }
+    await logout();
+    navigate("/login");
   };
 
   const { courseId } = useParams();
@@ -200,12 +200,19 @@ export default function LayoutTeacher() {
                 to={item.to}
                 end={item.end}
                 onClick={() => setSidebarOpen(false)}
-                className={({ isActive }) =>
-                  `flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-4'} py-3 rounded-lg text-sm font-medium transition-all duration-300 group overflow-x-hidden ${isActive
-                    ? "bg-blue-200 text-blue-700"
-                    : "text-gray-700 hover:bg-blue-200"
-                  }`
-                }
+                className={({ isActive }) => {
+                  // luôn sáng khi URL bắt đầu bằng /teacher
+                  const active =
+                    location.pathname.startsWith("/teacher") && item.to === "/teacher"
+                      ? true
+                      : isActive;
+
+                  return `
+      flex items-center ${sidebarCollapsed ? "justify-center px-2" : "justify-between px-4"} 
+      py-3 rounded-lg text-sm font-medium transition-all duration-300 group overflow-x-hidden
+      ${active ? "bg-blue-200 text-blue-700" : "text-gray-700 hover:bg-blue-200"}
+    `;
+                }}
                 title={sidebarCollapsed ? item.label : ''}
               >
                 <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-6'} ${sidebarCollapsed ? 'w-full' : ''}`}>

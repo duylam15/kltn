@@ -80,14 +80,15 @@ export default function Materials() {
 			if (res1.data.success) {
 				setMaterials(res1.data.data || []);
 			}
-			console.log(materials);
 
 			if (res2.data.success) {
 				const assignedMap: Record<number, boolean> = {};
 				const visibilityMap: Record<number, boolean> = {};
-				res2.data.data.forEach((mat: any) => {
-					assignedMap[mat.id] = true;
-					visibilityMap[mat.id] = mat.isOpen;
+				res2.data.data.forEach((item: any) => {
+					// item.materialId là ID của tài liệu trong bảng material
+					// item.isOpen là trạng thái hiển thị
+					assignedMap[item.materialId] = true;
+					visibilityMap[item.materialId] = item.isOpen;
 				});
 				setAssignedIds(assignedMap);
 				setVisibility(visibilityMap);
@@ -109,13 +110,14 @@ export default function Materials() {
 			if (res.data.success) {
 				toast.success("Đã gán tài liệu vào lớp");
 				setAssignedIds((prev) => ({ ...prev, [materialId]: true }));
+				// Khi mới gán, mặc định là true (hiển thị)
 				setVisibility((prev) => ({ ...prev, [materialId]: true }));
 			} else {
 				// Nếu tài liệu đã được gán vào lớp rồi
 				if (res.data.message === "Tài liệu này đã được gán vào lớp rồi") {
-					// Cập nhật UI âm thầm
-					setAssignedIds((prev) => ({ ...prev, [materialId]: true }));
-					setVisibility((prev) => ({ ...prev, [materialId]: true }));
+					toast.success("Tài liệu đã được gán vào lớp");
+					// Refresh lại dữ liệu để lấy trạng thái isOpen thực tế
+					fetchData();
 				} else {
 					toast.error(res.data.message || "Không thể gán tài liệu");
 				}
@@ -126,9 +128,9 @@ export default function Materials() {
 			// Kiểm tra nếu là lỗi 400 với message đã gán
 			if (err.response?.status === 400 &&
 				err.response?.data?.message === "Tài liệu này đã được gán vào lớp rồi") {
-				// Cập nhật UI âm thầm
-				setAssignedIds((prev) => ({ ...prev, [materialId]: true }));
-				setVisibility((prev) => ({ ...prev, [materialId]: true }));
+				toast.success("Tài liệu đã được gán vào lớp");
+				// Refresh lại dữ liệu để lấy trạng thái isOpen thực tế
+				fetchData();
 			} else {
 				toast.error("Lỗi server khi gán tài liệu");
 			}
@@ -146,7 +148,7 @@ export default function Materials() {
 				toast.success(`Đã ${checked ? "mở" : "đóng"} tài liệu`);
 				setVisibility((prev) => ({ ...prev, [materialId]: checked }));
 			} else {
-				toast.error(res.data.toast || "Không thể cập nhật trạng thái");
+				toast.error(res.data.message || "Không thể cập nhật trạng thái");
 			}
 		} catch (err: any) {
 			console.error("Lỗi toggle visibility:", err);

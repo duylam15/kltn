@@ -11,41 +11,53 @@ import {
 	X,
 	GraduationCap,
 	Users,
+	Book,
+	FileQuestion,
+	UserCog,
+	Layers,
 } from "lucide-react";
 import { useState } from "react";
 import api from "../utils/axiosInstance";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../context/authContext";
 
 export default function LayoutAdmin() {
 	const navigate = useNavigate();
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-	const { user } = useAuth();
+	const { user,  logout } = useAuth();
 
 	// Hàm check quyền
 	const hasPermission = (perm: string) =>
 		user?.role?.permissions?.some((p) => p.name === perm) ?? false;
 
 	const sidebarMenu = [
+		// Tổng quan
 		{ to: "/admin", label: "Báo cáo", icon: LineChart, end: true },
-		{ to: "/admin/questions", label: "Câu hỏi", icon: BookOpen },
-		{ to: "/admin/notifications", label: "Thông báo", icon: Bell },
 		{ to: "/admin/reports", label: "Thống kê", icon: ClipboardList },
-		{ to: "/admin/courses", label: "Khóa học", icon: ClipboardList },
-		{ to: "/admin/instructors", label: "Phân công", icon: ClipboardList },
+
+		// Quản lý học tập
+		{ to: "/admin/subjects", label: "Môn học", icon: Book },
+		{ to: "/admin/courses", label: "Học phần", icon: Layers },
+		{ to: "/admin/assignments", label: "Bài tập", icon: FileQuestion },
+		{ to: "/admin/questions", label: "Câu hỏi", icon: BookOpen },
+
+		// Quản lý con người
+		{ to: "/admin/teachers", label: "Giảng viên", icon: GraduationCap, required: "*" },
+		{ to: "/admin/students", label: "Sinh viên", icon: Users, required: "*" },
+		{ to: "/admin/instructors", label: "Phân công", icon: UserCog },
+
+		// Hệ thống
 		{ to: "/admin/roles", label: "Vai trò", icon: User, required: "role:view" },
-		{ to: "/admin/teachers", label: "Giáo viên", icon: GraduationCap, required: "user:view" },
-		{ to: "/admin/students", label: "Sinh viên", icon: Users, required: "user:view" },
+		{ to: "/admin/notifications", label: "Thông báo", icon: Bell },
 	];
 
+
 	const handleLogout = async () => {
-		try {
-			await api.post("/auths/logout");
-			navigate("/login");
-		} catch (err) {
-			console.error("Logout failed:", err);
-		}
+		await logout();
+		navigate("/login");
 	};
+
+
 
 	return (
 		<div className="h-screen flex flex-col">
@@ -118,39 +130,42 @@ export default function LayoutAdmin() {
           `}
 				>
 					{/* Navigation */}
-					<nav className="px-3 py-4 overflow-y-auto flex-1">
-						{sidebarMenu.map((item) => {
-							if (item.required && !hasPermission(item.required)) return null;
-							return (
-								<NavLink
-									key={item.to}
-									to={item.to}
-									end={item.end}
-									onClick={() => setSidebarOpen(false)}
-									className={({ isActive }) =>
-										`flex items-center ${sidebarCollapsed ? "justify-center px-2" : "justify-between px-4"
-										} py-3 rounded-lg text-sm font-medium transition-all duration-300 group overflow-x-hidden ${isActive
-											? "bg-blue-200 text-blue-700"
-											: "text-gray-700 hover:bg-blue-200"
-										}`
-									}
-									title={sidebarCollapsed ? item.label : ""}
-								>
-									<div
-										className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-6"
-											} ${sidebarCollapsed ? "w-full" : ""}`}
+					<div className="flex flex-col h-full">
+						<nav className="px-3 py-4 overflow-y-auto flex-1 min-h-0">
+							{sidebarMenu.map((item) => {
+								if (item.required && !hasPermission(item.required)) return null;
+								return (
+									<NavLink
+										key={item.to}
+										to={item.to}
+										end={item.end}
+										onClick={() => setSidebarOpen(false)}
+										className={({ isActive }) =>
+											`flex items-center ${sidebarCollapsed ? "justify-center px-2" : "justify-between px-4"
+											} py-3 rounded-lg text-sm font-medium transition-all duration-300 group ${isActive
+												? "bg-blue-200 text-blue-700"
+												: "text-gray-700 hover:bg-blue-200"
+											}`
+										}
+										title={sidebarCollapsed ? item.label : ""}
 									>
-										<item.icon className="h-5 w-5 flex-shrink-0" />
-										{!sidebarCollapsed && (
-											<span className="whitespace-nowrap overflow-hidden">
-												{item.label}
-											</span>
-										)}
-									</div>
-								</NavLink>
-							);
-						})}
-					</nav>
+										<div
+											className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-6"
+												} ${sidebarCollapsed ? "w-full" : ""}`}
+										>
+											<item.icon className="h-5 w-5 flex-shrink-0" />
+											{!sidebarCollapsed && (
+												<span className="whitespace-nowrap overflow-hidden">
+													{item.label}
+												</span>
+											)}
+										</div>
+									</NavLink>
+								);
+							})}
+						</nav>
+					</div>
+
 				</aside>
 
 				{/* Main Content */}

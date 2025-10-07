@@ -28,7 +28,7 @@ import {
   QrcodeOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
-import dayjs from "dayjs";
+import dayjs, { Dayjs } from "dayjs";
 import toast from "react-hot-toast";
 
 const { Title } = Typography;
@@ -40,13 +40,14 @@ type Session = {
   name?: string | null;
   sessionCode?: string;
   qrCodeUrl?: string;
-  expiresAt?: string | null;
   latitude?: number;
   longitude?: number;
   radius?: number;
   createdAt: string;
   updatedAt?: string;
   attendances?: Attendance[];
+  expiresAt?: string | Dayjs | null;
+
 };
 
 type Attendance = {
@@ -179,7 +180,8 @@ export default function RollCall() {
       const values = await form.validateFields();
       const payload = {
         ...values,
-        expiresAt: values.expiresAt ? values.expiresAt.toString() : null,
+        expiresAt: values.expiresAt ? dayjs(values.expiresAt).toISOString() : null,
+
       };
 
       await axios.put(`${API_BASE}/attendance/sessions/${editing.id}`, payload);
@@ -316,8 +318,11 @@ export default function RollCall() {
       title: "Hết hạn",
       dataIndex: "expiresAt",
       key: "expiresAt",
-      sorter: (a: Session, b: Session) =>
-        new Date(a.expiresAt || 0).getTime() - new Date(b.expiresAt || 0).getTime(),
+      sorter: (a: Session, b: Session) => {
+        const aTime = a.expiresAt ? (typeof a.expiresAt === 'string' ? a.expiresAt : a.expiresAt.toISOString()) : '0';
+        const bTime = b.expiresAt ? (typeof b.expiresAt === 'string' ? b.expiresAt : b.expiresAt.toISOString()) : '0';
+        return new Date(aTime).getTime() - new Date(bTime).getTime();
+      },
       render: (v: string) => (v ? dayjs(v).format("DD/MM/YYYY HH:mm") : "—"),
     },
     {
@@ -354,7 +359,7 @@ export default function RollCall() {
                 setEditing(record);
                 form.setFieldsValue({
                   ...record,
-                  expiresAt: record.expiresAt ? dayjs(record.expiresAt).format("YYYY-MM-DD HH:mm:ss") : null
+                  expiresAt: record.expiresAt ? dayjs(record.expiresAt) : null
                 });
                 setEditModalOpen(true);
               }}
@@ -554,6 +559,7 @@ export default function RollCall() {
           </Form.Item>
           <Form.Item label="Ngày hết hạn" name="expiresAt">
             <DatePicker showTime style={{ width: "100%" }} />
+            
           </Form.Item>
         </Form>
       </Modal>

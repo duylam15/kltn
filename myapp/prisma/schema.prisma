@@ -15,21 +15,20 @@ enum StudentStatus {
 }
 
 model Permission {
-  id          Int       @id @default(autoincrement())
-  name        String    @unique @db.VarChar(100)   // ví dụ: "user:create"
-  description String?   @db.VarChar(255)
-  groupName   String?   @db.VarChar(100)           // ví dụ: "User & Role Management"
-  createdAt   DateTime  @default(now())
+  id          Int      @id @default(autoincrement())
+  name        String   @unique @db.VarChar(100)
+  description String?  @db.VarChar(255)
+  groupName   String?  @db.VarChar(100)
+  createdAt   DateTime @default(now())
 
-  roles       RolePermission[]
+  roles RolePermission[]
 }
 
-
 model Role {
-  id          Int              @id @default(autoincrement())
-  name        String           @unique @db.VarChar(50)
-  description String?          @db.VarChar(200)
-  createdAt   DateTime         @default(now())
+  id          Int      @id @default(autoincrement())
+  name        String   @unique @db.VarChar(50)
+  description String?  @db.VarChar(200)
+  createdAt   DateTime @default(now())
 
   users       User[]
   permissions RolePermission[]
@@ -39,47 +38,47 @@ model RolePermission {
   roleId       Int
   permissionId Int
 
-  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
-  @@id([roleId, permissionId]) // composite key
+  @@id([roleId, permissionId])
 }
 
-
 model User {
-  id            Int           @id @default(autoincrement())
-  studentCode  String? @unique @db.VarChar(30)   // 👈 nullable
-  email         String?       @unique @db.VarChar(100)  // email giờ optional
-  passwordHash  String        @db.VarChar(255)
-  fullName      String        @db.VarChar(120)
-  avatarUrl     String?       @db.VarChar(500)
-  phone         String?       @db.VarChar(20)
+  id            Int       @id @default(autoincrement())
+  studentCode   String?   @unique @db.VarChar(30)
+  email         String?   @unique @db.VarChar(100)
+  passwordHash  String    @db.VarChar(255)
+  fullName      String    @db.VarChar(120)
+  avatarUrl     String?   @db.VarChar(500)
+  phone         String?   @db.VarChar(20)
   dateOfBirth   DateTime?
-  address       String?       @db.VarChar(200)
+  address       String?   @db.VarChar(200)
   roleId        Int
-  isActive      Boolean       @default(true)
-  emailVerified Boolean       @default(false)
+  isActive      Boolean   @default(true)
+  emailVerified Boolean   @default(false)
   lastLogin     DateTime?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  role          Role          @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  student       Student?
-  teacher       Teacher?
-  refreshTokens RefreshToken[]
+  role              Role              @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  student           Student?
+  teacher           Teacher?
+  refreshTokens     RefreshToken[]
   uploadedMaterials Material[]
-  forumThreads ForumThread[] @relation("UserThreads") // 👈 đặt tên nếu nhiều quan hệ với User
-  forumPosts ForumPost[] @relation("UserPosts") // 👈 quan hệ ngược
-  notifications Notification[] // 👈 ngược lại
-  reminders Reminder[] // 👈 ngược lại
-  learningPaths LearningPath[] // 👈 ngược lại
-  auditLogs AuditLog[] // 👈 ngược lại
+  forumThreads      ForumThread[]     @relation("UserThreads")
+  forumPosts        ForumPost[]       @relation("UserPosts")
+  notifications     Notification[]
+  reminders         Reminder[]
+  learningPaths     LearningPath[]
+  auditLogs         AuditLog[]
+  chatMessages      ChatMessage[]
+  chatParticipants  ChatParticipant[]
 
   @@index([roleId])
   @@index([isActive])
   @@index([lastLogin])
 }
-
 
 model Student {
   id             Int           @id @default(autoincrement())
@@ -94,11 +93,11 @@ model Student {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  enrollments    SectionEnrollment[]  // 👈 thêm relation ngược lại
-  submissions Submission[]  // 👈 quan hệ ngược
-  learningPaths LearningPath[] // 👈 ngược lại
-  attendances Attendance[]
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollments    SectionEnrollment[]
+  submissions    Submission[]
+  learningPaths  LearningPath[]
+  attendances    Attendance[]
 
   @@index([status])
   @@index([className])
@@ -115,28 +114,27 @@ model Teacher {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sections       SectionInstructor[]  // 👈 thêm relation ngược lại
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sections SectionInstructor[]
 
   @@index([department])
   @@index([position])
 }
 
 model RefreshToken {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   userId    Int
-  token     String   @unique @db.VarChar(500)
+  token     String    @unique @db.VarChar(500)
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
   revokedAt DateTime?
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
   @@index([revokedAt])
 }
 
-// Enums
 enum CourseSectionStatus {
   planned
   ongoing
@@ -156,20 +154,17 @@ enum EnrollmentStatus {
   completed
 }
 
-// Subjects (Danh mục môn học)
 model Subject {
-  id           Int             @id @default(autoincrement())
-  subjectCode  String          @unique @db.VarChar(30)
-  subjectName  String          @db.VarChar(200)
-  credits      Int             @default(3)
+  id          Int    @id @default(autoincrement())
+  subjectCode String @unique @db.VarChar(30)
+  subjectName String @db.VarChar(200)
+  credits     Int    @default(3)
 
-  // Relations
   courseSections CourseSection[]
 
   @@index([subjectCode])
 }
 
-// Terms (Kỳ học)
 model Term {
   id        Int       @id @default(autoincrement())
   code      String    @unique @db.VarChar(30)
@@ -177,51 +172,53 @@ model Term {
   startDate DateTime? @db.Date
   endDate   DateTime? @db.Date
 
-  // Relations
   courseSections CourseSection[]
 
   @@index([code])
 }
 
-// Course sections (Lớp học phần)
 model CourseSection {
-  id              Int                  @id @default(autoincrement())
+  id              Int                 @id @default(autoincrement())
   subjectId       Int
   termId          Int
-  sectionCode     String              
-  sectionName     String?   // nullable
+  sectionCode     String
+  sectionName     String?
   schedule        Json?
-  maxStudents     Int                  @default(50)
-  currentStudents Int                  @default(0)
-  status          CourseSectionStatus  @default(planned)
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  maxStudents     Int                 @default(50)
+  currentStudents Int                 @default(0)
+  status          CourseSectionStatus @default(planned)
+  
+  // ===== LIÊN KẾT VỚI TEMPLATE =====
+  gradeTemplateId Int?                            // Template đang sử dụng (nullable)
+  
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
 
-  // Relations
-  subject     Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  term        Term           @relation(fields: [termId], references: [id], onDelete: Cascade)
-  instructors SectionInstructor[]
-  groups      SectionGroup[]
-  enrollments SectionEnrollment[]
-  assignments Assignment[]   // 👈 thêm quan hệ ngược
-  forumThreads ForumThread[] // 👈 ngược lại
+  
+  subject            Subject             @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  term               Term                @relation(fields: [termId], references: [id], onDelete: Cascade)
+  instructors        SectionInstructor[]
+  groups             SectionGroup[]
+  enrollments        SectionEnrollment[]
+  forumThreads       ForumThread[]
   attendanceSessions AttendanceSession[]
-  materials   CourseMaterial[]  // 👈 tài liệu của lớp
+  materials          CourseMaterial[]
+  assignments        SectionAssignment[]
+  notifications      Notification[]
+  chatRooms          ChatRoom[]
 
   @@index([subjectId])
   @@index([termId])
   @@index([sectionCode])
+  @@index([gradeTemplateId])
 }
 
-// Section instructors (Phân công giảng viên cho học phần)
-// Composite primary key (sectionId, teacherId) như trong DDL
 model SectionInstructor {
-  sectionId Int
-  teacherId Int
-  role      InstructorRole @default(owner)
-  assignedAt DateTime      @default(now())
+  sectionId  Int
+  teacherId  Int
+  role       InstructorRole @default(owner)
+  assignedAt DateTime       @default(now())
 
-  // Relations
   section CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   teacher Teacher       @relation(fields: [teacherId], references: [id], onDelete: Cascade)
 
@@ -230,37 +227,33 @@ model SectionInstructor {
   @@index([sectionId])
 }
 
-// Section groups (Nhóm trong học phần)
 model SectionGroup {
-  id          Int          @id @default(autoincrement())
-  sectionId   Int
-  groupCode   String?      @db.VarChar(40)
-  groupName   String?      @db.VarChar(100)
-  maxMembers  Int          @default(6)
-  isActive    Boolean      @default(true)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id         Int      @id @default(autoincrement())
+  sectionId  Int
+  groupCode  String?  @db.VarChar(40)
+  groupName  String?  @db.VarChar(100)
+  maxMembers Int      @default(6)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  // Relations
-  section     CourseSection      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  enrollments SectionEnrollment[]   // 👈 thêm quan hệ ngược lại
+  section     CourseSection       @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  enrollments SectionEnrollment[]
+  chatRooms   ChatRoom[]
 
   @@unique([id, sectionId], map: "uniq_group_section")
   @@index([sectionId], map: "idx_section")
 }
 
-
-// Section enrollments (Sinh viên đăng ký học phần)
 model SectionEnrollment {
-  id         Int               @id @default(autoincrement())
-  sectionId  Int
-  studentId  Int
-  groupId    Int?
+  id        Int  @id @default(autoincrement())
+  sectionId Int
+  studentId Int
+  groupId   Int?
 
-  status     EnrollmentStatus  @default(enrolled)
-  enrolledAt DateTime          @default(now())
+  status     EnrollmentStatus @default(enrolled)
+  enrolledAt DateTime         @default(now())
 
-  // Relations
   section CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   student Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
   group   SectionGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
@@ -271,160 +264,136 @@ model SectionEnrollment {
   @@index([groupId])
 }
 
-// Loại tài liệu
 enum MaterialCategory {
-  lecture     // Bài giảng
-  slide       // Slide
-  exercise    // Bài tập
-  reference   // Tài liệu tham khảo
-  syllabus    // Đề cương
-  other       // Khác
+  lecture
+  slide
+  exercise
+  reference
+  syllabus
+  other
 }
 
-// Bảng tài liệu
 model Material {
-  id            Int       @id @default(autoincrement())
+  id            Int              @id @default(autoincrement())
   title         String
   description   String?
   fileName      String?
   filePath      String?
   fileSize      BigInt?
   fileType      String?
-  category      MaterialCategory  @default(other)
-  isPublic      Boolean   @default(false)
-  downloadCount Int       @default(0)
+  category      MaterialCategory @default(other)
+  isPublic      Boolean          @default(false)
+  downloadCount Int              @default(0)
   uploadedBy    Int
-  uploadedAt    DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  uploadedAt    DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
-  // Quan hệ
   uploader    User             @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
   courseLinks CourseMaterial[] @relation("MaterialToCourse")
 }
 
 model CourseMaterial {
-  id              Int           @id @default(autoincrement())
+  id              Int      @id @default(autoincrement())
   courseSectionId Int
   materialId      Int
-  assignedAt      DateTime      @default(now())
-  isOpen          Boolean       @default(true)
+  assignedAt      DateTime @default(now())
+  isOpen          Boolean  @default(true)
 
-  courseSection   CourseSection @relation(fields: [courseSectionId], references: [id], onDelete: Cascade)
-  material        Material      @relation("MaterialToCourse", fields: [materialId], references: [id], onDelete: Cascade)
+  courseSection CourseSection @relation(fields: [courseSectionId], references: [id], onDelete: Cascade)
+  material      Material      @relation("MaterialToCourse", fields: [materialId], references: [id], onDelete: Cascade)
 
   @@unique([courseSectionId, materialId])
 }
 
-
-enum AssignmentType {
-  exercise     // Bài tập
-  quiz         // Trắc nghiệm
-  project      // Đồ án / nhóm
-  exam         // Thi
-}
-
-model Assignment {
-  id           Int             @id @default(autoincrement())
-  sectionId    Int
-  title        String          @db.VarChar(200)
-  description  String?         @db.Text
-  type         AssignmentType  @default(exercise)
-  dueDate      DateTime?
-  maxScore     Int             @default(100)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-
-  section      CourseSection   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  submissions  Submission[]
-}
-
-model Submission {
-  id           Int        @id @default(autoincrement())
-  assignmentId Int
-  studentId    Int
-  filePath     String?    @db.VarChar(500)   // file nộp
-  answerText   String?    @db.Text           // câu trả lời text/code
-  score        Int?
-  feedback     String?    @db.Text
-  submittedAt  DateTime   @default(now())
-  gradedAt     DateTime?
-
-  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  student      Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
-
-  @@unique([assignmentId, studentId])
-}
-
 model ForumThread {
-  id          Int      @id @default(autoincrement())
-  sectionId   Int
-  title       String   @db.VarChar(200)
-  content     String   @db.Text
-  createdBy   Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  author      User @relation("UserThreads", fields: [createdBy], references: [id], onDelete: Cascade)
+  id        Int      @id @default(autoincrement())
+  sectionId Int
+  title     String   @db.VarChar(200)
+  content   String   @db.Text
+  createdBy Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  author    User     @relation("UserThreads", fields: [createdBy], references: [id], onDelete: Cascade)
 
-  section     CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  posts       ForumPost[]
+  section CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  posts   ForumPost[]
 }
 
 model ForumPost {
-  id          Int      @id @default(autoincrement())
-  threadId    Int
-  content     String   @db.Text
-  createdBy   Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  votes       Int      @default(0)
-  author      User @relation("UserPosts", fields: [createdBy], references: [id], onDelete: Cascade)
+  id        Int      @id @default(autoincrement())
+  threadId  Int
+  content   String   @db.Text
+  createdBy Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  votes     Int      @default(0)
+  author    User     @relation("UserPosts", fields: [createdBy], references: [id], onDelete: Cascade)
 
-  thread      ForumThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  thread ForumThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 }
 
 model Notification {
-  id          Int      @id @default(autoincrement())
-  userId      Int
-  title       String   @db.VarChar(200)
-  message     String?  @db.Text
-  isRead      Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  type      NotificationType @default(system)
+  title     String           @db.VarChar(200)
+  message   String?          @db.Text
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatMessageId Int?
+  assignmentId  Int?
+  sectionId     Int?
+
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatMessage ChatMessage?   @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+  assignment  Assignment?    @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  section     CourseSection? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([type])
+}
+
+enum NotificationType {
+  system
+  chat
+  assignment
+  section
 }
 
 model Reminder {
-  id          Int      @id @default(autoincrement())
-  userId      Int
-  content     String   @db.VarChar(200)
-  remindAt    DateTime
-  createdAt   DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  content   String   @db.VarChar(200)
+  remindAt  DateTime
+  createdAt DateTime @default(now())
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model LearningPath {
   id          Int      @id @default(autoincrement())
   studentId   Int
-  userId      Int      // 👈 thêm field này
+  userId      Int
   title       String   @db.VarChar(200)
   description String?  @db.Text
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  items       LearningItem[]
+  student Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  items   LearningItem[]
 }
 
 model LearningItem {
-  id            Int      @id @default(autoincrement())
-  learningPathId Int
-  resourceType  String   @db.VarChar(50)   // "subject", "video", "course"
-  resourceUrl   String?  @db.VarChar(500)
+  id                 Int     @id @default(autoincrement())
+  learningPathId     Int
+  resourceType       String  @db.VarChar(50)
+  resourceUrl        String? @db.VarChar(500)
   recommendationNote String? @db.Text
-  priority      Int      @default(1)
+  priority           Int     @default(1)
 
-  path          LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+  path LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
 }
 
 model AuditLog {
@@ -435,38 +404,39 @@ model AuditLog {
   details   Json?
   createdAt DateTime @default(now())
 
-  admin     User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  admin User @relation(fields: [adminId], references: [id], onDelete: Cascade)
 }
 
 model AttendanceSession {
-  id          Int           @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   sectionId   Int
-  name        String?       // 👈 tên buổi điểm danh
-  sessionCode String        @unique
+  name        String?
+  sessionCode String    @unique
   qrCodeUrl   String?
   latitude    Float?
   longitude   Float?
-  radius      Float?        @default(50) // mét
-  createdAt   DateTime      @default(now())
-  expiresAt   DateTime?     // 👈 thời gian hết hạn
+  radius      Float?    @default(50)
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime?
+  
 
   section     CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   attendances Attendance[]
 }
 
-
 model Attendance {
-  id         Int                @id @default(autoincrement())
-  sessionId  Int
-  studentId  Int
-  status     AttendanceStatus   @default(present)
-  checkedInAt DateTime          @default(now())
-  latitude   Float?
-  longitude  Float?
-  distance   Float?             // khoảng cách tính được
-
-  session    AttendanceSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  student    Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  id          Int              @id @default(autoincrement())
+  sessionId   Int
+  studentId   Int
+  status      AttendanceStatus @default(present)
+  checkedInAt DateTime         @default(now())
+  latitude    Float?
+  longitude   Float?
+  distance    Float?
+  score       Float?
+  
+  session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, studentId], map: "uniq_attendance")
 }
@@ -477,3 +447,235 @@ enum AttendanceStatus {
   absent
   warning
 }
+
+enum AssignmentType {
+  exercise
+  quiz
+  project
+  exam
+}
+
+enum QuestionType {
+  multiple_choice
+  essay
+  coding
+  true_false
+}
+
+enum ProgrammingLanguage {
+  javascript
+  python
+  java
+  cpp
+  csharp
+}
+
+model Question {
+  id          Int          @id @default(autoincrement())
+  type        QuestionType
+  content     String       @db.Text
+  explanation String?      @db.Text
+  points      Int          @default(1)
+  order       Int          @default(0)
+
+  language    ProgrammingLanguage?
+  starterCode String?              @db.Text
+  timeLimit   Int?
+  memoryLimit Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignments AssignmentQuestion[]
+  choices     QuestionChoice[]
+  testCases   TestCase[]
+  answers     SubmissionAnswer[]
+}
+
+model QuestionChoice {
+  id         Int     @id @default(autoincrement())
+  questionId Int
+  content    String  @db.Text
+  isCorrect  Boolean @default(false)
+  order      Int     @default(0)
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+}
+
+model TestCase {
+  id             Int     @id @default(autoincrement())
+  questionId     Int
+  input          String  @db.Text
+  expectedOutput String  @db.Text
+  isHidden       Boolean @default(false)
+  points         Int     @default(0)
+  order          Int     @default(0)
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+}
+
+model Submission {
+  id           Int @id @default(autoincrement())
+  assignmentId Int
+  studentId    Int
+
+  filePath   String? @db.VarChar(500)
+  answerText String? @db.Text
+
+  score       Float?
+  maxScore    Float?
+  autoGraded  Boolean   @default(false)
+  feedback    String?   @db.Text
+  submittedAt DateTime  @default(now())
+  gradedAt    DateTime?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  assignment Assignment         @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  answers    SubmissionAnswer[]
+
+  @@unique([assignmentId, studentId])
+  @@index([studentId])
+  @@index([assignmentId])
+}
+
+model SubmissionAnswer {
+  id           Int @id @default(autoincrement())
+  submissionId Int
+  questionId   Int
+
+  selectedChoices Json?
+
+  essayAnswer String? @db.Text
+
+  codeAnswer    String?              @db.Text
+  language      ProgrammingLanguage?
+  executionTime Int?
+  memoryUsed    Int?
+
+  score      Float?
+  maxScore   Float?
+  isCorrect  Boolean?
+  autoGraded Boolean  @default(false)
+  feedback   String?  @db.Text
+
+  testResults Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, questionId])
+  @@index([questionId])
+}
+
+model Assignment {
+  id          Int            @id @default(autoincrement())
+  title       String         @db.VarChar(200)
+  description String?        @db.Text
+  type        AssignmentType @default(exercise)
+  
+
+  dueDate                DateTime?
+  maxScore               Float     @default(100)
+  passingScore           Float?
+  timeLimit              Int?
+  maxAttempts            Int?      @default(1)
+  shuffleQuestions       Boolean   @default(false)
+  showAnswersAfterSubmit Boolean   @default(false)
+  allowLateSubmission    Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  questions     AssignmentQuestion[]
+  submissions   Submission[]
+  sectionLinks  SectionAssignment[]
+  notifications Notification[]
+
+  ChatRoom ChatRoom[]
+}
+
+model SectionAssignment {
+  id           Int      @id @default(autoincrement())
+  sectionId    Int
+  assignmentId Int
+  assignedAt   DateTime @default(now())
+  isOpen       Boolean  @default(true)
+
+  section    CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  assignment Assignment    @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@unique([sectionId, assignmentId])
+  @@index([assignmentId])
+}
+
+model AssignmentQuestion {
+  assignmentId Int
+  questionId   Int
+  assignedAt   DateTime @default(now())
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@id([assignmentId, questionId])
+}
+
+model ChatRoom {
+  id        Int          @id @default(autoincrement())
+  title     String?      @db.VarChar(200)
+  type      ChatRoomType
+  createdAt DateTime     @default(now())
+
+  sectionId    Int?
+  assignmentId Int?
+  groupId      Int?
+
+  section    CourseSection? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  assignment Assignment?    @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  group      SectionGroup?  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  participants ChatParticipant[]
+  messages     ChatMessage[]
+}
+
+enum ChatRoomType {
+  private
+  section
+  group
+  assignment
+}
+
+model ChatParticipant {
+  id     Int @id @default(autoincrement())
+  roomId Int
+  userId Int
+
+  joinedAt DateTime @default(now())
+
+  room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+}
+
+model ChatMessage {
+  id        Int      @id @default(autoincrement())
+  roomId    Int
+  senderId  Int
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  room          ChatRoom       @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender        User           @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  notifications Notification[]
+}
+

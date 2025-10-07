@@ -21,6 +21,7 @@ import {
   UserOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
+import { Layers } from "lucide-react";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -233,36 +234,33 @@ export default function CoursesAdmin() {
   }, {});
 
   return (
-    <div style={{ padding: 16 }}>
-      {/* Thanh công cụ */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 16,
-          gap: 16,
-          flexWrap: "wrap",
-        }}
-      >
-        <Title level={3}>
-          <UserOutlined /> Quản lý học phần
+    <div className="pl-3 pr-3">
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 16,
+      }}>
+        <Title level={3} className="mt-2">
+          <div className="flex items-center gap-2">
+            <Layers /> Quản lý học phần
+          </div>
         </Title>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Input
             allowClear
             prefix={<SearchOutlined />}
-            placeholder="Tìm theo mã lớp, tên lớp, môn học..."
+            placeholder="Tìm kiếm"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            style={{ width: 300 }}
+            style={{ width: 150 }}
           />
 
           <Select
             allowClear
             placeholder="Lọc theo trạng thái"
-            style={{ width: 160 }}
+            style={{ width: 150 }}
             value={statusFilter ?? undefined}
             onChange={(value) => setStatusFilter(value)}
           >
@@ -275,13 +273,13 @@ export default function CoursesAdmin() {
           <Select
             allowClear
             placeholder="Lọc theo học kỳ"
-            style={{ width: 200 }}
+            style={{ width: 150 }}
             value={termFilter ?? undefined}
             onChange={(value) => setTermFilter(value)}
           >
             {terms.map((t) => (
               <Option key={t.id} value={t.id}>
-                {t.code} - {t.name}
+                {t.name}
               </Option>
             ))}
           </Select>
@@ -311,7 +309,6 @@ export default function CoursesAdmin() {
             level={4}
             style={{
               marginBottom: 16,
-              background: "linear-gradient(90deg, #e6f7ff, #ffffff)",
               padding: "8px 16px",
               borderRadius: 8,
               border: "1px solid #f0f0f0",
@@ -428,6 +425,11 @@ export default function CoursesAdmin() {
         onOk={handleAdd}
         okText="Thêm"
         cancelText="Hủy"
+        centered
+        bodyStyle={{
+          maxHeight: "70vh", // Giới hạn chiều cao modal
+          overflowY: "auto", // Thêm scroll dọc
+        }}
       >
         <Form layout="vertical" form={form}>
           <Form.Item
@@ -443,6 +445,7 @@ export default function CoursesAdmin() {
               ))}
             </Select>
           </Form.Item>
+
           <Form.Item
             label="Học kỳ"
             name="termId"
@@ -456,6 +459,7 @@ export default function CoursesAdmin() {
               ))}
             </Select>
           </Form.Item>
+
           <Form.Item
             label="Mã lớp (sectionCode)"
             name="sectionCode"
@@ -463,6 +467,7 @@ export default function CoursesAdmin() {
           >
             <Input />
           </Form.Item>
+
           <Form.Item
             label="Tên lớp (sectionName)"
             name="sectionName"
@@ -470,9 +475,11 @@ export default function CoursesAdmin() {
           >
             <Input />
           </Form.Item>
+
           <Form.Item label="Sĩ số tối đa" name="maxStudents" initialValue={50}>
             <Input type="number" />
           </Form.Item>
+
           <Form.Item label="Trạng thái" name="status" initialValue="planned">
             <Select>
               <Option value="planned">Planned</Option>
@@ -483,6 +490,7 @@ export default function CoursesAdmin() {
           </Form.Item>
         </Form>
       </Modal>
+
     </div>
   );
 }

@@ -23,9 +23,9 @@ import RollCall from "../pages/Teacher/RollCall";
 import RollCallCheckIn from "../pages/Teacher/RollCallCheckIn";
 import StudentList from "../pages/Teacher/StudentList";
 import TeacherDashboard from "../pages/Teacher/Dashboard";
+import AssignmentsTeacher from "../pages/Teacher/AssignmentsTeacher";
 
 // Admin pages
-import AdminQuestions from "../pages/Admin/AdminQuestions";
 import Notifications from "../pages/Admin/Notifications";
 import Reports from "../pages/Admin/Reports";
 import Roles from "../pages/Admin/Roles";
@@ -38,7 +38,6 @@ import StudentRoute from "./StudentRoute";
 import TeacherRoute from "./TeacherRoute";
 import AdminRoute from "./AdminRoute";
 import Error from "./Error";
-import { requirePermission } from './../../../myapp/src/middlewares/requirePermission';
 import RequirePermission from "./RequirePermission";
 import Students from "../pages/Admin/Students";
 import Teachers from "../pages/Admin/Teachers";
@@ -46,6 +45,11 @@ import DashboardStudent from "../pages/Student/DashboardStudent";
 import CourseLayoutStudent from "../layouts/CourseLayoutStudent";
 import OverviewAdmin from "../pages/Admin/OverviewAdmin";
 import Instructors from "../pages/Admin/Instructors";
+import Assignments from "../pages/Admin/Assignments";
+import Questions from "../pages/Admin/Questions";
+import Subjects from "../pages/Admin/Subjects";
+import Chat from "../pages/Teacher/Chat";
+import GradesTeacher from "../pages/Teacher/GradesTeacher";
 
 export const router = createBrowserRouter([
   // ========== Root check auth ==========
@@ -139,6 +143,9 @@ export const router = createBrowserRouter([
           { path: "friend", element: <StudentList /> },
           { path: "materials", element: <Materials /> },
           { path: "roll-call", element: <RollCall /> },
+          { path: "chat", element: <Chat /> },
+          { path: "assignments", element: <AssignmentsTeacher /> },
+          { path: "grades", element: <GradesTeacher /> },
         ],
       },
     ],
@@ -155,12 +162,13 @@ export const router = createBrowserRouter([
     errorElement: <Error />,
     children: [
       { index: true, element: <Reports /> },
-      { path: "questions", element: <AdminQuestions /> },
       { path: "notifications", element: <Notifications /> },
       { path: "reports", element: <Reports /> },
       { path: "roles", element: <Roles /> },
       { path: "instructors", element: <Instructors /> },
-
+      { path: "assignments", element: <Assignments /> },
+      { path: "questions", element: <Questions /> },
+      { path: "subjects", element: <Subjects /> },
       // Admin courses
       {
         path: "courses",
@@ -177,15 +185,23 @@ export const router = createBrowserRouter([
           { path: "roll-call", element: <RollCall /> },
         ],
       },
-
       {
         path: "students",
-        element: (
-          <RequirePermission permission="user:view">
-            <Students />
-          </RequirePermission>
-        ),
+        lazy: async () => {
+          const { default: Students } = await import("../pages/Admin/Students");
+          const { default: RequirePermission } = await import("./RequirePermission");
+          return {
+            element: (
+              <RequirePermission permission="*">
+                <Students />
+              </RequirePermission>
+            ),
+          };
+        },
       },
+
+
+
       { path: "teachers", element: <Teachers /> },
     ],
   },

@@ -26,6 +26,7 @@ import axios from "axios";
 import dayjs from "dayjs";
 import { toast } from 'react-hot-toast';
 import { useAuth } from "../../context/authContext";
+import { User } from "lucide-react";
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -367,16 +368,17 @@ export default function Roles() {
 	);
 
 	return (
-		<div style={{ padding: 16 }}>
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					alignItems: "center",
-					marginBottom: 16,
-				}}
-			>
-				<Title level={3}>Quản lý Vai trò</Title>
+		<div className="pl-3 pr-3">
+			<div style={{
+				display: "flex",
+				justifyContent: "space-between",
+				alignItems: "center",
+			}}>
+				<Title level={3} className="mt-2">
+					<div className="flex items-center gap-2">
+						<div className=""><User /></div> Quản lý Vai trò
+					</div>
+				</Title>
 				<div style={{ display: "flex", gap: 8 }}>
 					<Input
 						allowClear
@@ -464,21 +466,20 @@ export default function Roles() {
 			<Modal
 				title={editing ? "Sửa vai trò" : "Thêm vai trò"}
 				open={modalOpen}
-				centered   // 👈 luôn căn giữa màn hình
 				onCancel={() => {
 					setModalOpen(false);
 					setSelectedPermissions([]);
 				}}
 				onOk={handleSubmit}
 				okText={editing ? "Lưu" : "Tạo mới"}
-				width="90%"     // chiếm 90% màn hình
-				style={{ maxWidth: "1400px" }} // giới hạn không vượt quá 1400px
-				bodyStyle={{ maxHeight: "80vh", overflowY: "auto" }} // tránh tràn màn
+				width="80%"     // chiếm 100% màn hình
+				centered
+				bodyStyle={{ maxHeight: "80vh", overflowY: "hidden", overflowX: "hidden" }}   
 			>
 				<Form
 					form={form}
 					layout="vertical"
-					className="w-full max-w-6xl mx-auto"
+					className="w-full max-w-8xl mx-auto"
 				>
 					{/* Chia grid 12 cột */}
 					<div className="grid grid-cols-12 gap-6">
@@ -578,15 +579,6 @@ export default function Roles() {
 														>
 															<div>
 																<div style={{ fontWeight: 500, color: "#333" }}>
-																	{permission.name}
-																</div>
-																<div
-																	style={{
-																		fontSize: 12,
-																		color: "#666",
-																		marginTop: 4,
-																	}}
-																>
 																	{permission.description}
 																</div>
 															</div>

@@ -118,12 +118,16 @@ export async function getMaterialsByClass(req: Request, res: Response) {
     try {
         const courseSectionId = parseInt(req.params.courseSectionId);
 
-        const materials = await prisma.courseMaterial.findMany({
-            where: { courseSectionId },
-            include: { material: true },
-        });
+       const materials = await prisma.courseMaterial.findMany({
+           where: { courseSectionId },
+           include: { material: true },
+       });
 
-        res.json({ success: true, data: jsonSafe(materials.map((m) => m.material)) });
+       res.json({
+           success: true,
+           data: jsonSafe(materials), // sẽ có { id, courseSectionId, materialId, isOpen, assignedAt, material: {...} }
+       });
+
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }

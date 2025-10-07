@@ -26,6 +26,7 @@ import {
 import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
+import { GraduationCap, Layers, UserCog } from "lucide-react";
 
 const { Title } = Typography;
 const API_BASE = "http://localhost:4000/api/v1";
@@ -391,28 +392,27 @@ export default function Instructors() {
 	});
 
 	return (
-		<div style={{ padding: 24 }}>
-			<Title level={3} style={{ marginBottom: 24 }}>
-				<UserOutlined /> Quản lý Phân công Giảng viên
-			</Title>
-
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					alignItems: "center",
-					marginBottom: 16,
-				}}
-			>
-				<Input
-					allowClear
-					prefix={<SearchOutlined />}
-					placeholder="Tìm theo môn học, giảng viên, mã môn..."
-					value={keyword}
-					onChange={(e) => setKeyword(e.target.value)}
-					style={{ width: 400 }}
-				/>
+		<div className="pl-3 pr-3">
+			<div style={{
+				display: "flex",
+				justifyContent: "space-between",
+				alignItems: "center",
+				marginBottom: 16,
+			}}>
+				<Title level={3} className="mt-2">
+					<div className="flex items-center gap-2">
+						<UserCog /> Quản lý phân công
+					</div>
+				</Title>
 				<div style={{ display: "flex", gap: 8 }}>
+					<Input
+						allowClear
+						prefix={<SearchOutlined />}
+						placeholder="Tìm theo môn học, giảng viên, mã môn..."
+						value={keyword}
+						onChange={(e) => setKeyword(e.target.value)}
+						style={{ width: 400 }}
+					/>
 					<Button icon={<ReloadOutlined />} onClick={fetchInstructors}>
 						Làm mới
 					</Button>
@@ -460,10 +460,17 @@ export default function Instructors() {
 				okText="Phân công"
 				cancelText="Hủy"
 				width={700}
+				centered
+				bodyStyle={{
+					maxHeight: "70vh", // Giới hạn chiều cao modal
+					height: "70vh",
+					overflowY: "auto", // Thêm scroll dọc
+				}}
 			>
 				<Tabs
 					activeKey={activeTab}
 					onChange={(key) => setActiveTab(key as "byTeacher" | "bySection")}
+					style={{ marginTop: -10 }}
 					items={[
 						{
 							key: "byTeacher",
@@ -473,71 +480,73 @@ export default function Instructors() {
 								</span>
 							),
 							children: (
-								<Space direction="vertical" style={{ width: "100%" }} size="large">
-									<Card size="small" title="1. Chọn giảng viên">
-										<Select
-											showSearch
-											style={{ width: "100%" }}
-											placeholder="Chọn giảng viên"
-											value={selectedTeacher}
-											onChange={setSelectedTeacher}
-											filterOption={(input, option) =>
-												(option?.label ?? "").toLowerCase().includes(input.toLowerCase())
-											}
-											options={teachers.map((t) => ({
-												value: t.id,
-												label: `${t.user?.fullName} (${t.teacherCode}) - ${t.department}`,
-											}))}
-										/>
-									</Card>
-
-									<Card size="small" title="2. Chọn các môn học cần phân công">
-										<Input
-											allowClear
-											prefix={<SearchOutlined />}
-											placeholder="Tìm kiếm môn học..."
-											value={searchSection}
-											onChange={(e) => setSearchSection(e.target.value)}
-											style={{ marginBottom: 12 }}
-										/>
-										<Checkbox.Group
-											style={{ width: "100%" }}
-											value={selectedSections}
-											onChange={setSelectedSections}
+								<div style={{ marginTop: -20 }}>
+									<Space direction="vertical" style={{ width: "100%" }} size="small" >
+										<Card size="small" title="1. Chọn giảng viên"
 										>
-											<div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 400, overflowY: "auto" }}>
-												{courseSections
-													.filter((section) => {
-														if (!searchSection) return true;
-														const search = searchSection.toLowerCase();
-														return (
-															section.subject?.subjectCode?.toLowerCase().includes(search) ||
-															section.subject?.subjectName?.toLowerCase().includes(search) ||
-															section.sectionCode?.toLowerCase().includes(search) ||
-															section.sectionName?.toLowerCase().includes(search) ||
-															section.term?.name?.toLowerCase().includes(search)
-														);
-													})
-													.map((section) => (
-														<Checkbox
-															key={section.id}
-															value={section.id}
-															disabled={!selectedTeacher}
-														>
-															<div>
-																<strong>{section.subject?.subjectCode}</strong> -{" "}
-																{section.subject?.subjectName}
-																<div style={{ fontSize: 12, color: "#666" }}>
-																	{section.sectionCode} - {section.sectionName} (
-																	{section.term?.name})
+											<Select
+												showSearch
+												style={{ width: "100%" }}
+												placeholder="Chọn giảng viên"
+												value={selectedTeacher}
+												onChange={setSelectedTeacher}
+												filterOption={(input, option) =>
+													(option?.label ?? "").toLowerCase().includes(input.toLowerCase())
+												}
+												options={teachers.map((t) => ({
+													value: t.id,
+													label: `${t.user?.fullName} (${t.teacherCode}) - ${t.department}`,
+												}))}
+											/>
+										</Card>
+
+										<Card size="small" title="2. Chọn các môn học cần phân công">
+											<Input
+												allowClear
+												prefix={<SearchOutlined />}
+												placeholder="Tìm kiếm môn học..."
+												value={searchSection}
+												onChange={(e) => setSearchSection(e.target.value)}
+												style={{ marginBottom: 12 }}
+											/>
+											<Checkbox.Group
+												style={{ width: "100%" }}
+												value={selectedSections}
+												onChange={setSelectedSections}
+											>
+												<div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 300, overflowY: "auto" }} className="w-[100%]">
+													{courseSections
+														.filter((section) => {
+															if (!searchSection) return true;
+															const search = searchSection.toLowerCase();
+															return (
+																section.subject?.subjectCode?.toLowerCase().includes(search) ||
+																section.subject?.subjectName?.toLowerCase().includes(search) ||
+																section.sectionCode?.toLowerCase().includes(search) ||
+																section.sectionName?.toLowerCase().includes(search) ||
+																section.term?.name?.toLowerCase().includes(search)
+															);
+														})
+														.map((section) => (
+															<Checkbox
+																key={section.id}
+																value={section.id}
+																disabled={!selectedTeacher}
+															>
+																<div>
+																	<strong>{section.subject?.subjectCode}</strong> -{" "}
+																	{section.subject?.subjectName}
+																	<div style={{ fontSize: 12, color: "#666" }}>
+																		{section.sectionCode} - {section.sectionName} - {section.term?.name}
+																	</div>
 																</div>
-															</div>
-														</Checkbox>
-													))}
-											</div>
-										</Checkbox.Group>
-									</Card>
-								</Space>
+															</Checkbox>
+														))}
+												</div>
+											</Checkbox.Group>
+										</Card>
+									</Space>
+								</div>
 							),
 						},
 						{
@@ -548,65 +557,67 @@ export default function Instructors() {
 								</span>
 							),
 							children: (
-								<Space direction="vertical" style={{ width: "100%" }} size="large">
-									<Card size="small" title="1. Chọn môn học">
-										<Select
-											showSearch
-											style={{ width: "100%" }}
-											placeholder="Chọn môn học"
-											value={selectedSection}
-											onChange={setSelectedSection}
-											filterOption={(input, option) =>
-												(option?.label ?? "").toLowerCase().includes(input.toLowerCase())
-											}
-											options={courseSections.map((s) => ({
-												value: s.id,
-												label: `${s.subject?.subjectCode} - ${s.subject?.subjectName} (${s.sectionCode}) - ${s.term?.name}`,
-											}))}
-										/>
-									</Card>
+								<div style={{ marginTop: -20 }}>
+									<Space direction="vertical" style={{ width: "100%" }} size="small">
+										<Card size="small" title="1. Chọn môn học">
+											<Select
+												showSearch
+												style={{ width: "100%" }}
+												placeholder="Chọn môn học"
+												value={selectedSection}
+												onChange={setSelectedSection}
+												filterOption={(input, option) =>
+													(option?.label ?? "").toLowerCase().includes(input.toLowerCase())
+												}
+												options={courseSections.map((s) => ({
+													value: s.id,
+													label: `${s.subject?.subjectCode} - ${s.subject?.subjectName} (${s.sectionCode}) - ${s.term?.name}`,
+												}))}
+											/>
+										</Card>
 
-									<Card size="small" title="2. Chọn các giảng viên cần phân công">
-										<Input
-											allowClear
-											prefix={<SearchOutlined />}
-											placeholder="Tìm kiếm giảng viên..."
-											value={searchTeacher}
-											onChange={(e) => setSearchTeacher(e.target.value)}
-											style={{ marginBottom: 12 }}
-										/>
-										<Checkbox.Group
-											style={{ width: "100%" }}
-											value={selectedTeachers}
-											onChange={setSelectedTeachers}
-										>
-											<div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 400, overflowY: "auto" }}>
-												{teachers
-													.filter((teacher) => {
-														if (!searchTeacher) return true;
-														const search = searchTeacher.toLowerCase();
-														return (
-															teacher.user?.fullName?.toLowerCase().includes(search) ||
-															teacher.teacherCode?.toLowerCase().includes(search) ||
-															teacher.department?.toLowerCase().includes(search) ||
-															teacher.position?.toLowerCase().includes(search) ||
-															teacher.specialization?.toLowerCase().includes(search)
-														);
-													})
-													.map((teacher) => (
-														<Checkbox key={teacher.id} value={teacher.id}>
-															<div>
-																<strong>{teacher.user?.fullName}</strong> ({teacher.teacherCode})
-																<div style={{ fontSize: 12, color: "#666" }}>
-																	{teacher.department} - {teacher.position} - {teacher.specialization}
+										<Card size="small" title="2. Chọn các giảng viên cần phân công">
+											<Input
+												allowClear
+												prefix={<SearchOutlined />}
+												placeholder="Tìm kiếm giảng viên..."
+												value={searchTeacher}
+												onChange={(e) => setSearchTeacher(e.target.value)}
+												style={{ marginBottom: 12 }}
+											/>
+											<Checkbox.Group
+												style={{ width: "100%" }}
+												value={selectedTeachers}
+												onChange={setSelectedTeachers}
+											>
+												<div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 300, overflowY: "auto" }} className="w-[100%]">
+													{teachers
+														.filter((teacher) => {
+															if (!searchTeacher) return true;
+															const search = searchTeacher.toLowerCase();
+															return (
+																teacher.user?.fullName?.toLowerCase().includes(search) ||
+																teacher.teacherCode?.toLowerCase().includes(search) ||
+																teacher.department?.toLowerCase().includes(search) ||
+																teacher.position?.toLowerCase().includes(search) ||
+																teacher.specialization?.toLowerCase().includes(search)
+															);
+														})
+														.map((teacher) => (
+															<Checkbox key={teacher.id} value={teacher.id}>
+																<div>
+																	<strong>{teacher.user?.fullName}</strong> ({teacher.teacherCode})
+																	<div style={{ fontSize: 12, color: "#666" }}>
+																		{teacher.department} - {teacher.position} - {teacher.specialization}
+																	</div>
 																</div>
-															</div>
-														</Checkbox>
-													))}
-											</div>
-										</Checkbox.Group>
-									</Card>
-								</Space>
+															</Checkbox>
+														))}
+												</div>
+											</Checkbox.Group>
+										</Card>
+									</Space>
+								</div>
 							),
 						},
 					]}

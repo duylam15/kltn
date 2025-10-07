@@ -1,19 +1,23 @@
 import { ZodTypeAny } from "zod";
 import { Request, Response, NextFunction } from "express";
 import snakecaseKeys from "snakecase-keys";
+import camelcaseKeys from "camelcase-keys";
 
-function safeSnakeCase<T>(obj: T): T {
-    if (
-        obj &&
-        typeof obj === "object" &&
-        !Array.isArray(obj) &&
-        Object.getPrototypeOf(obj) === Object.prototype
-    ) {
-        return snakecaseKeys(obj as Record<string, unknown>, {
-            deep: true,
-        }) as T;
-    }
-    return obj;
+function isPlainObject(value: any): value is Record<string, any> {
+    return (
+        value !== null &&
+        typeof value === "object" &&
+        Object.getPrototypeOf(value) === Object.prototype
+    );
+}
+
+function unifyKeys<T>(obj: T): T {
+    if (!isPlainObject(obj)) return obj;
+
+    const snake = snakecaseKeys(obj, { deep: true });
+    const camel = camelcaseKeys(obj, { deep: true });
+
+    return { ...camel, ...snake } as T;
 }
 
 export const validate =
@@ -21,9 +25,9 @@ export const validate =
     (req: Request, res: Response, next: NextFunction) => {
         try {
             const transformed = {
-                body: safeSnakeCase(req.body),
-                query: safeSnakeCase(req.query),
-                params: safeSnakeCase(req.params),
+                body: unifyKeys(req.body),
+                query: unifyKeys(req.query),
+                params: unifyKeys(req.params),
             };
 
             const result = schema.safeParse(transformed);
