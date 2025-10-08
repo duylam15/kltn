@@ -75,6 +75,7 @@ model User {
   chatMessages      ChatMessage[]
   chatParticipants  ChatParticipant[]
   overriddenGrades  StudentGrade[]    @relation("GradeOverriddenBy")
+  assignedMaterials CourseMaterial[]   // ← THÊM DÒNG NÀY
 
   @@index([roleId])
   @@index([isActive])
@@ -278,6 +279,7 @@ model Material {
   filePath      String?
   fileSize      BigInt?
   fileType      String?
+  originalMaterialId String   @db.VarChar(100) 
   category      MaterialCategory @default(other)
   isPublic      Boolean          @default(false)
   downloadCount Int              @default(0)
@@ -293,13 +295,16 @@ model CourseMaterial {
   id              Int      @id @default(autoincrement())
   courseSectionId Int
   materialId      Int
+  assignedBy      Int      // ← THÊM DÒNG NÀY
   assignedAt      DateTime @default(now())
   isOpen          Boolean  @default(true)
 
   courseSection CourseSection @relation(fields: [courseSectionId], references: [id], onDelete: Cascade)
   material      Material      @relation("MaterialToCourse", fields: [materialId], references: [id], onDelete: Cascade)
+  assigner      User          @relation(fields: [assignedBy], references: [id], onDelete: Cascade) // ← THÊM DÒNG NÀY
 
   @@unique([courseSectionId, materialId])
+  @@index([assignedBy]) // ← THÊM INDEX
 }
 
 model ForumThread {
@@ -592,6 +597,8 @@ model Assignment {
   shuffleQuestions       Boolean   @default(false)
   showAnswersAfterSubmit Boolean   @default(false)
   allowLateSubmission    Boolean   @default(false)
+  createdBy               Int       // ← THÊM FIELD NÀY (nếu chưa có)
+  originalAssignmentId String   @db.VarChar(100) 
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

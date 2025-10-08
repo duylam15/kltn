@@ -22,6 +22,7 @@ import {
   Tooltip,
   Collapse,
   Switch,
+  Grid,
 } from 'antd';
 import {
   PlusOutlined,
@@ -44,6 +45,7 @@ import {
 import type { MenuProps, TableColumnsType } from 'antd';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../context/authContext';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -106,9 +108,11 @@ interface GradeBook {
 }
 
 export default function GradesTeacher() {
-  const [sectionId] = useState(100);
   const [loading, setLoading] = useState(false);
-
+ const { user } = useAuth(); // ✅ thêm dòng này
+  const teacherId = user?.id; // ID của giáo viên hiện tại
+  const path = window.location.pathname;
+  const sectionId = Number(path.split("/")[3]);
   // Data states
   const [gradeBook, setGradeBook] = useState<GradeBook | null>(null);
   const [attendanceSessions, setAttendanceSessions] = useState<AttendanceSession[]>([]);
@@ -144,6 +148,9 @@ export default function GradesTeacher() {
   const [originalColumns, setOriginalColumns] = useState<number[]>([]);
   const [itemWeight, setItemWeight] = useState(1);
   const [keyword, setKeyword] = useState("");
+  const { useBreakpoint } = Grid;
+
+  const screens = useBreakpoint();
 
   const sortColumns = (columns: GradeColumn[]) => {
     const typeOrder: { [key: string]: number } = {
@@ -217,6 +224,8 @@ export default function GradesTeacher() {
       const response = await axios.get(
         `${API_BASE_URL}/assignments/sections/${sectionId}/assignments`
       );
+      console.log('Assignments response:', response.data);
+      console.log('Assignments response:', sectionId);
       if (response.data.success) {
         setAssignments(response.data.data);
       }
@@ -458,7 +467,7 @@ export default function GradesTeacher() {
       name: '',
       type: 'attendance',
       description: '',
-      maxScore: 100,
+      maxScore: 10,
       weight: 0,
       calculationMethod: 'average',
       bestNCount: null,
@@ -647,18 +656,18 @@ export default function GradesTeacher() {
       {
         title: "STT",
         key: "stt",
-        width: 80,
         fixed: "left",
         align: "center",
+        responsive: ["sm"], // chỉ hiện từ sm trở lên
         render: (_: any, __: Student, index: number) => index + 1,
       },
       {
         title: "Mã SV",
         dataIndex: "studentCode",
         key: "studentCode",
-        width: 120,
         fixed: "left",
         ellipsis: true,
+        responsive: ["xs", "sm", "md"], // hiện cả mobile
         render: (text: string) => (
           <Tooltip title={text}>
             <Text strong>{text}</Text>
@@ -669,9 +678,9 @@ export default function GradesTeacher() {
         title: "Họ và tên",
         dataIndex: "fullName",
         key: "fullName",
-        width: 200,
         fixed: "left",
         ellipsis: true,
+        responsive: ["xs", "sm", "md"], // luôn hiện
         render: (text: string) => (
           <Tooltip title={text}>
             <Text strong>{text}</Text>
@@ -682,9 +691,8 @@ export default function GradesTeacher() {
         title: "Email",
         dataIndex: "email",
         key: "email",
-        width: 100,
-        fixed: "left",
         ellipsis: true,
+        responsive: ["md"], // ẩn trên mobile nhỏ
         render: (text: string) => (
           <Tooltip title={text}>
             <Text type="secondary">{text}</Text>
@@ -692,6 +700,7 @@ export default function GradesTeacher() {
         ),
       },
     ];
+
 
     const gradeColumns: TableColumnsType<Student> = sortColumns(
       gradeBook?.columns || []
@@ -712,7 +721,6 @@ export default function GradesTeacher() {
         </div>
       ),
       key: `grade-${col.id}`,
-      width: 150,
       align: "center" as const,
       ellipsis: true,
       render: (_: any, student: Student) => {
@@ -816,10 +824,9 @@ export default function GradesTeacher() {
       style={{
         paddingLeft: 16,
         paddingRight: 16,
-        height: "79vh",        // chiếm full chiều cao viewport
-        overflow: "hidden",     // chặn cả scroll ngang + dọc
+        overflow: "hidden",    
         display: "flex",
-        flexDirection: "column"
+        flexDirection: "column",
       }}
     >
       {/* Header */}
@@ -937,23 +944,19 @@ export default function GradesTeacher() {
             columns={getTableColumns()}
             rowKey="studentId"
             bordered
-            scroll={{ y: 'calc(100vh - 330px)' }}
+            scroll={{
+              y: 'calc(100vh - 330px)',
+              x: screens.lg ? undefined : "max-content", // 👈 máy tính bỏ scroll.x
+            }}
             pagination={{
-              pageSize: 50,
+              pageSize: 10,
               showSizeChanger: true,
               showTotal: (total) => `Tổng ${total} sinh viên`,
-            }}
-            locale={{
-              emptyText: keyword
-                ? 'Không tìm thấy sinh viên nào'
-                : 'Chưa có sinh viên nào trong lớp',
             }}
           />
         );
       })()}
 
-
-      {/* Create/Edit Column Modal */}
       <Modal
         title={
           <Space>
@@ -967,6 +970,8 @@ export default function GradesTeacher() {
           resetColumnForm();
         }}
         width={shouldShowSourceSelection() ? 1000 : 600}
+        centered
+        bodyStyle={{ maxHeight: "70vh", overflowY: "auto", overflowX: "hidden" }}
         footer={[
           <Button key="cancel" onClick={() => {
             setOpenColumnDialog(false);
@@ -992,7 +997,6 @@ export default function GradesTeacher() {
               <Title level={5} style={{ color: '#1890ff', marginBottom: 16 }}>
                 Thông tin cơ bản
               </Title>
-              <Divider style={{ marginTop: 8, marginBottom: 16 }} />
 
               <Form.Item
                 label="Tên cột điểm"
@@ -1062,11 +1066,10 @@ export default function GradesTeacher() {
                   {columnForm.type === 'assignment' && 'Chọn bài tập'}
                   {(columnForm.type === 'midterm' || columnForm.type === 'final' || columnForm.type === 'custom') && 'Chọn các cột điểm'}
                 </Title>
-                <Divider style={{ marginTop: 8, marginBottom: 16 }} />
 
                 {/* Attendance Sessions Selection */}
                 {columnForm.type === 'attendance' && (
-                  <div>
+                  <div >
                     <Alert
                       message={
                         <span>
@@ -1092,7 +1095,7 @@ export default function GradesTeacher() {
                       <Card
                         bordered
                         size="small"
-                        style={{ maxHeight: 400, overflow: 'auto' }}
+                        style={{ maxHeight: 250, overflow: 'auto' }}
                         bodyStyle={{ padding: 0 }}
                       >
                         <List
@@ -1162,7 +1165,7 @@ export default function GradesTeacher() {
                       <Card
                         bordered
                         size="small"
-                        style={{ maxHeight: 400, overflow: 'auto' }}
+                        style={{ maxHeight: 250, overflow: 'auto' }}
                         bodyStyle={{ padding: 0 }}
                       >
                         <List

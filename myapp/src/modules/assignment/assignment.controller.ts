@@ -1,5 +1,20 @@
 import { Request, Response } from "express";
 import * as service from "./assignment.service";
+import { jsonSafe } from "../../utils/bigint";
+import { prisma } from "../../prisma/client";
+
+export async function getAssignmentsByTeacher(req: Request, res: Response) {
+    try {
+        const teacherId = parseInt(req.params.teacherId);
+        const assignments = await prisma.assignment.findMany({
+            where: { createdBy: teacherId },
+            orderBy: { createdAt: "desc" },
+        });
+        res.json({ success: true, data: jsonSafe(assignments) });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+}
 
 // assignment.controller.ts
 export async function bySection(req: Request, res: Response) {

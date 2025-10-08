@@ -15,6 +15,7 @@ import {
 	FileQuestion,
 	UserCog,
 	Layers,
+	FileText,
 } from "lucide-react";
 import { useState } from "react";
 import api from "../utils/axiosInstance";
@@ -40,6 +41,7 @@ export default function LayoutAdmin() {
 		{ to: "/admin/courses", label: "Học phần", icon: Layers },
 		{ to: "/admin/assignments", label: "Bài tập", icon: FileQuestion },
 		{ to: "/admin/questions", label: "Câu hỏi", icon: BookOpen },
+		{ to: "/admin/materials", label: "Tài liệu", icon: FileText },
 
 		// Quản lý con người
 		{ to: "/admin/teachers", label: "Giảng viên", icon: GraduationCap, required: "*" },

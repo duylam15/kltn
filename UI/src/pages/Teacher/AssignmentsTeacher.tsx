@@ -31,11 +31,15 @@ import {
   QuestionCircleOutlined,
   CheckCircleOutlined,
   CalendarOutlined,
+  CopyOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import { FileQuestion } from "lucide-react";
+import { v4 as uuidv4 } from "uuid";
+
+import { useAuth } from "../../context/authContext";
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -52,6 +56,8 @@ type Assignment = {
   timeLimit?: number;
   maxAttempts?: number;
   shuffleQuestions?: boolean;
+  createdBy?: number;              // ← THÊM
+  originalAssignmentId?: number;   // ← THÊM
   showAnswersAfterSubmit?: boolean;
   allowLateSubmission?: boolean;
   createdAt?: string;
@@ -67,7 +73,8 @@ type Question = {
 };
 
 export default function AssignmentTeacher() {
-  const teacherId = 100; // TODO: lấy từ useAuth
+  const { user } = useAuth(); // ✅ thêm dòng này
+  const teacherId = user?.id; // ID của giáo viên hiện tại
   const path = window.location.pathname;
   const sectionId = Number(path.split("/")[3]);
 
@@ -89,6 +96,12 @@ export default function AssignmentTeacher() {
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [questionKeyword, setQuestionKeyword] = useState("");
 
+  const [libraryModalOpen, setLibraryModalOpen] = useState(false);
+  const [allAssignments, setAllAssignments] = useState<Assignment[]>([]);
+  const [loadingLibrary, setLoadingLibrary] = useState(false);
+  const [selectedAssignmentIds, setSelectedAssignmentIds] = useState<number[]>([]);
+  const [libraryKeyword, setLibraryKeyword] = useState("");
+
   useEffect(() => {
     fetchData();
     fetchQuestions();
@@ -98,13 +111,15 @@ export default function AssignmentTeacher() {
     try {
       setLoading(true);
       const [res1, res2] = await Promise.all([
-        axios.get(`${API_BASE}/assignments`),
+        axios.get(`${API_BASE}/assignments/teacher/${teacherId}`),
         axios.get(`${API_BASE}/sections-assignments/sections/${sectionId}/assignments`),
       ]);
 
       if (res1.data.success) {
         setAssignments(res1.data.data || []);
       }
+
+      console.log(assignments);
 
       if (res2.data.success) {
         const assignedMap: Record<number, boolean> = {};
@@ -257,6 +272,7 @@ export default function AssignmentTeacher() {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
+      const uniqueCode = uuidv4(); // 👈 mã ngẫu nhiên
 
       const payload = {
         title: values.title.trim(),
@@ -270,6 +286,9 @@ export default function AssignmentTeacher() {
         shuffleQuestions: values.shuffleQuestions || false,
         showAnswersAfterSubmit: values.showAnswersAfterSubmit || false,
         allowLateSubmission: values.allowLateSubmission || false,
+        createdBy: teacherId, // hoặc lấy từ context, token decode
+        originalAssignmentId: uniqueCode
+        // Không gửi originalAssignmentId khi tạo mới
       };
 
       let assignmentId: number;
@@ -510,6 +529,138 @@ export default function AssignmentTeacher() {
     );
   });
 
+  const fetchAllAssignments = async () => {
+    try {
+      setLoadingLibrary(true);
+
+      const [allRes, myRes] = await Promise.all([
+        axios.get(`${API_BASE}/assignments`),
+        axios.get(`${API_BASE}/assignments/teacher/${teacherId}`),
+      ]);
+
+      if (allRes.data.success && myRes.data.success) {
+        const allAsgs = allRes.data.data;
+        const myAsgs = myRes.data.data;
+
+        // Lấy Set chứa originalAssignmentId của các bài tập tôi đã copy
+        const myOriginalAssignmentIds = new Set(
+          myAsgs
+            .filter((a: Assignment) => a.originalAssignmentId)
+            .map((a: Assignment) => a.originalAssignmentId)
+        );
+
+        // Bước 1: Lọc bỏ bài tập của chính mình (không phải copy)
+        const otherAssignments = allAsgs.filter((a: Assignment) => {
+          return !(a.createdBy === teacherId && !a.originalAssignmentId);
+        });
+
+        // Bước 2: Nhóm theo rootId, chỉ lấy 1 đại diện
+        const assignmentsByRootId = new Map<number, Assignment>();
+
+        otherAssignments.forEach((a: Assignment) => {
+          const rootId = a.originalAssignmentId || a.id;
+
+          // Ưu tiên bản gốc
+          if (!assignmentsByRootId.has(rootId) || !a.originalAssignmentId) {
+            assignmentsByRootId.set(rootId, a);
+          }
+        });
+
+        // Bước 3: Lọc bỏ những rootId đã copy
+        const availableAssignments = Array.from(assignmentsByRootId.entries())
+          .filter(([rootId, _]) => !myOriginalAssignmentIds.has(rootId))
+          .map(([_, assignment]) => assignment);
+
+        console.log("📚 Tổng bài tập:", allAsgs.length);
+        console.log("📖 Bài tập của tôi:", myAsgs.length);
+        console.log("✅ Có thể copy:", availableAssignments.length);
+
+        setAllAssignments(availableAssignments);
+      }
+    } catch (err) {
+      console.error("Lỗi fetch assignments:", err);
+      toast.error("Không tải được danh sách bài tập");
+    } finally {
+      setLoadingLibrary(false);
+    }
+  };
+
+  const handleCopyAssignments = async () => {
+    if (selectedAssignmentIds.length === 0) {
+      toast.error("Vui lòng chọn ít nhất 1 bài tập");
+      return;
+    }
+
+    try {
+      const selectedAssignments = allAssignments.filter((a) =>
+        selectedAssignmentIds.includes(a.id)
+      );
+
+      // Copy từng bài tập
+      const copyPromises = selectedAssignments.map(async (assignment) => {
+        // 1. Tạo bài tập mới
+        const createRes = await axios.post(`${API_BASE}/assignments`, {
+          title: assignment.title,
+          description: assignment.description,
+          type: assignment.type,
+          dueDate: assignment.dueDate,
+          maxScore: assignment.maxScore,
+          passingScore: assignment.passingScore,
+          timeLimit: assignment.timeLimit,
+          maxAttempts: assignment.maxAttempts,
+          shuffleQuestions: assignment.shuffleQuestions,
+          showAnswersAfterSubmit: assignment.showAnswersAfterSubmit,
+          allowLateSubmission: assignment.allowLateSubmission,
+          createdBy: teacherId,
+          originalAssignmentId: assignment.originalAssignmentId || assignment.id,
+        });
+
+        if (!createRes.data.success) return;
+
+        const newAssignmentId = createRes.data.data.id;
+
+        // 2. Copy câu hỏi từ bài tập gốc
+        try {
+          const questionsRes = await axios.get(
+            `${API_BASE}/assignments-questions/assignments/${assignment.id}/questions`
+          );
+
+          if (questionsRes.data.success && questionsRes.data.data.length > 0) {
+            const copyQuestionPromises = questionsRes.data.data.map(
+              (item: any) =>
+                axios.post(
+                  `${API_BASE}/assignments-questions/assignments/${newAssignmentId}/questions/${item.questionId}`
+                )
+            );
+
+            await Promise.all(copyQuestionPromises);
+          }
+        } catch (err) {
+          console.error("Lỗi copy câu hỏi:", err);
+        }
+
+        // 3. Gán vào lớp hiện tại
+        await axios.post(
+          `${API_BASE}/sections-assignments/sections/${sectionId}/assignments`,
+          { assignmentId: newAssignmentId }
+        );
+
+        return createRes;
+      });
+
+      await Promise.all(copyPromises);
+
+      toast.success(`Đã sao chép ${selectedAssignmentIds.length} bài tập`);
+      setLibraryModalOpen(false);
+      setSelectedAssignmentIds([]);
+      setLibraryKeyword("");
+      fetchData();
+    } catch (err: any) {
+      console.error("Lỗi copy:", err);
+      toast.error(err.response?.data?.message || "Không thể sao chép bài tập");
+    }
+  };
+
   const getStatistics = () => {
     const totalAssignments = assignments.length;
     const assignedAssignments = Object.keys(assignedIds).length;
@@ -596,82 +747,6 @@ export default function AssignmentTeacher() {
             <span>Đã gán vào lớp:</span>
             <strong style={{ color: "#52c41a" }}>{stats.assignedAssignments}</strong>
           </div>
-
-          {stats.unassignedAssignments > 0 && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                fontSize: 12,
-                color: "#000",
-                border: "1px solid #ddd",
-                borderRadius: 6,
-                padding: "6px 10px",
-                background: "#fff",
-              }}
-            >
-              <CalendarOutlined style={{ fontSize: 14, color: "#faad14" }} />
-              <span>Chưa gán:</span>
-              <strong style={{ color: "#faad14" }}>{stats.unassignedAssignments}</strong>
-            </div>
-          )}
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 12,
-              color: "#000",
-              border: "1px solid #ddd",
-              borderRadius: 6,
-              padding: "6px 10px",
-              background: "#fff",
-            }}
-          >
-            <CheckCircleOutlined style={{ fontSize: 14, color: "#722ed1" }} />
-            <span>Hiển thị:</span>
-            <strong style={{ color: "#722ed1" }}>{stats.visibleAssignments}</strong>
-          </div>
-
-          {stats.hiddenAssignments > 0 && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                fontSize: 12,
-                color: "#000",
-                border: "1px solid #ddd",
-                borderRadius: 6,
-                padding: "6px 10px",
-                background: "#fff",
-              }}
-            >
-              <EyeInvisibleOutlined style={{ fontSize: 14, color: "#ff4d4f" }} />
-              <span>Đã ẩn:</span>
-              <strong style={{ color: "#ff4d4f" }}>{stats.hiddenAssignments}</strong>
-            </div>
-          )}
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 12,
-              color: "#000",
-              border: "1px solid #ddd",
-              borderRadius: 6,
-              padding: "6px 10px",
-              background: "#fff",
-            }}
-          >
-            <QuestionCircleOutlined style={{ fontSize: 14, color: "#1890ff" }} />
-            <span>Tổng câu hỏi:</span>
-            <strong>{stats.totalQuestions}</strong>
-          </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <Input
@@ -684,6 +759,15 @@ export default function AssignmentTeacher() {
           />
           <Button icon={<ReloadOutlined />} onClick={fetchData}>
             Làm mới
+          </Button>
+          <Button
+            icon={<CopyOutlined />}
+            onClick={() => {
+              setLibraryModalOpen(true);
+              fetchAllAssignments();
+            }}
+          >
+            Lấy từ thư viện
           </Button>
           <Button
             type="primary"
@@ -919,6 +1003,103 @@ export default function AssignmentTeacher() {
             </div>
           </Col>
         </Row>
+      </Modal>
+      <Modal
+        title="Lấy bài tập từ thư viện"
+        open={libraryModalOpen}
+        onCancel={() => {
+          setLibraryModalOpen(false);
+          setSelectedAssignmentIds([]);
+          setLibraryKeyword("");
+        }}
+        onOk={handleCopyAssignments}
+        okText={`Sao chép (${selectedAssignmentIds.length})`}
+        cancelText="Hủy"
+        width={1000}
+        centered
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Input
+            allowClear
+            prefix={<SearchOutlined />}
+            placeholder="Tìm bài tập..."
+            value={libraryKeyword}
+            onChange={(e) => setLibraryKeyword(e.target.value)}
+          />
+        </div>
+
+        {loadingLibrary ? (
+          <div style={{ textAlign: "center", padding: 40 }}>
+            <Spin tip="Đang tải..." />
+          </div>
+        ) : allAssignments.filter(
+          (a) =>
+            !libraryKeyword ||
+            a.title.toLowerCase().includes(libraryKeyword.toLowerCase()) ||
+            a.description?.toLowerCase().includes(libraryKeyword.toLowerCase())
+        ).length === 0 ? (
+          <div style={{ textAlign: "center", padding: 40, color: "#999" }}>
+            <FileTextOutlined style={{ fontSize: 48, marginBottom: 16 }} />
+            <div>Không có bài tập mới để sao chép</div>
+          </div>
+        ) : (
+          <Table<Assignment>
+            dataSource={allAssignments.filter(
+              (a) =>
+                !libraryKeyword ||
+                a.title.toLowerCase().includes(libraryKeyword.toLowerCase()) ||
+                a.description?.toLowerCase().includes(libraryKeyword.toLowerCase())
+            )}
+            columns={[
+              {
+                title: "Tiêu đề",
+                dataIndex: "title",
+                key: "title",
+                render: (text: string, record: Assignment) => (
+                  <div>
+                    <div style={{ fontWeight: 500 }}>{text}</div>
+                    {record.description && (
+                      <div style={{ fontSize: 12, color: "#666" }}>
+                        {record.description}
+                      </div>
+                    )}
+                  </div>
+                ),
+              },
+              {
+                title: "Loại",
+                dataIndex: "type",
+                key: "type",
+                align: "center" as const,
+                render: (type: string) => (
+                  <Tag color={getTypeColor(type)}>{type.toUpperCase()}</Tag>
+                ),
+              },
+              {
+                title: "Điểm",
+                dataIndex: "maxScore",
+                key: "maxScore",
+                align: "center" as const,
+                render: (score: number) => <Tag color="green">{score}</Tag>,
+              },
+              {
+                title: "Hạn nộp",
+                dataIndex: "dueDate",
+                key: "dueDate",
+                width: 140,
+                render: (date: string) =>
+                  date ? dayjs(date).format("DD/MM/YYYY HH:mm") : <Tag>Không giới hạn</Tag>,
+              },
+            ]}
+            rowKey="id"
+            rowSelection={{
+              selectedRowKeys: selectedAssignmentIds,
+              onChange: (keys) => setSelectedAssignmentIds(keys as number[]),
+            }}
+            pagination={{ pageSize: 5 }}
+            size="small"
+          />
+        )}
       </Modal>
     </div>
   );

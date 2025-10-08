@@ -3,6 +3,67 @@ import * as materialService from "./materials.service";
 import { jsonSafe } from "../../utils/bigint";
 import { prisma } from "../../prisma/client";
 
+export async function copyMaterial(req: Request, res: Response) {
+    try {
+        const { materialId, teacherId, sectionId } = req.body;
+
+        if (!materialId || !teacherId) {
+            return res.status(400).json({
+                success: false,
+                message: "Thiếu thông tin materialId hoặc teacherId",
+            });
+        }
+
+        const originalMaterial = await materialService.getMaterialById(
+            Number(materialId)
+        );
+
+        if (!originalMaterial) {
+            return res.status(404).json({
+                success: false,
+                message: "Tài liệu không tồn tại",
+            });
+        }
+
+        if (originalMaterial.uploadedBy === Number(teacherId)) {
+            return res.status(400).json({
+                success: false,
+                message: "Không thể sao chép tài liệu của chính mình",
+            });
+        }
+
+        // Tạo bản sao tài liệu
+        const newMaterial = await materialService.copyMaterial(
+            Number(materialId),
+            Number(teacherId)
+        );
+
+        // Nếu có sectionId, tự động gán vào lớp luôn
+        if (sectionId) {
+            await prisma.courseMaterial.create({
+                data: {
+                    courseSectionId: Number(sectionId),
+                    materialId: newMaterial.id,
+                    assignedBy: Number(teacherId), // ← THÊM DÒNG NÀY
+                    isOpen: true,
+                },
+            });
+        }
+
+        res.json({
+            success: true,
+            data: jsonSafe(newMaterial),
+            message: "Sao chép tài liệu thành công",
+        });
+    } catch (error: any) {
+        console.error("Lỗi copy material:", error);
+        res.status(500).json({
+            success: false,
+            message: error.message || "Không thể sao chép tài liệu",
+        });
+    }
+}
+
 export async function getMaterials(req: Request, res: Response) {
   try {
     const materials = await materialService.getAllMaterials();
@@ -59,7 +120,7 @@ export async function uploadMaterial(req: Request, res: Response) {
                 .json({ success: false, message: "No file uploaded" });
         }
 
-        const { sectionId, title, description, uploadedBy } = req.body;
+        const { sectionId, title, description, uploadedBy, originalMaterialId } = req.body;
 
         const material = await prisma.material.create({
             data: {
@@ -67,9 +128,10 @@ export async function uploadMaterial(req: Request, res: Response) {
                 description,
                 fileName: req.file.originalname,
                 filePath: req.file.path,
-                fileSize: BigInt(req.file.size), // prisma field là BigInt
+                fileSize: BigInt(req.file.size),
                 fileType: req.file.mimetype,
                 uploadedBy: Number(uploadedBy),
+                originalMaterialId: originalMaterialId || undefined, // 👈 giữ nguyên string
             },
         });
 
@@ -81,9 +143,17 @@ export async function uploadMaterial(req: Request, res: Response) {
 
 export async function assignMaterialToClass(req: Request, res: Response) {
     try {
-        const { courseSectionId, materialId } = req.body;
+        const { courseSectionId, materialId, assignedBy } = req.body;
 
-        // ✅ Check trước khi tạo
+        // Validate
+        if (!assignedBy) {
+            return res.status(400).json({
+                success: false,
+                message: "Thiếu thông tin assignedBy (ID người gán)",
+            });
+        }
+
+        // Check trước khi tạo
         const existing = await prisma.courseMaterial.findUnique({
             where: {
                 courseSectionId_materialId: {
@@ -100,12 +170,11 @@ export async function assignMaterialToClass(req: Request, res: Response) {
             });
         }
 
-        const courseMaterial = await prisma.courseMaterial.create({
-            data: {
-                courseSectionId: Number(courseSectionId),
-                materialId: Number(materialId),
-            },
-        });
+        const courseMaterial = await materialService.assignMaterialToClass(
+            Number(courseSectionId),
+            Number(materialId),
+            Number(assignedBy) // ← THÊM THAM SỐ
+        );
 
         res.json({ success: true, data: courseMaterial });
     } catch (error: any) {

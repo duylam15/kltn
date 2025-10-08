@@ -12,6 +12,8 @@ export const createAssignmentSchema = z.object({
         passingScore: z.number().nullable().optional(),
         timeLimit: z.number().nullable().optional(),
         maxAttempts: z.number().default(1),
+        createdBy: z.coerce.number().int(),
+        originalAssignmentId: z.string().uuid().optional(), // 👈 đổi sang string
         shuffleQuestions: z.boolean().default(false),
         showAnswersAfterSubmit: z.boolean().default(false),
         allowLateSubmission: z.boolean().default(false),

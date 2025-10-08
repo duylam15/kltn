@@ -56,6 +56,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  console.log(user);
+
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [termFilter, setTermFilter] = useState<number | null>(null);
@@ -70,6 +72,7 @@ export default function Dashboard() {
       const res = await axios.get(
         `http://localhost:4000/api/v1/teachers/${user.teacher.id}/groups`
       );
+      console.log(res);
       if (res.data.success) {
         setData(res.data.data);
       }
@@ -152,7 +155,7 @@ export default function Dashboard() {
         }}
       >
         <Title level={3}>
-          <BookOutlined /> Lớp học phần của tôi
+          <BookOutlined /> Lớp học phần
         </Title>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -162,13 +165,13 @@ export default function Dashboard() {
             placeholder="Tìm theo mã lớp, tên lớp, môn học..."
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            style={{ width: 300 }}
+            style={{ width: 150 }}
           />
 
           <Select
             allowClear
             placeholder="Lọc theo trạng thái"
-            style={{ width: 160 }}
+            style={{ width: 150 }}
             value={statusFilter ?? undefined}
             onChange={(value) => setStatusFilter(value)}
           >
@@ -181,7 +184,7 @@ export default function Dashboard() {
           <Select
             allowClear
             placeholder="Lọc theo học kỳ"
-            style={{ width: 200 }}
+            style={{ width: 150 }}
             value={termFilter ?? undefined}
             onChange={(value) => setTermFilter(value)}
           >

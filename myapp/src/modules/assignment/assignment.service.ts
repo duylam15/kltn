@@ -1,5 +1,6 @@
 import { prisma } from "../../prisma/client";
 import { AssignmentType } from "@prisma/client";
+import { v4 as uuidv4 } from "uuid";
 
 export async function getAssignmentsBySection(sectionId: number) {
   return prisma.assignment.findMany({
@@ -18,10 +19,40 @@ export async function getAssignmentsBySection(sectionId: number) {
   });
 }
 
-
-export async function createAssignment(data: any) {
-    return prisma.assignment.create({ data });
+export async function createAssignment(data: {
+    title: string;
+    description?: string;
+    type: AssignmentType;
+    dueDate?: string | Date | null;
+    maxScore?: number;
+    passingScore?: number;
+    timeLimit?: number;
+    maxAttempts?: number;
+    shuffleQuestions?: boolean;
+    showAnswersAfterSubmit?: boolean;
+    allowLateSubmission?: boolean;
+    createdBy: number;
+    originalAssignmentId?: string | null;
+}) {
+    return prisma.assignment.create({
+        data: {
+            title: data.title,
+            description: data.description,
+            type: data.type,
+            dueDate: data.dueDate ? new Date(data.dueDate) : null,
+            maxScore: data.maxScore ?? 100,
+            passingScore: data.passingScore ?? null,
+            timeLimit: data.timeLimit ?? null,
+            maxAttempts: data.maxAttempts ?? 1,
+            shuffleQuestions: data.shuffleQuestions ?? false,
+            showAnswersAfterSubmit: data.showAnswersAfterSubmit ?? false,
+            allowLateSubmission: data.allowLateSubmission ?? false,
+            createdBy: data.createdBy,
+            originalAssignmentId: data.originalAssignmentId ?? uuidv4(), // 👈 luôn đảm bảo có string
+        },
+    });
 }
+
 
 export async function updateAssignment(id: number, data: any) {
     return prisma.assignment.update({

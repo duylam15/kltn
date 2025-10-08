@@ -6,6 +6,7 @@ const router = Router();
 
 // Upload file thật (tạo mới material, chưa gắn lớp)
 router.post("/upload", upload.single("file"), controller.uploadMaterial);
+router.post("/copy", controller.copyMaterial);
 
 // Gán tài liệu vào lớp
 router.post("/assign", controller.assignMaterialToClass);

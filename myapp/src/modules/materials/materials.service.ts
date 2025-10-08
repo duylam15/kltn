@@ -1,5 +1,31 @@
 import { prisma } from "../../prisma/client";
 
+export async function copyMaterial(materialId: number, newTeacherId: number) {
+    const originalMaterial = await prisma.material.findUnique({
+        where: { id: materialId },
+    });
+
+    if (!originalMaterial) {
+        throw new Error("Tài liệu không tồn tại");
+    }
+
+    return prisma.material.create({
+        data: {
+            title: originalMaterial.title,
+            description: originalMaterial.description,
+            fileName: originalMaterial.fileName,
+            filePath: originalMaterial.filePath,
+            fileSize: originalMaterial.fileSize,
+            fileType: originalMaterial.fileType,
+            uploadedBy: newTeacherId,
+            originalMaterialId: originalMaterial.originalMaterialId
+                ? originalMaterial.originalMaterialId
+                : originalMaterial.id.toString(), // nếu chưa có thì lấy id gốc
+        },
+    });
+
+}
+
 // Lấy tất cả tài liệu
 export async function getAllMaterials() {
   return prisma.material.findMany({
@@ -35,12 +61,13 @@ export async function deleteMaterial(id: number) {
 }
 
 // Gán tài liệu vào lớp
-export async function assignMaterialToClass(courseSectionId: number, materialId: number) {
+export async function assignMaterialToClass(courseSectionId: number, materialId: number, assignedBy: number) {
   return prisma.courseMaterial.create({
-    data: {
-      courseSectionId,
-      materialId,
-    },
+      data: {
+          courseSectionId,
+          materialId,
+          assignedBy, // ← THÊM THAM SỐ
+      },
   });
 }
 

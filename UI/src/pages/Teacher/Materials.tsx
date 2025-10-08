@@ -27,10 +27,13 @@ import {
 	EyeInvisibleOutlined,
 	CheckCircleOutlined,
 	FolderOpenOutlined,
+	CopyOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
+import { v4 as uuidv4 } from "uuid";
+import { useAuth } from "../../context/authContext";
 
 const { Title } = Typography;
 const API_BASE = "http://localhost:4000/api/v1";
@@ -43,13 +46,15 @@ type Material = {
 	filePath?: string;
 	fileType?: string;
 	fileSize?: number;
+	originalMaterialId?: number; // ← THÊM DÒNG NÀY
 	uploadedBy: number;
 	uploadedAt: string;
 	updatedAt?: string;
 };
 
 export default function Materials() {
-	const teacherId = 100; // TODO: lấy từ useAuth
+		const { user } = useAuth(); // ✅ thêm dòng này
+	const teacherId = user?.id; // ID của giáo viên hiện tại
 	const path = window.location.pathname;
 	const sectionId = Number(path.split("/")[3]);
 
@@ -68,6 +73,12 @@ export default function Materials() {
 	const [form] = Form.useForm<Material>();
 	const [addForm] = Form.useForm<Material>();
 
+	const [libraryModalOpen, setLibraryModalOpen] = useState(false);
+	const [allMaterials, setAllMaterials] = useState<Material[]>([]);
+	const [loadingLibrary, setLoadingLibrary] = useState(false);
+	const [selectedMaterialIds, setSelectedMaterialIds] = useState<number[]>([]);
+	const [libraryKeyword, setLibraryKeyword] = useState("");
+	// ← ĐẾN ĐÂY
 	useEffect(() => {
 		fetchData();
 	}, [sectionId]);
@@ -109,17 +120,15 @@ export default function Materials() {
 			const res = await axios.post(`${API_BASE}/materials/assign`, {
 				courseSectionId: sectionId,
 				materialId,
+				assignedBy: teacherId,  // ← THÊM DÒNG NÀY
 			});
 			if (res.data.success) {
 				toast.success("Đã gán tài liệu vào lớp");
 				setAssignedIds((prev) => ({ ...prev, [materialId]: true }));
-				// Khi mới gán, mặc định là true (hiển thị)
 				setVisibility((prev) => ({ ...prev, [materialId]: true }));
 			} else {
-				// Nếu tài liệu đã được gán vào lớp rồi
 				if (res.data.message === "Tài liệu này đã được gán vào lớp rồi") {
 					toast.success("Tài liệu đã được gán vào lớp");
-					// Refresh lại dữ liệu để lấy trạng thái isOpen thực tế
 					fetchData();
 				} else {
 					toast.error(res.data.message || "Không thể gán tài liệu");
@@ -128,11 +137,9 @@ export default function Materials() {
 		} catch (err: any) {
 			console.error("Lỗi assign:", err);
 
-			// Kiểm tra nếu là lỗi 400 với message đã gán
 			if (err.response?.status === 400 &&
 				err.response?.data?.message === "Tài liệu này đã được gán vào lớp rồi") {
 				toast.success("Tài liệu đã được gán vào lớp");
-				// Refresh lại dữ liệu để lấy trạng thái isOpen thực tế
 				fetchData();
 			} else {
 				toast.error("Lỗi server khi gán tài liệu");
@@ -207,7 +214,6 @@ export default function Materials() {
 			toast.error("Không thể cập nhật tài liệu");
 		}
 	};
-
 	const handleAdd = async () => {
 		try {
 			const values = await addForm.validateFields();
@@ -217,12 +223,20 @@ export default function Materials() {
 				return;
 			}
 
+			if (!teacherId) {
+				toast.error("Không thể xác định giáo viên");
+				return;
+			}
+
+			const uniqueCode = uuidv4(); // 👈 mã ngẫu nhiên
+console.log("🆔 Mã uniqueMaterialId:", uniqueCode);
 			const formData = new FormData();
 			formData.append("file", file);
 			formData.append("sectionId", sectionId.toString());
 			formData.append("title", values.title);
 			formData.append("description", values.description || "");
 			formData.append("uploadedBy", teacherId.toString());
+			formData.append("originalMaterialId", uniqueCode); // 👈 luôn duy nhất
 
 			await axios.post(`${API_BASE}/materials/upload`, formData, {
 				headers: { "Content-Type": "multipart/form-data" },
@@ -234,11 +248,132 @@ export default function Materials() {
 			addForm.resetFields();
 			fetchData();
 		} catch (err: any) {
-			if (err?.errorFields) return; // lỗi validate form
+			if (err?.errorFields) return;
 			console.error("Lỗi add:", err);
 			toast.error("Không thể thêm tài liệu");
 		}
 	};
+
+	const fetchAllMaterials = async () => {
+		try {
+			setLoadingLibrary(true);
+
+			const [allRes, myRes] = await Promise.all([
+				axios.get(`${API_BASE}/materials`),
+				axios.get(`${API_BASE}/materials/teacher/${teacherId}`)
+			]);
+
+			if (allRes.data.success && myRes.data.success) {
+				const allMats = allRes.data.data;
+				const myMats = myRes.data.data;
+
+				// ✅ Lấy Set chứa originalMaterialId của các tài liệu tôi đã copy
+				const myOriginalMaterialIds = new Set(
+					myMats
+						.filter((m: Material) => m.originalMaterialId)
+						.map((m: Material) => m.originalMaterialId)
+				);
+
+				console.log("📚 Tất cả tài liệu:", allMats.length);
+				console.log("📖 Tài liệu của tôi:", myMats.length);
+				console.log("🔗 OriginalMaterialIds đã copy:", Array.from(myOriginalMaterialIds));
+
+				// ✅ Bước 1: Lọc bỏ tài liệu của chính mình (không phải copy)
+				const otherMaterials = allMats.filter((m: Material) => {
+					// Giữ lại nếu: không phải tự tạo gốc HOẶC là bản copy
+					return !(m.uploadedBy === teacherId && !m.originalMaterialId);
+				});
+
+				// ✅ Bước 2: Nhóm theo rootId, chỉ lấy 1 đại diện
+				const materialsByRootId = new Map<number, Material>();
+
+				otherMaterials.forEach((m: Material) => {
+					const rootId = m.originalMaterialId || m.id;
+
+					// Nếu chưa có rootId này, hoặc tài liệu hiện tại là bản gốc (ưu tiên bản gốc)
+					if (!materialsByRootId.has(rootId) || !m.originalMaterialId) {
+						materialsByRootId.set(rootId, m);
+					}
+				});
+
+				// ✅ Bước 3: Lọc bỏ những rootId đã copy
+				const availableMaterials = Array.from(materialsByRootId.entries())
+					.filter(([rootId, material]) => {
+						const alreadyCopied = myOriginalMaterialIds.has(rootId);
+
+						if (alreadyCopied) {
+							console.log(`❌ Ẩn tài liệu (đã copy): ${material.title} (rootId: ${rootId})`);
+							return false;
+						}
+
+						console.log(`✅ Hiển thị tài liệu: ${material.title} (rootId: ${rootId})`);
+						return true;
+					})
+					.map(([_, material]) => material);
+
+				console.log("✅ Tài liệu có thể copy:", availableMaterials.length);
+
+				setAllMaterials(availableMaterials);
+			}
+		} catch (err) {
+			console.error("Lỗi fetch materials:", err);
+			toast.error("Không tải được danh sách tài liệu");
+		} finally {
+			setLoadingLibrary(false);
+		}
+	};
+
+	const handleCopyMaterials = async () => {
+		if (selectedMaterialIds.length === 0) {
+			toast.error("Vui lòng chọn ít nhất 1 tài liệu");
+			return;
+		}
+
+		try {
+			// Lấy thông tin chi tiết của các tài liệu được chọn
+			const selectedMaterials = allMaterials.filter(m =>
+				selectedMaterialIds.includes(m.id)
+			);
+
+			// Tạo material mới cho từng tài liệu được chọn
+			const createPromises = selectedMaterials.map(async (material) => {
+				// Tạo material mới
+				const createRes = await axios.post(`${API_BASE}/materials`, {
+					title: material.title,
+					description: material.description,
+					fileName: material.fileName,
+					filePath: material.filePath,
+					fileSize: material.fileSize,
+					fileType: material.fileType,
+					uploadedBy: teacherId,
+					originalMaterialId: material.originalMaterialId || material.id, // ← THÊM DÒNG NÀY
+				});
+
+				// Nếu tạo thành công, gán vào lớp luôn
+				if (createRes.data.success) {
+					await axios.post(`${API_BASE}/materials/assign`, {
+						courseSectionId: sectionId,
+						materialId: createRes.data.data.id,
+						assignedBy: teacherId,
+					});
+				}
+
+				return createRes;
+			});
+
+			await Promise.all(createPromises);
+
+			toast.success(`Đã sao chép ${selectedMaterialIds.length} tài liệu`);
+			setLibraryModalOpen(false);
+			setSelectedMaterialIds([]);
+			setLibraryKeyword("");
+			fetchData();
+		} catch (err: any) {
+			console.error("Lỗi copy:", err);
+			toast.error(err.response?.data?.message || "Không thể sao chép tài liệu");
+		}
+	};
+
 
 	const getFileTypeTag = (fileType: string) => {
 		const type = fileType?.toLowerCase();
@@ -449,44 +584,6 @@ export default function Materials() {
 							background: "#fff",
 						}}
 					>
-						<CloudUploadOutlined style={{ fontSize: 14, color: "#52c41a" }} />
-						<span>Đã gán vào lớp:</span>
-						<strong style={{ color: "#52c41a" }}>{stats.assignedMaterials}</strong>
-					</div>
-
-					{stats.unassignedMaterials > 0 && (
-						<div
-							style={{
-								display: "flex",
-								alignItems: "center",
-								gap: 6,
-								fontSize: 12,
-								color: "#000",
-								border: "1px solid #ddd",
-								borderRadius: 6,
-								padding: "6px 10px",
-								background: "#fff",
-							}}
-						>
-							<FileOutlined style={{ fontSize: 14, color: "#faad14" }} />
-							<span>Chưa gán:</span>
-							<strong style={{ color: "#faad14" }}>{stats.unassignedMaterials}</strong>
-						</div>
-					)}
-
-					<div
-						style={{
-							display: "flex",
-							alignItems: "center",
-							gap: 6,
-							fontSize: 12,
-							color: "#000",
-							border: "1px solid #ddd",
-							borderRadius: 6,
-							padding: "6px 10px",
-							background: "#fff",
-						}}
-					>
 						<CheckCircleOutlined style={{ fontSize: 14, color: "#722ed1" }} />
 						<span>Hiển thị:</span>
 						<strong style={{ color: "#722ed1" }}>{stats.visibleMaterials}</strong>
@@ -523,6 +620,15 @@ export default function Materials() {
 					/>
 					<Button icon={<ReloadOutlined />} onClick={fetchData}>
 						Refresh
+					</Button>
+					<Button
+						icon={<CopyOutlined />}
+						onClick={() => {
+							setLibraryModalOpen(true);
+							fetchAllMaterials();
+						}}
+					>
+						Lấy từ thư viện
 					</Button>
 					<Button
 						type="primary"
@@ -648,6 +754,91 @@ export default function Materials() {
 						)}
 					</Form.Item>
 				</Form>
+			</Modal>
+
+			<Modal
+				title="Lấy tài liệu từ thư viện"
+				open={libraryModalOpen}
+				onCancel={() => {
+					setLibraryModalOpen(false);
+					setSelectedMaterialIds([]);
+					setLibraryKeyword("");
+				}}
+				onOk={handleCopyMaterials}
+				okText={`Sao chép (${selectedMaterialIds.length})`}
+				cancelText="Hủy"
+				width={900}
+				centered
+			>
+				<div style={{ marginBottom: 16 }}>
+					<Input
+						allowClear
+						prefix={<SearchOutlined />}
+						placeholder="Tìm tài liệu..."
+						value={libraryKeyword}
+						onChange={(e) => setLibraryKeyword(e.target.value)}
+					/>
+				</div>
+
+				{loadingLibrary ? (
+					<div style={{ textAlign: "center", padding: 40 }}>
+						<Spin tip="Đang tải..." />
+					</div>
+				) : (
+					<Table<Material>
+						dataSource={allMaterials.filter(
+							(m) =>
+								!libraryKeyword ||
+								m.title.toLowerCase().includes(libraryKeyword.toLowerCase()) ||
+								m.description?.toLowerCase().includes(libraryKeyword.toLowerCase())
+						)}
+						columns={[
+							{
+								title: "Tiêu đề",
+								dataIndex: "title",
+								key: "title",
+								render: (text: string, record: Material) => (
+									<div>
+										<div style={{ fontWeight: 500 }}>{text}</div>
+										{record.description && (
+											<div style={{ fontSize: 12, color: "#666" }}>
+												{record.description}
+											</div>
+										)}
+									</div>
+								),
+							},
+							{
+								title: "File",
+								key: "file",
+								render: (_: any, record: Material) => (
+									<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+										{getFileTypeTag(record.fileType || "")}
+										{record.fileSize && (
+											<Tag color="default">
+												{formatFileSize(record.fileSize)}
+											</Tag>
+										)}
+									</div>
+								),
+							},
+							{
+								title: "Ngày tải",
+								dataIndex: "uploadedAt",
+								key: "uploadedAt",
+								width: 140,
+								render: (date: string) => dayjs(date).format("DD/MM/YYYY"),
+							},
+						]}
+						rowKey="id"
+						rowSelection={{
+							selectedRowKeys: selectedMaterialIds,
+							onChange: (keys) => setSelectedMaterialIds(keys as number[]),
+						}}
+						pagination={{ pageSize: 5 }}
+						size="small"
+					/>
+				)}
 			</Modal>
 		</div>
 	);

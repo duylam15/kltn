@@ -30,6 +30,8 @@ import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import { FileQuestion } from "lucide-react";
+import { useAuth } from "../../context/authContext";
+import { v4 as uuidv4 } from "uuid";
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -46,6 +48,8 @@ type Assignment = {
 	passingScore?: number;
 	timeLimit?: number;
 	maxAttempts?: number;
+	createdBy?: number;              // ← THÊM
+	originalAssignmentId?: number;   // ← THÊM
 	shuffleQuestions?: boolean;
 	showAnswersAfterSubmit?: boolean;
 	allowLateSubmission?: boolean;
@@ -90,6 +94,9 @@ export default function Assignments() {
 	const [loadingQuestions, setLoadingQuestions] = useState(false);
 	const [questionKeyword, setQuestionKeyword] = useState("");
 
+	const { user } = useAuth(); // ✅ thêm dòng này
+	  const teacherId = user?.id; // ID của giáo viên hiện tại
+
 	useEffect(() => {
 		fetchAssignments();
 		fetchSections();
@@ -105,6 +112,7 @@ export default function Assignments() {
 			if (res.data.success) {
 				setAssignments(res.data.data || []);
 			}
+			console.log(assignments);
 		} catch {
 			toast.error("Không tải được danh sách bài tập");
 		} finally {
@@ -151,6 +159,7 @@ export default function Assignments() {
 	const handleSubmit = async () => {
 		try {
 			const values = await form.validateFields();
+			const uniqueCode = uuidv4(); // 👈 mã ngẫu nhiên
 
 			const payload = {
 				// nếu sectionId optional thì chỉ thêm nếu có nhập
@@ -167,6 +176,8 @@ export default function Assignments() {
 				shuffleQuestions: values.shuffleQuestions || false,
 				showAnswersAfterSubmit: values.showAnswersAfterSubmit || false,
 				allowLateSubmission: values.allowLateSubmission || false,
+				createdBy: teacherId, // hoặc lấy từ context, token decode
+				originalAssignmentId: uniqueCode
 			};
 
 			let assignmentId: number;
@@ -528,10 +539,10 @@ export default function Assignments() {
 				okText={editing ? "Lưu" : "Tạo mới"}
 				cancelText="Hủy"
 				width={1200}
-				centered  
+				centered
 				bodyStyle={{
 					maxHeight: "70vh", overflowY: "auto", overflowX: "hidden",
-					 }}   
+				}}
 			>
 
 				<Row gutter={24}>
@@ -563,8 +574,12 @@ export default function Assignments() {
 								name="type"
 								className="mb-3"
 							>
-								<Select placeholder="Chọn loại bài tập" className="w-full" />
-							</Form.Item>
+								<Select placeholder="Chọn loại bài tập">
+									<Option value="exercise">Exercise</Option>
+									<Option value="quiz">Quiz</Option>
+									<Option value="project">Project</Option>
+									<Option value="exam">Exam</Option>
+								</Select>							</Form.Item>
 
 							<Form.Item label="Hạn nộp" name="dueDate" className="mb-3">
 								<DatePicker

@@ -311,7 +311,6 @@ export default function CoursesAdmin() {
               marginBottom: 16,
               padding: "8px 16px",
               borderRadius: 8,
-              border: "1px solid #f0f0f0",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
@@ -345,13 +344,19 @@ export default function CoursesAdmin() {
                       marginBottom: 6,
                     }}
                   >
-                        <Text strong>Giảng viên:</Text>{" "}
-                        {section.instructors && section.instructors.length > 0
-                          ? section.instructors
-                            .map((inst) => inst.teacher?.user?.fullName || "Chưa có")
-                            .join(", ")
-                          : "Chưa có"}
+                    <Text strong style={{ marginRight: 8 }}>Giảng viên:</Text>
+                    <Text
+                      style={{ flex: 1 }}
+                      ellipsis={{ tooltip: true }} // 👈 sẽ hiện ... và hover ra tooltip
+                    >
+                      {section.instructors && section.instructors.length > 0
+                        ? section.instructors
+                          .map((inst) => inst.teacher?.user?.fullName || "Chưa có")
+                          .join(", ")
+                        : "Chưa có"}
+                    </Text>
                   </div>
+
                   <div
                     style={{
                       display: "flex",

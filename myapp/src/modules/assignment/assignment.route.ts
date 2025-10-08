@@ -34,6 +34,7 @@ router.get(
     controller.submissions
 );
 
+router.get("/teacher/:teacherId", controller.getAssignmentsByTeacher); // ← THÊM ROUTE NÀY
 router.get("/sections/:sectionId/assignments", controller.bySection);
 
 // Student

@@ -144,6 +144,11 @@ export default function StudentList() {
 		}
 	};
 
+	const refresh = () => {
+		setKeyword("");
+		fetchData();
+	}
+
 	const handleAdd = async () => {
 		try {
 			const values = await addForm.validateFields();
@@ -387,20 +392,6 @@ export default function StudentList() {
 				),
 		},
 		{
-			title: "Lớp",
-			dataIndex: ["student", "className"],
-			key: "className",
-			width: 100,
-			ellipsis: true,
-			sorter: (a: Enrollment, b: Enrollment) =>
-				(a.student.className || "").localeCompare(b.student.className || ""),
-			render: (text: string) => (
-				<Tooltip title={text}>
-					<Tag color="green">{text}</Tag>
-				</Tooltip>
-			),
-		},
-		{
 			title: "Nhóm",
 			key: "group",
 			align: "center" as const,
@@ -609,7 +600,7 @@ export default function StudentList() {
 						onChange={(e) => setKeyword(e.target.value)}
 						style={{ width: 200 }}
 					/>
-					<Button icon={<ReloadOutlined />} onClick={fetchData}>
+					<Button icon={<ReloadOutlined />} onClick={refresh}>
 						Refresh
 					</Button>
 					<Button
@@ -711,13 +702,6 @@ export default function StudentList() {
 					</Form.Item>
 					<Form.Item name="phoneNumber" label="Số điện thoại">
 						<Input placeholder="VD: 0123456789" />
-					</Form.Item>
-					<Form.Item
-						name="className"
-						label="Lớp"
-						rules={[{ required: true, message: "Vui lòng nhập lớp" }]}
-					>
-						<Input placeholder="VD: CNTT2021A" />
 					</Form.Item>
 					{editing && (
 						<div
