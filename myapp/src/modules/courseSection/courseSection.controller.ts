@@ -78,63 +78,51 @@ export const remove = catchAsync(
 );
 
 
-declare global {
-  namespace Express {
-    interface Request { user?: { id: number; [k: string]: any } }
-  }
-}
 
-// helper: get student by user id
-async function getStudentByUserIdOrThrow(userId: number) {
-  const st = await prisma.student.findUnique({ where: { userId } });
-  if (!st) throw new ApiError(404, "Student profile not found");
-  return st;
-}
+// Join by code
+export const joinByCodePublic = catchAsync(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const code = String(req.body.code || "").trim();
+    const userId = Number(req.body.userId);
 
+    if (!code) return next(new ApiError(400, "Class code is required"));
+    if (!userId || Number.isNaN(userId)) return next(new ApiError(400, "Invalid userId"));
 
-export const joinByCode = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const code = String(req.body.code || "").trim();
-  if (!code) return next(new ApiError(400, "Class code is required"));
+    // 1) tìm lớp theo sectionCode
+    const section = await prisma.courseSection.findFirst({
+      where: { sectionCode: code },
+      include: { subject: true, term: true },
+    });
+    if (!section) return next(new ApiError(404, "Invalid class code"));
 
-  // tìm lớp theo code
-  const section = await prisma.courseSection.findFirst({
-    where: { sectionCode: code },
-  });
-  if (!section) return next(new ApiError(404, "Invalid class code"));
+    // 2) từ userId -> student
+    const student = await prisma.student.findUnique({ where: { userId } });
+    if (!student) return next(new ApiError(404, "Student not found for this user"));
 
-  // xác định student hiện tại (từ user đăng nhập)
-  const userId = req.user?.id;
-  if (!userId) return next(new ApiError(401, "Unauthorized"));
-  const student = await getStudentByUserIdOrThrow(userId);
+    // 3) kiểm tra đã ghi danh chưa
+    const exist = await prisma.sectionEnrollment.findFirst({
+      where: { sectionId: section.id, studentId: student.id },
+    });
+    if (exist) {
+      return sendResponse(res, {
+        success: true,
+        message: "You are already enrolled in this class",
+        data: { sectionId: section.id, enrollmentId: exist.id, section },
+      });
+    }
 
-  // kiểm tra đã ghi danh chưa
-  const exist = await prisma.sectionEnrollment.findFirst({
-    where: { sectionId: section.id, studentId: student.id },
-  });
-  if (exist) {
+    // 4) tạo enrollment
+    const enrollment = await prisma.sectionEnrollment.create({
+      data: {
+        sectionId: section.id,
+        studentId: student.id,
+      },
+    });
+
     return sendResponse(res, {
       success: true,
-      message: "You are already enrolled in this class",
-      data: { sectionId: section.id, enrollmentId: exist.id },
+      message: "Joined class successfully",
+      data: { sectionId: section.id, enrollmentId: enrollment.id, section },
     });
   }
-
-  // tạo enrollment
-  const enrollment = await prisma.sectionEnrollment.create({
-    data: {
-      sectionId: section.id,
-      studentId: student.id,
-      // status: "active" // nếu bạn có field
-    },
-  });
-
-  sendResponse(res, {
-    success: true,
-    message: "Joined class successfully",
-    data: { sectionId: section.id, enrollmentId: enrollment.id },
-  });
-});
-
-
-
-
+);
