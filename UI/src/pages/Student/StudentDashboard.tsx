@@ -1,3 +1,4 @@
+// src/pages/Student/StudentDashboard.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import {
@@ -11,20 +12,29 @@ import {
   Modal,
   Select,
   message,
+  Button,
+  Input,
+  Space,
 } from "antd";
 import type { MenuProps } from "antd";
-import { EllipsisOutlined, FolderOpenOutlined, PictureOutlined } from "@ant-design/icons";
-import { useAuth } from "../../context/authContext";
+import {
+  EllipsisOutlined,
+  FolderOpenOutlined,
+  PictureOutlined,
+  PlusOutlined,
+} from "@ant-design/icons";
+import { useAuth } from "../../hooks/useAuth";
 
 const { Text, Title } = Typography;
+const { Search } = Input;
 
 const API_BASE = "http://localhost:4000/api/v1";
 const ORDER_KEY = "studentCourseOrder";
 const GRID_GUTTER = 24;
+// 3 thẻ / hàng trên màn hình >= lg
 const COL_SPAN = { xs: 24, sm: 12, md: 8, lg: 8, xl: 8 };
 
-
-/* ===== Types (align with your BE) ===== */
+/* ===== Types ===== */
 type User = { id: number; fullName: string; email: string; avatar?: string };
 type Teacher = { id: number; user: User };
 type SectionInstructor = {
@@ -39,19 +49,17 @@ type Term = { name?: string };
 type CourseSection = { id: number; name?: string; subject?: Subject; term?: Term };
 
 type Enrollment = {
-  id: number;               // enrollmentId (để hủy)
-  sectionId?: number;       // tuỳ API
-  courseSectionId?: number; // tuỳ API
-  section?: CourseSection;  // 1 số route trả "section"
-  courseSection?: CourseSection; // 1 số route trả "courseSection"
+  id: number; // enrollmentId
+  sectionId?: number;
+  courseSectionId?: number;
+  section?: CourseSection;
+  courseSection?: CourseSection;
 };
 
-/* Helpers */
 const getSectionFrom = (en: Enrollment): CourseSection =>
   en.section ||
   en.courseSection ||
   ({ id: Number(en.sectionId ?? en.courseSectionId) } as CourseSection);
-
 
 export default function StudentDashboard() {
   const { user } = useAuth();
@@ -62,7 +70,11 @@ export default function StudentDashboard() {
   const [teachers, setTeachers] = useState<Record<number, SectionInstructor | null>>({});
   const [moveModal, setMoveModal] = useState<{ open: boolean; secId?: number }>({ open: false });
 
-  // order từ localStorage
+  // Modal tham gia lớp
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+
+  // Thứ tự thẻ (lưu localStorage)
   const initialOrder = useMemo<number[]>(() => {
     try {
       const raw = localStorage.getItem(ORDER_KEY);
@@ -73,37 +85,40 @@ export default function StudentDashboard() {
   }, []);
   const [order, setOrder] = useState<number[]>(initialOrder);
 
-  /* 1) Lấy danh sách lớp theo userId */
-  useEffect(() => {
-    if (!userId) return; // chưa đăng nhập
-    (async () => {
-      try {
-        setLoading(true);
-        const res = await axios.get<{ success: boolean; data: Enrollment[] }>(
-          `${API_BASE}/sections-enrollments/by-user/${userId}`,
-          
-        );
-        const data = res.data?.data ?? [];
-        setEnrollments(data);
+  /** 1) Tải danh sách lớp của SV theo userId */
+  async function fetchCourses() {
+    if (!userId) return;
+    setLoading(true);
+    try {
+      const res = await axios.get<{ success: boolean; data: Enrollment[] }>(
+        `${API_BASE}/sections-enrollments/by-user/${userId}`
+        // { withCredentials: true } // bật nếu endpoint cần cookie
+      );
+      const data = res.data?.data ?? [];
+      setEnrollments(data);
 
-        // init order nếu chưa có
-        if (!initialOrder.length && data.length) {
-          const ids = data
-            .map((e) => getSectionFrom(e).id)
-            .filter((id) => Number.isFinite(id));
-          setOrder(ids);
-          localStorage.setItem(ORDER_KEY, JSON.stringify(ids));
-        }
-      } catch (e) {
-        console.error(e);
-        message.error("Không tải được danh sách lớp.");
-      } finally {
-        setLoading(false);
+      // init order nếu chưa có
+      if (!initialOrder.length && data.length) {
+        const ids = data
+          .map((e) => getSectionFrom(e).id)
+          .filter((id) => Number.isFinite(id));
+        setOrder(ids);
+        localStorage.setItem(ORDER_KEY, JSON.stringify(ids));
       }
-    })();
-  }, [userId, initialOrder.length]);
+    } catch (e) {
+      console.error(e);
+      message.error("Không tải được danh sách lớp.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  /* 2) Lấy giáo viên owner cho từng section */
+  useEffect(() => {
+    fetchCourses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  /** 2) Tải giáo viên owner cho từng section */
   useEffect(() => {
     if (!enrollments.length) return;
     (async () => {
@@ -126,13 +141,11 @@ export default function StudentDashboard() {
         const map: Record<number, SectionInstructor | null> = {};
         pairs.forEach(([sid, ins]) => Number.isFinite(sid) && (map[sid] = ins));
         setTeachers(map);
-      } catch {
-        /* ignore */
-      }
+      } catch {/* ignore */}
     })();
   }, [enrollments]);
 
-  /* 3) Sắp xếp theo order */
+  /** 3) Sắp xếp theo thứ tự đã lưu */
   const ordered = useMemo(() => {
     if (!order.length) return enrollments;
     const byId: Record<number, Enrollment> = {};
@@ -140,7 +153,7 @@ export default function StudentDashboard() {
 
     const arranged: Enrollment[] = [];
     order.forEach((sid) => byId[sid] && arranged.push(byId[sid]));
-    // thêm lớp mới chưa có trong order
+    // cộng thêm lớp mới chưa có trong order
     enrollments.forEach((e) => {
       const sid = getSectionFrom(e).id;
       if (!order.includes(sid)) arranged.push(e);
@@ -148,7 +161,7 @@ export default function StudentDashboard() {
     return arranged;
   }, [order, enrollments]);
 
-  /* Di chuyển vị trí thẻ */
+  /** Đổi vị trí thẻ */
   const onMove = (secId: number, newPos: number) => {
     const base = order.length ? order : ordered.map((e) => getSectionFrom(e).id);
     const current = [...base];
@@ -161,7 +174,7 @@ export default function StudentDashboard() {
     setMoveModal({ open: false, secId: undefined });
   };
 
-  /* Hủy đăng ký theo enrollmentId (khuyên dùng) */
+  /** Hủy đăng ký theo enrollmentId */
   const onUnenroll = (enrollmentId: number) => {
     Modal.confirm({
       title: "Hủy đăng ký lớp này?",
@@ -171,7 +184,7 @@ export default function StudentDashboard() {
       async onOk() {
         try {
           await axios.delete(`${API_BASE}/sections-enrollments/${enrollmentId}`, {
-            withCredentials: true,
+            
           });
           message.success("Đã hủy đăng ký.");
           setEnrollments((prev) => prev.filter((e) => e.id !== enrollmentId));
@@ -188,7 +201,7 @@ export default function StudentDashboard() {
     });
   };
 
-  /* Menu 3 chấm */
+  /** Menu 3 chấm */
   const cardMenu = (en: Enrollment): MenuProps["items"] => {
     const section = getSectionFrom(en);
     return [
@@ -198,13 +211,12 @@ export default function StudentDashboard() {
     ];
   };
 
-  /* Header card */
+  /** Header card (tiêu đề + avatar GV) */
   const CardHeader = ({ en }: { en: Enrollment }) => {
     const section = getSectionFrom(en);
     const ins = teachers[section.id];
     const teacherName = ins?.teacher?.user?.fullName || "—";
     const teacherAvatar = ins?.teacher?.user?.avatar;
-    
 
     return (
       <div style={{ position: "relative", color: "#fff" }}>
@@ -218,7 +230,7 @@ export default function StudentDashboard() {
           }}
         >
           <Title level={4} style={{ color: "#fff", margin: 0 }}>
-            {section.subject?.subjectName || ""}
+            {section.name || section.subject?.subjectName || section.subject?.code || `Lớp #${section.id}`}
           </Title>
           <Text style={{ color: "rgba(255,255,255,0.9)" }}>
             {section.term?.name || ""}
@@ -237,55 +249,101 @@ export default function StudentDashboard() {
     );
   };
 
-  if (!userId) {
-    return (
-      <div style={{ padding: 16 }}>
-        <Text type="secondary">Vui lòng đăng nhập để xem danh sách lớp.</Text>
-      </div>
+  /** Tham gia lớp bằng mã */
+ async function handleJoinByCode(code: string, uId?: number) {
+  const trimmed = (code || "").trim();
+  if (!trimmed) return message.warning("Nhập mã lớp");
+  if (!uId)    return message.error("Thiếu userId. Vui lòng đăng nhập lại.");
+
+  try {
+    const res = await axios.post(
+      `${API_BASE}/course-sections/join-public`,
+      { code: trimmed, userId: uId },
+      { withCredentials: false }
     );
+    if (res.data?.success) {
+      message.success("Tham gia lớp thành công");
+      setJoinOpen(false);
+      setJoinCode("");
+      await fetchCourses();  // cập nhật lưới thẻ lớp
+    } else {
+      message.error(res.data?.message || "Không thể tham gia lớp");
+    }
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || "Mã lớp không hợp lệ");
   }
+}
 
   return (
-    <div>
+    <Spin spinning={loading}>
       <div style={{ padding: 16 }}>
+        {/* Header + nút tham gia */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <Title level={4} style={{ margin: 0 }}>Lớp học của tôi</Title>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setJoinOpen(true)}>
+            Tham gia lớp
+          </Button>
+        </div>
+
         <Row gutter={[GRID_GUTTER, GRID_GUTTER]}>
           {ordered.map((en) => {
-            const section = getSectionFrom(en);
-            return (
-              <Col key={section.id} {...COL_SPAN}>
-                <Card
-                  hoverable
-                  style={{ borderRadius: 12, overflow: "hidden" }}
-                  bodyStyle={{ padding: 0 }}
-                  actions={[
-                   
-                    <Dropdown
-    key="more"
-    trigger={["click"]}
-    menu={{ items: cardMenu(en) }}
-    placement="bottomLeft"
-  >
-    <div
-      onClick={(e) => e.stopPropagation()} // ⛔ Ngăn click lan ra Card
-      style={{
-        width: "100%",
-        display: "flex",
-        justifyContent: "flex-end", // cho icon nằm bên trái
-        padding: "8px 0",
-      }}
-    >
-      <EllipsisOutlined style={{ fontSize: 20, marginRight:20}} />
-    </div>
-  </Dropdown>,
-                  ]}
-                  onClick={() => (window.location.href = `/student/courses/${section.id}`)}
-                >
-                  <CardHeader en={en} />
-                  <div style={{ height: 140, background: "#fff" }} />
-                </Card>
-              </Col>
-            );
-          })}
+  const section = getSectionFrom(en);
+
+  return (
+    <Col key={section.id} {...COL_SPAN}>
+      {/* khung bao ngoài để đặt nút 3 chấm chồng lên Card */}
+      <div style={{ position: "relative" }}>
+        {/* Nút 3 chấm nổi, nằm ngoài Card và chồng lên */}
+        <Dropdown
+          trigger={["click"]}
+          placement="bottomLeft"
+          menu={{
+            items: cardMenu(en),
+            onClick: async ({ key, domEvent }) => {
+              domEvent.stopPropagation(); // không đè onClick Card
+              if (key.startsWith("move-")) {
+                setMoveModal({ open: true, secId: getSectionFrom(en).id });
+              }
+              if (key.startsWith("unenroll-")) {
+                onUnenroll(en.id);
+              }
+            },
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}     // tránh kích hoạt onClick của Card
+            style={{
+              position: "absolute",
+              top: 8,
+              right: 8,
+              zIndex: 5,                              // 🔸 cao hơn Card
+              padding: 5,
+              height: 26,
+              borderRadius: 999,
+              background: "rgba(255,255,255,0.9)",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+              cursor: "pointer",
+            }}
+          >
+            <EllipsisOutlined style={{ fontSize: 18 }} />
+          </div>
+        </Dropdown>
+
+        {/* Card */}
+        <Card
+          hoverable
+          style={{ borderRadius: 12, overflow: "hidden" }} 
+            styles={{ body: { padding: 0 } }}
+          onClick={() => (window.location.href = `/student/courses/${section.id}`)}
+        >
+          <CardHeader en={en} />
+          <div style={{ height: 140, background: "#fff" }} />
+        </Card>
+      </div>
+    </Col>
+  );
+})}
+
         </Row>
       </div>
 
@@ -311,6 +369,40 @@ export default function StudentDashboard() {
           * Thứ tự này được lưu trên trình duyệt của bạn (local).
         </div>
       </Modal>
-    </div>
+
+      {/* Modal tham gia lớp */}
+      <Modal
+        open={joinOpen}
+        title="Tham gia lớp học"
+        okText="Tham gia"
+        onCancel={() => setJoinOpen(false)}
+        onOk={() => handleJoinByCode(joinCode, userId)}
+        okButtonProps={{ disabled: !joinCode.trim() }}
+      >
+        <Space direction="vertical" style={{ width: "100%" }}>
+          <Text type="secondary">Bạn đang đăng nhập bằng:</Text>
+          <Space>
+            <Avatar>{(user?.fullName || "U")[0]}</Avatar>
+            <div>
+              <div style={{ fontWeight: 600 }}>{user?.fullName || "User"}</div>
+              <Text type="secondary">{user?.email}</Text>
+            </div>
+          </Space>
+
+          <div style={{ marginTop: 12 }}>
+            <Text strong>Mã lớp</Text>
+            <Search
+              style={{ marginTop: 6 }}
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value)}
+              placeholder="Nhập mã lớp do GV cung cấp"
+              enterButton="Tham gia"
+              onSearch={(val) => handleJoinByCode(val, userId)}
+              allowClear
+            />
+          </div>
+        </Space>
+      </Modal>
+    </Spin>
   );
 }
