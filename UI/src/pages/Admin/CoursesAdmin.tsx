@@ -325,12 +325,11 @@ export default function CoursesAdmin() {
             {subject.sections.map((section: Section) => (
               <Col xs={24} sm={12} md={8} lg={6} key={section.id}>
                 <Card
-                  hoverable
                   style={{
                     borderRadius: 12,
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
                     transition: "all 0.3s",
                   }}
+                  className={`bg-white rounded-xl shadow border transition hover:shadow-xl border-blue-200`}
                   bodyStyle={{ padding: 16 }}
                   onClick={() => navigate(`/admin/courses/${section.id}`)}
                 >

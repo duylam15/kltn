@@ -20,4 +20,14 @@ router.get("/sessions/:id", attendanceController.getSession);
 // Xóa session
 router.delete("/sessions/:id", attendanceController.deleteSession);
 
+// 🔥 GV chỉnh điểm danh
+router.put(
+    "/attendances/:attendanceId/adjust",
+    attendanceController.adjustAttendance
+);
+// 🔥 Lấy danh sách cảnh báo gian lận
+router.get(
+    "/sessions/:sessionId/warnings",
+    attendanceController.getWarningAttendances
+);
 export default router;

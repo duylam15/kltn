@@ -28,6 +28,46 @@ export async function bySection(req: Request, res: Response) {
   res.json({ success: true, data });
 }
 
+export async function getAssignmentsBySectionForStudent(
+    req: Request,
+    res: Response
+) {
+    try {
+        const { sectionId, studentId } = req.params;
+        const { type, status } = req.query;
+
+        if (!sectionId || !studentId) {
+            return res.status(400).json({
+                success: false,
+                message: "sectionId và studentId là bắt buộc",
+            });
+        }
+
+        const filters = {
+            type: type as any,
+            status: (status as any) || "all",
+        };
+
+        const assignments = await service.getAssignmentsBySectionForStudent(
+            Number(sectionId),
+            Number(studentId),
+            filters
+        );
+
+        res.json({
+            success: true,
+            data: jsonSafe(assignments),
+            total: assignments.length,
+        });
+    } catch (error: any) {
+        console.error("Error getting assignments for student:", error);
+        res.status(500).json({
+            success: false,
+            message: error.message || "Lỗi khi lấy danh sách bài tập",
+        });
+    }
+}
+
 
 export async function create(req: Request, res: Response) {
     const { body } = (req as any).validated;
@@ -65,40 +105,87 @@ export async function submissions(req: Request, res: Response) {
     res.json({ success: true, data: subs });
 }
 
-// Lấy danh sách bài tập của 1 student
-export async function myAssignments(req: Request, res: Response) {
-  const { studentId } = req.query; // GET /me/my-assignments?studentId=123
-  if (!studentId) {
-    return res.status(400).json({ success: false, message: "studentId required" });
-  }
-  const data = await service.getMyAssignments(Number(studentId));
-  res.json({ success: true, data });
-}
-
 // Start assignment
 export async function start(req: Request, res: Response) {
-  const { studentId } = req.body; // POST /assignments/:id/start { studentId: 123 }
-  if (!studentId) {
-    return res.status(400).json({ success: false, message: "studentId required" });
-  }
-  const submission = await service.startAssignment(
-    Number(studentId),
-    Number(req.params.id)
-  );
-  res.json({ success: true, data: submission });
+    try {
+        // Lấy studentId từ body, query, hoặc auth user
+        let studentId = req.body?.studentId || req.query?.studentId;
+
+        // Nếu không có, lấy từ user đã đăng nhập
+        if (!studentId && (req as any).user?.student?.id) {
+            studentId = (req as any).user.student.id;
+        }
+
+        if (!studentId) {
+            return res.status(400).json({
+                success: false,
+                message: "studentId required",
+            });
+        }
+
+        const assignmentId = req.params.id;
+
+        if (!assignmentId) {
+            return res.status(400).json({
+                success: false,
+                message: "assignmentId required",
+            });
+        }
+
+        const submission = await service.startAssignment(
+            Number(studentId),
+            Number(assignmentId)
+        );
+
+        res.json({ success: true, data: submission });
+    } catch (error: any) {
+        console.error("Error starting assignment:", error);
+        res.status(500).json({
+            success: false,
+            message: error.message || "Lỗi khi bắt đầu bài tập",
+        });
+    }
 }
 
-// Submit assignment
 export async function submit(req: Request, res: Response) {
-  const { studentId, answers } = req.body; // POST /assignments/:id/submit { studentId, answers: [...] }
-  if (!studentId) {
-    return res.status(400).json({ success: false, message: "studentId required" });
-  }
-  const submission = await service.submitAssignment(
-    Number(studentId),
-    Number(req.params.id),
-    answers
-  );
-  res.json({ success: true, data: submission });
-}
+    try {
+        // Lấy studentId từ body hoặc user đã đăng nhập
+        let studentId = req.body?.studentId;
 
+        if (!studentId && (req as any).user?.student?.id) {
+            studentId = (req as any).user.student.id;
+        }
+
+        const { answers } = req.body || {};
+
+        if (!studentId) {
+            return res.status(400).json({
+                success: false,
+                message: "studentId required",
+            });
+        }
+
+        if (!answers || !Array.isArray(answers)) {
+            return res.status(400).json({
+                success: false,
+                message: "answers array required",
+            });
+        }
+
+        const assignmentId = req.params.id;
+
+        const submission = await service.submitAssignment(
+            Number(studentId),
+            Number(assignmentId),
+            answers
+        );
+
+        res.json({ success: true, data: submission });
+    } catch (error: any) {
+        console.error("Error submitting assignment:", error);
+        res.status(500).json({
+            success: false,
+            message: error.message || "Lỗi khi nộp bài",
+        });
+    }
+}

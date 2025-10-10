@@ -229,13 +229,12 @@ export default function Dashboard() {
             {g.sections.map((section: Section) => (
               <Col xs={24} sm={12} md={8} lg={6} key={section.sectionId}>
                 <Card
-                  hoverable
                   style={{
                     borderRadius: 12,
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
                     transition: "all 0.3s",
                     cursor: "pointer",
                   }}
+                  className={`bg-white rounded-xl shadow border transition hover:shadow-xl border-blue-200`}
                   bodyStyle={{ padding: 16 }}
                   onClick={() =>
                     navigate(`/teacher/courses/${section.sectionId}`)

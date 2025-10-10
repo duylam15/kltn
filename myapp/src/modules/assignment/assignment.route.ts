@@ -34,19 +34,20 @@ router.get(
     controller.submissions
 );
 
-router.get("/teacher/:teacherId", controller.getAssignmentsByTeacher); // ← THÊM ROUTE NÀY
+router.get("/teacher/:teacherId", controller.getAssignmentsByTeacher);
 router.get("/sections/:sectionId/assignments", controller.bySection);
 
-// Student
-router.get("/me/my-assignments", controller.myAssignments); // sẽ truyền studentId qua query
+// Student Routes
+router.get(
+    "/section/:sectionId/student/:studentId",
+    controller.getAssignmentsBySectionForStudent
+); 
 
-router.post("/:id/start", controller.start); // truyền studentId trong body hoặc query
+router.post("/:id/start", controller.start);
 
 router.post(
-  "/:id/submit",
-  validate(validation.submitAssignmentSchema),
-  controller.submit // cũng truyền studentId trong body
+    "/:id/submit",
+    controller.submit
 );
-
 
 export default router;

@@ -193,23 +193,27 @@ model CourseSection {
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
-  subject            Subject             @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  term               Term                @relation(fields: [termId], references: [id], onDelete: Cascade)
-  instructors        SectionInstructor[]
-  groups             SectionGroup[]
-  enrollments        SectionEnrollment[]
-  forumThreads       ForumThread[]
+  subject        Subject             @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  term           Term                @relation(fields: [termId], references: [id], onDelete: Cascade)
+  instructors    SectionInstructor[]
+  groups         SectionGroup[]
+  enrollments    SectionEnrollment[]
+  forumThreads   ForumThread[]
+  materials      CourseMaterial[]
+  assignments    SectionAssignment[]
+  notifications  Notification[]
+  chatRooms      ChatRoom[]
+  gradeColumns   GradeColumn[]
+  attendanceScoreRules AttendanceScoreRule[]
+
+  // chỉ cần 1 field này thôi
   attendanceSessions AttendanceSession[]
-  materials          CourseMaterial[]
-  assignments        SectionAssignment[]
-  notifications      Notification[]
-  chatRooms          ChatRoom[]
-  gradeColumns       GradeColumn[]
 
   @@index([subjectId])
   @@index([termId])
   @@index([sectionCode])
 }
+
 
 model SectionInstructor {
   sectionId  Int
@@ -423,7 +427,11 @@ model AttendanceSession {
   createdAt   DateTime  @default(now())
   expiresAt   DateTime?
 
-  section      CourseSection                  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+requireDeviceCheck Boolean @default(true)
+  maxCheckInsPerIP   Int     @default(3)  // Giới hạn số lần điểm danh/IP
+  allowedDevices     Json?                // Danh sách device đã được phép
+  section CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  
   attendances  Attendance[]
   gradeColumns GradeColumnAttendanceSession[]
 }
@@ -434,15 +442,36 @@ model Attendance {
   studentId   Int
   status      AttendanceStatus @default(present)
   checkedInAt DateTime         @default(now())
+
   latitude    Float?
   longitude   Float?
   distance    Float?
+  ipAddress   String? @db.VarChar(45)
+  deviceInfo  String? @db.VarChar(255)
+  isValid     Boolean @default(true)
+ // 🔥 Thêm để chống gian lận
+  userAgent   String?  @db.VarChar(500)
+
   score       Float?
+  adjustedBy  Int?
+  adjustedAt  DateTime?
 
   session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   student Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, studentId], map: "uniq_attendance")
+}
+
+model AttendanceScoreRule {
+  id        Int              @id @default(autoincrement())
+  sectionId Int
+  status    AttendanceStatus
+  score     Float
+  updatedAt DateTime         @updatedAt
+
+  section CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([sectionId, status], map: "uniq_section_status_rule")
 }
 
 enum AttendanceStatus {
@@ -451,6 +480,9 @@ enum AttendanceStatus {
   absent
   warning
 }
+
+
+
 
 // ===== HỆ THỐNG BÀI TẬP =====
 

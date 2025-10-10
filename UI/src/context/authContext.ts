@@ -18,6 +18,15 @@ type Teacher = {
     specialization: string;
     user?: User;
 };
+
+type Student = {
+    id: number;
+    userId: number;
+    studentCode: string;
+    year: number;
+    major: string;
+    user?: User;
+};
 export interface User {
     id: number;
     email: string;
@@ -25,6 +34,7 @@ export interface User {
     studentCode?: string;
     role: Role;
     teacher?: Teacher | null;
+    student?: Student | null;
 }
 
 

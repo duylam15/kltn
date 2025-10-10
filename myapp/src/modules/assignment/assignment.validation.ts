@@ -2,6 +2,18 @@ import { z } from "zod";
 import { AssignmentType } from "@prisma/client";
 import { QuestionType, ProgrammingLanguage } from "@prisma/client";
 
+export const getAssignmentsBySectionForStudentSchema = z.object({
+    params: z.object({
+        sectionId: z.string().regex(/^\d+$/, "sectionId phải là số"),
+        studentId: z.string().regex(/^\d+$/, "studentId phải là số"),
+    }),
+    query: z.object({
+        type: z.nativeEnum(AssignmentType).optional(),
+        status: z.enum(["all", "not_started", "in_progress", "completed", "overdue"]).optional().default("all"),
+    }),
+});
+
+
 export const createAssignmentSchema = z.object({
     body: z.object({
         title: z.string().min(1, "Tiêu đề không được bỏ trống"),

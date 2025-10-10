@@ -12,18 +12,53 @@ export const io = new Server(httpServer, {
 
 // Khởi tạo Socket.IO
 io.on("connection", (socket) => {
-    console.log("User connected", socket.id);
+    console.log("========================================");
+    console.log("[Server] 🔌 User connected:", socket.id);
+    console.log("========================================");
 
+    // 👤 Handler cho Chat (giữ nguyên)
     socket.on("joinUser", (userId: number) => {
         socket.join(`user_${userId}`);
+        console.log(`[Server] 👤 Socket ${socket.id} joined user_${userId}`);
     });
 
     socket.on("joinRoom", (roomId: number) => {
         socket.join(`room_${roomId}`);
+        console.log(`[Server] 💬 Socket ${socket.id} joined room_${roomId}`);
+    });
+
+    // 🆕 Handler cho Groups (THÊM MỚI)
+    socket.on("joinSection", (sectionId: number) => {
+        socket.join(`section_${sectionId}`);
+        console.log("========================================");
+        console.log(
+            `[Server] 📚 Socket ${socket.id} joined section_${sectionId}`
+        );
+
+        // Kiểm tra số client trong room
+        const room = io.sockets.adapter.rooms.get(`section_${sectionId}`);
+        console.log(
+            `[Server] 👥 Room section_${sectionId} now has ${
+                room?.size || 0
+            } clients`
+        );
+        console.log("========================================");
+
+        // Gửi confirmation về client
+        socket.emit("joinedSection", { sectionId, socketId: socket.id });
+    });
+
+    socket.on("leaveSection", (sectionId: number) => {
+        socket.leave(`section_${sectionId}`);
+        console.log(
+            `[Server] 👋 Socket ${socket.id} left section_${sectionId}`
+        );
     });
 
     socket.on("disconnect", () => {
-        console.log("User disconnected", socket.id);
+        console.log("========================================");
+        console.log("[Server] ❌ User disconnected:", socket.id);
+        console.log("========================================");
     });
 });
 

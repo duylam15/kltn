@@ -30,10 +30,12 @@ import {
   CalendarOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
+  GlobalOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
 import toast from "react-hot-toast";
+import { useAuth } from "../../context/authContext";
 
 const { Title } = Typography;
 const API_BASE = "http://localhost:4000/api/v1";
@@ -61,6 +63,15 @@ type Attendance = {
   status: "present" | "warning" | "late";
   checkedInAt: string;
   distance?: number;
+  // 🔥 THÊM CÁC FIELD MỚI
+  ipAddress?: string;
+  deviceInfo?: string;
+  userAgent?: string;
+  score?: number;
+  isValid?: boolean;
+  adjustedBy?: number;
+  adjustedAt?: string;
+  note?: string;
 };
 
 type Student = {
@@ -78,7 +89,8 @@ type Enrollment = {
 export default function RollCall() {
   const path = window.location.pathname;
   const sectionId = Number(path.split("/")[3]);
-
+const { user } = useAuth(); // ✅ thêm dòng này
+  const teacherId = user?.id; // ID của giáo viên hiện tại
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [keyword, setKeyword] = useState("");
@@ -215,42 +227,52 @@ export default function RollCall() {
     if (!selectedSession) return;
 
     try {
-      const res = await axios.post(`${API_BASE}/attendance/check-in`, {
-        sessionId: selectedSession.id,
-        studentCode,
-        latitude: null,
-        longitude: null,
-      });
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const res = await axios.post(`${API_BASE}/attendance/check-in`, {
+            sessionId: selectedSession.id,
+            studentCode,
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+          console.log(res.data);
+          if (res.data.success) {
+            toast.success(res.data.message || "Điểm danh thành công");
 
-      if (res.data.success) {
-        toast.success(res.data.message || "Điểm danh thành công");
+            const newAttendance = res.data.data;
 
-        const newAttendance = res.data.data;
+            setStudentList((prev) =>
+              prev.map((enrollment) =>
+                enrollment.student.studentCode === studentCode
+                  ? { ...enrollment, attendance: newAttendance }
+                  : enrollment
+              )
+            );
 
-        setStudentList((prev) =>
-          prev.map((enrollment) =>
-            enrollment.student.studentCode === studentCode
-              ? { ...enrollment, attendance: newAttendance }
-              : enrollment
-          )
-        );
-
-        setSelectedSession((prev: Session | null) => {
-          if (!prev) return prev;
-          const updated = { ...prev };
-          const idx = updated.attendances?.findIndex(
-            (a: Attendance) => a.studentId === newAttendance.studentId
-          ) ?? -1;
-          if (idx !== -1 && updated.attendances) {
-            updated.attendances[idx] = newAttendance;
-          } else if (updated.attendances) {
-            updated.attendances.push(newAttendance);
+            setSelectedSession((prev: Session | null) => {
+              if (!prev) return prev;
+              const updated = { ...prev };
+              const idx = updated.attendances?.findIndex(
+                (a: Attendance) => a.studentId === newAttendance.studentId
+              ) ?? -1;
+              if (idx !== -1 && updated.attendances) {
+                updated.attendances[idx] = newAttendance;
+              } else if (updated.attendances) {
+                updated.attendances.push(newAttendance);
+              }
+              return updated;
+            });
+          } else {
+            toast.error(res.data.message || "Không thể điểm danh");
           }
-          return updated;
-        });
-      } else {
-        toast.error(res.data.message || "Không thể điểm danh");
-      }
+        },
+        (err) => {
+          console.error("Không lấy được vị trí:", err);
+        }
+      );
+
+
+      
     } catch (err: any) {
       console.error(err);
       toast.error(err.response?.data?.message || "Điểm danh thất bại");
@@ -391,6 +413,8 @@ export default function RollCall() {
       title: "MSSV",
       dataIndex: ["student", "studentCode"],
       key: "studentCode",
+      width: 120,
+      fixed: "left" as const,
       sorter: (a: Enrollment, b: Enrollment) =>
         a.student.studentCode.localeCompare(b.student.studentCode),
     },
@@ -398,55 +422,205 @@ export default function RollCall() {
       title: "Họ tên",
       dataIndex: ["student", "user", "fullName"],
       key: "fullName",
+      width: 180,
       sorter: (a: Enrollment, b: Enrollment) =>
         a.student.user.fullName.localeCompare(b.student.user.fullName),
     },
     {
       title: "Email",
       dataIndex: ["student", "user", "email"],
-      key: "email"
+      key: "email",
+      width: 200,
+      ellipsis: true,
     },
     {
       title: "Lớp",
       dataIndex: ["student", "className"],
-      key: "className"
+      key: "className",
+      width: 100,
     },
     {
       title: "Trạng thái",
       key: "status",
+      width: 120,
       align: "center" as const,
-      render: (_: any, record: Enrollment) =>
-        getStatusTag(record.attendance?.status || ""),
+      filters: [
+        { text: "Có mặt", value: "present" },
+        { text: "Cảnh báo", value: "warning" },
+        { text: "Trễ", value: "late" },
+        { text: "Chưa điểm danh", value: "none" },
+      ],
+      onFilter: (value: any, record: Enrollment) => {
+        if (value === "none") return !record.attendance;
+        return record.attendance?.status === value;
+      },
+      render: (_: any, record: Enrollment) => {
+        const status = record.attendance?.status;
+        const isValid = record.attendance?.isValid ?? true;
+
+        if (!status) {
+          return <Tag color="default">Chưa điểm danh</Tag>;
+        }
+
+        const statusConfig = {
+          present: { color: "green", text: "Có mặt", icon: <CheckCircleOutlined /> },
+          warning: { color: "orange", text: "Cảnh báo", icon: <WarningOutlined /> },
+          late: { color: "red", text: "Trễ", icon: <ClockCircleOutlined /> },
+        };
+
+        const config = statusConfig[status] || { color: "default", text: "N/A", icon: null };
+
+        return (
+          <Tag color={config.color} icon={config.icon}>
+            {config.text}
+            {!isValid && <span style={{ marginLeft: 4 }}>⚠️</span>}
+          </Tag>
+        );
+      },
     },
     {
-      title: "Thời gian điểm danh",
+      title: "Thời gian",
       key: "checkedInAt",
+      width: 160,
+      sorter: (a: Enrollment, b: Enrollment) => {
+        const aTime = a.attendance?.checkedInAt ? new Date(a.attendance.checkedInAt).getTime() : 0;
+        const bTime = b.attendance?.checkedInAt ? new Date(b.attendance.checkedInAt).getTime() : 0;
+        return aTime - bTime;
+      },
       render: (_: any, record: Enrollment) =>
         record.attendance?.checkedInAt
-          ? dayjs(record.attendance.checkedInAt).format("DD/MM/YYYY HH:mm:ss")
-          : "—",
+          ? dayjs(record.attendance.checkedInAt).format("HH:mm:ss DD/MM/YYYY")
+          : <span style={{ color: "#999" }}>—</span>,
     },
     {
-      title: "Khoảng cách (m)",
+      title: "Khoảng cách",
       key: "distance",
+      width: 120,
       align: "center" as const,
-      render: (_: any, record: Enrollment) =>
-        record.attendance?.distance
-          ? `${record.attendance.distance.toFixed(2)} m`
-          : "—",
+      sorter: (a: Enrollment, b: Enrollment) => {
+        const aDist = a.attendance?.distance ?? 999999;
+        const bDist = b.attendance?.distance ?? 999999;
+        return aDist - bDist;
+      },
+      render: (_: any, record: Enrollment) => {
+        const distance = record.attendance?.distance;
+        if (!distance && distance !== 0) return <span style={{ color: "#999" }}>—</span>;
+
+        const isWarning = distance > (selectedSession?.radius || 50);
+        return (
+          <Tag color={isWarning ? "orange" : "green"}>
+            {distance.toFixed(1)}m
+            {isWarning && " ⚠️"}
+          </Tag>
+        );
+      },
+    },
+    // 🔥 THÊM CỘT IP ADDRESS
+    {
+      title: "Địa chỉ IP",
+      key: "ipAddress",
+      width: 150,
+      render: (_: any, record: Enrollment) => {
+        const ip = record.attendance?.ipAddress;
+        if (!ip) return <span style={{ color: "#999" }}>—</span>;
+
+        return (
+          <Tooltip title={`Device: ${record.attendance?.deviceInfo || "Unknown"}`}>
+            <Tag icon={<GlobalOutlined />} color="blue">
+              {ip}
+            </Tag>
+          </Tooltip>
+        );
+      },
+    },
+    // 🔥 THÊM CỘT ĐIỂM SỐ
+    {
+      title: "Điểm",
+      key: "score",
+      width: 100,
+      align: "center" as const,
+      sorter: (a: Enrollment, b: Enrollment) => {
+        const aScore = a.attendance?.score ?? 0;
+        const bScore = b.attendance?.score ?? 0;
+        return aScore - bScore;
+      },
+      render: (_: any, record: Enrollment) => {
+        const score = record.attendance?.score;
+
+        if (score === null || score === undefined) {
+          return <span style={{ color: "#999" }}>—</span>;
+        }
+
+        // Màu sắc theo điểm
+        let color = "default";
+        if (score >= 9) color = "green";
+        else if (score >= 7) color = "blue";
+        else if (score >= 5) color = "orange";
+        else color = "red";
+
+        return (
+          <Tag color={color} style={{ fontWeight: "bold", fontSize: 14 }}>
+            {score.toFixed(1)}
+          </Tag>
+        );
+      },
     },
     {
       title: "Hành động",
       key: "action",
+      width: 150,
+      fixed: "right" as const,
       render: (_: any, record: Enrollment) => (
-        <Button
-          type="primary"
-          size="small"
-          disabled={!!record.attendance}
-          onClick={() => handleManualCheckIn(record.student.studentCode)}
-        >
-          {record.attendance ? "Đã điểm danh" : "Điểm danh"}
-        </Button>
+        <Space size="small">
+          <Button
+            type="primary"
+            size="small"
+            disabled={!!record.attendance}
+            onClick={() => handleManualCheckIn(record.student.studentCode)}
+            icon={<CheckCircleOutlined />}
+          >
+            {record.attendance ? "Đã điểm danh" : "Điểm danh"}
+          </Button>
+          {record.attendance && (
+            <Tooltip title="Xem chi tiết">
+              <Button
+                size="small"
+                icon={<EyeOutlined />}
+                onClick={() => {
+                  Modal.info({
+                    title: "Chi tiết điểm danh",
+                    width: 600,
+                    content: (
+                      <div style={{ marginTop: 16 }}>
+                        <p><strong>Sinh viên:</strong> {record.student.user.fullName}</p>
+                        <p><strong>MSSV:</strong> {record.student.studentCode}</p>
+                        <p><strong>Trạng thái:</strong> {getStatusTag(record.attendance?.status || "")}</p>
+                        <p><strong>Thời gian:</strong> {dayjs(record.attendance?.checkedInAt).format("HH:mm:ss DD/MM/YYYY")}</p>
+                        {record.attendance?.distance && (
+                          <p><strong>Khoảng cách:</strong> {record.attendance?.distance.toFixed(2)}m</p>
+                        )}
+                        {record.attendance?.ipAddress && (
+                          <p><strong>IP:</strong> {record.attendance?.ipAddress}</p>
+                        )}
+                        {record.attendance?.deviceInfo && (
+                          <p><strong>Thiết bị:</strong> {record.attendance?.deviceInfo}</p>
+                        )}
+                        {record.attendance?.score !== null && record.attendance?.score !== undefined && (
+                          <p><strong>Điểm:</strong> {record.attendance?.score}</p>
+                        )}
+                        {!record.attendance?.isValid && (
+                          <p style={{ color: "red" }}>
+                            <WarningOutlined /> <strong>Cảnh báo:</strong> Điểm danh có vấn đề
+                          </p>
+                        )}
+                      </div>
+                    ),
+                  });
+                }}
+              />
+            </Tooltip>
+          )}
+        </Space>
       ),
     },
   ];
@@ -622,9 +796,10 @@ export default function RollCall() {
           dataSource={studentList}
           columns={studentColumns}
           rowKey={(record) => record.student.id}
-          pagination={false}
+          pagination={{ pageSize: 20, showSizeChanger: true }}
           bordered
-          scroll={{ x: "max-content" }}
+          scroll={{ x: 1600, y: 500 }} // 👈 Cố định chiều rộng để fixed column hoạt động
+          size="small"
         />
       </Modal>
 
