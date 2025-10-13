@@ -1,5 +1,4 @@
-import { prisma } from "../../prisma/client";
-
+import { prisma } from "@/prisma/client";
 
 export async function sendMessageWithNotification(
     roomId: number,
@@ -30,6 +29,41 @@ export async function sendMessageWithNotification(
     });
 
     return { message, notifications };
+}
+
+// Thêm vào cuối file chat.service.ts
+export async function getChatRoomByContext(params: {
+    sectionId?: number;
+    groupId?: number;
+    assignmentId?: number;
+}) {
+    const { sectionId, groupId, assignmentId } = params;
+
+    let where: any = {};
+
+    if (sectionId) {
+        where = { type: "section", sectionId };
+    } else if (groupId) {
+        where = { type: "group", groupId };
+    } else if (assignmentId) {
+        where = { type: "assignment", assignmentId };
+    }
+
+    const chatRoom = await prisma.chatRoom.findFirst({
+        where,
+        include: {
+            participants: {
+                include: { user: true },
+            },
+            messages: {
+                orderBy: { createdAt: "desc" },
+                take: 1,
+                include: { sender: true },
+            },
+        },
+    });
+
+    return chatRoom;
 }
 
 export async function getAllChatRooms() {

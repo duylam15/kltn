@@ -10,7 +10,14 @@ import {
   Tooltip,
   Form,
   Popconfirm,
-  InputNumber,
+  Space,
+  Statistic,
+  Card,
+  Tabs,
+  Empty,
+  Collapse,
+  Badge,
+  Descriptions,
 } from "antd";
 import {
   ReloadOutlined,
@@ -19,61 +26,202 @@ import {
   EditOutlined,
   DeleteOutlined,
   BookOutlined,
+  FileTextOutlined,
+  QuestionCircleOutlined,
+  EyeOutlined,
+  FolderOpenOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import { Book } from "lucide-react";
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
+const { TextArea } = Input;
+const { Panel } = Collapse;
 const API_BASE = "http://localhost:4000/api/v1";
 
 type Subject = {
   id: number;
   subjectCode: string;
   subjectName: string;
-  credits: number;
+  description?: string;
   createdAt?: string;
   updatedAt?: string;
+  _count?: {
+    chapters: number;
+    questions: number;
+  };
+  chapters?: Chapter[];
+};
+
+type Chapter = {
+  id: number;
+  subjectId: number;
+  chapterCode: string;
+  chapterName: string;
+  description?: string;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+  _count?: {
+    questions: number;
+  };
+};
+
+type Question = {
+  id: number;
+  type: string;
+  content: string;
+  difficulty: "easy" | "medium" | "hard";
+  points: number;
+  createdAt: string;
+};
+
+type ChapterDetail = Chapter & {
+  questions?: Question[];
+  subject?: {
+    id: number;
+    subjectCode: string;
+    subjectName: string;
+  };
+};
+
+type ApiResponse = {
+  success: boolean;
+  data: Subject[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+  };
 };
 
 export default function Subjects() {
   const [loading, setLoading] = useState(true);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [keyword, setKeyword] = useState("");
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 10,
+    total: 0,
+  });
 
   // modal thêm/sửa
   const [form] = Form.useForm<any>();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Subject | null>(null);
 
+  // modal xem chi tiết
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
+  const [chapters, setChapters] = useState<ChapterDetail[]>([]);
+  const [chapterQuestions, setChapterQuestions] = useState<
+    Record<number, Question[]>
+  >({});
+  const [loadingChapters, setLoadingChapters] = useState<number[]>([]);
+
   useEffect(() => {
-    fetchSubjects();
+    fetchSubjects(1, 10);
   }, []);
 
-  async function fetchSubjects() {
+  async function fetchSubjects(page = 1, limit = 10, search?: string) {
     try {
       setLoading(true);
-      const res = await axios.get<{ success: boolean; data: Subject[] }>(
-        `${API_BASE}/subjects`
+      const params: any = { page, limit };
+      if (search) params.q = search;
+
+      const res = await axios.get<ApiResponse>(
+        `${API_BASE}/question-subjects`,
+        { params }
       );
+
       if (res.data.success) {
         setSubjects(res.data.data || []);
+        setPagination({
+          current: res.data.meta.page,
+          pageSize: res.data.meta.limit,
+          total: res.data.meta.total,
+        });
       }
     } catch (err) {
       toast.error("Không tải được danh sách môn học");
+      console.error(err);
     } finally {
       setLoading(false);
     }
   }
 
+  // 🆕 Lấy chi tiết môn học + danh sách chương
+  const fetchSubjectDetail = async (subjectId: number) => {
+    try {
+      setDetailLoading(true);
+      setDetailModalOpen(true);
+
+      // Lấy chi tiết môn học
+      const subjectRes = await axios.get(
+        `${API_BASE}/question-subjects/${subjectId}`
+      );
+
+      if (subjectRes.data.success) {
+        setSelectedSubject(subjectRes.data.data);
+        setChapters(subjectRes.data.data.chapters || []);
+      }
+    } catch (err) {
+      toast.error("Không thể tải chi tiết môn học");
+      console.error(err);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  // 🆕 Lấy danh sách câu hỏi của chương
+  const fetchChapterQuestions = async (chapterId: number) => {
+    if (chapterQuestions[chapterId]) return; // Đã load rồi
+
+    try {
+      setLoadingChapters((prev) => [...prev, chapterId]);
+
+      const res = await axios.get(
+        `${API_BASE}/chapters/${chapterId}/questions`
+      );
+
+      if (res.data.success) {
+        setChapterQuestions((prev) => ({
+          ...prev,
+          [chapterId]: res.data.data || [],
+        }));
+      }
+    } catch (err) {
+      toast.error("Không thể tải câu hỏi");
+      console.error(err);
+    } finally {
+      setLoadingChapters((prev) => prev.filter((id) => id !== chapterId));
+    }
+  };
+
+  // 🆕 Lấy thống kê câu hỏi theo độ khó
+  const fetchChapterStats = async (chapterId: number) => {
+    try {
+      const res = await axios.get(
+        `${API_BASE}/chapters/${chapterId}/questions/stats`
+      );
+      return res.data.data;
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+  };
+
   const handleDelete = async (id: number) => {
     try {
-      await axios.delete(`${API_BASE}/subjects/${id}`);
+      await axios.delete(`${API_BASE}/question-subjects/${id}`);
       toast.success("Đã xóa môn học");
-      setSubjects((prev) => prev.filter((s) => s.id !== id));
-    } catch (err) {
-      toast.error("Không thể xóa môn học");
+      fetchSubjects(pagination.current, pagination.pageSize, keyword);
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || "Không thể xóa môn học";
+      toast.error(errorMsg);
     }
   };
 
@@ -83,21 +231,24 @@ export default function Subjects() {
       const payload = {
         subjectCode: values.subjectCode.trim().toUpperCase(),
         subjectName: values.subjectName.trim(),
-        credits: values.credits,
+        description: values.description?.trim() || undefined,
       };
 
       if (editing) {
-        await axios.patch(`${API_BASE}/subjects/${editing.id}`, payload);
+        await axios.patch(
+          `${API_BASE}/question-subjects/${editing.id}`,
+          payload
+        );
         toast.success("Đã cập nhật môn học");
       } else {
-        await axios.post(`${API_BASE}/subjects`, payload);
+        await axios.post(`${API_BASE}/question-subjects`, payload);
         toast.success("Đã thêm môn học mới");
       }
 
       setModalOpen(false);
       setEditing(null);
       form.resetFields();
-      fetchSubjects();
+      fetchSubjects(1, pagination.pageSize);
     } catch (err: any) {
       if (err?.errorFields) return;
       const errorMsg = err?.response?.data?.message || "Không thể lưu môn học";
@@ -105,14 +256,49 @@ export default function Subjects() {
     }
   };
 
+  const handleSearch = () => {
+    fetchSubjects(1, pagination.pageSize, keyword);
+  };
+
+  const handleTableChange = (newPagination: any) => {
+    fetchSubjects(newPagination.current, newPagination.pageSize, keyword);
+  };
+
+  // 🎨 Render tag độ khó
+  const renderDifficultyTag = (difficulty: string) => {
+    const config = {
+      easy: { color: "green", text: "Dễ" },
+      medium: { color: "orange", text: "Trung bình" },
+      hard: { color: "red", text: "Khó" },
+    };
+    const diff = config[difficulty as keyof typeof config] || {
+      color: "default",
+      text: difficulty,
+    };
+    return <Tag color={diff.color}>{diff.text}</Tag>;
+  };
+
+  // 🎨 Render tag loại câu hỏi
+  const renderQuestionTypeTag = (type: string) => {
+    const config = {
+      multiple_choice: { color: "blue", text: "Trắc nghiệm" },
+      essay: { color: "purple", text: "Tự luận" },
+      coding: { color: "cyan", text: "Lập trình" },
+      true_false: { color: "geekblue", text: "Đúng/Sai" },
+    };
+    const t = config[type as keyof typeof config] || {
+      color: "default",
+      text: type,
+    };
+    return <Tag color={t.color}>{t.text}</Tag>;
+  };
+
   const columns = [
     {
       title: "Mã môn học",
       dataIndex: "subjectCode",
       key: "subjectCode",
-      width: "20%",
-      sorter: (a: Subject, b: Subject) =>
-        a.subjectCode.localeCompare(b.subjectCode),
+      width: "12%",
       render: (text: string) => (
         <Tag color="blue" style={{ fontSize: 14, fontWeight: 600 }}>
           {text}
@@ -123,21 +309,43 @@ export default function Subjects() {
       title: "Tên môn học",
       dataIndex: "subjectName",
       key: "subjectName",
-      width: "40%",
-      sorter: (a: Subject, b: Subject) =>
-        a.subjectName.localeCompare(b.subjectName),
+      width: "22%",
       render: (text: string) => <strong>{text}</strong>,
     },
     {
-      title: "Số tín chỉ",
-      dataIndex: "credits",
-      key: "credits",
+      title: "Mô tả",
+      dataIndex: "description",
+      key: "description",
+      width: "25%",
+      ellipsis: {
+        showTitle: false,
+      },
+      render: (text: string) => (
+        <Tooltip title={text}>
+          {text || <span style={{ color: "#999" }}>Chưa có mô tả</span>}
+        </Tooltip>
+      ),
+    },
+    {
+      title: "Số chương",
+      key: "chapters",
       align: "center" as const,
-      width: "15%",
-      sorter: (a: Subject, b: Subject) => a.credits - b.credits,
-      render: (credits: number) => (
-        <Tag color="green" style={{ fontSize: 14 }}>
-          {credits} TC
+      width: "10%",
+      render: (_: any, record: Subject) => (
+        <Tag icon={<FileTextOutlined />} color="cyan">
+          {record._count?.chapters || 0}
+          <span style={{ marginLeft: 4 }}>Chương</span>
+        </Tag>
+      ),
+    },
+    {
+      title: "Số câu hỏi",
+      key: "questions",
+      align: "center" as const,
+      width: "10%",
+      render: (_: any, record: Subject) => (
+        <Tag icon={<QuestionCircleOutlined />} color="green">
+          {record._count?.questions || 0}
         </Tag>
       ),
     },
@@ -145,19 +353,26 @@ export default function Subjects() {
       title: "Ngày tạo",
       dataIndex: "createdAt",
       key: "createdAt",
-      width: "15%",
-      sorter: (a: Subject, b: Subject) =>
-        new Date(a.createdAt || 0).getTime() -
-        new Date(b.createdAt || 0).getTime(),
-      render: (v: string) => (v ? dayjs(v).format("DD/MM/YYYY HH:mm") : "—"),
+      width: "10%",
+      render: (v: string) => (v ? dayjs(v).format("DD/MM/YYYY") : "—"),
     },
     {
       title: "Hành động",
       key: "actions",
       align: "center" as const,
-      width: "10%",
+      width: "12%",
+      fixed: "right" as const,
       render: (_: any, record: Subject) => (
-        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+        <Space size="small">
+          <Tooltip title="Xem chi tiết">
+            <Button
+              icon={<EyeOutlined />}
+              size="small"
+              type="primary"
+              ghost
+              onClick={() => fetchSubjectDetail(record.id)}
+            />
+          </Tooltip>
           <Tooltip title="Sửa">
             <Button
               icon={<EditOutlined />}
@@ -167,7 +382,7 @@ export default function Subjects() {
                 form.setFieldsValue({
                   subjectCode: record.subjectCode,
                   subjectName: record.subjectName,
-                  credits: record.credits,
+                  description: record.description,
                 });
                 setModalOpen(true);
               }}
@@ -176,7 +391,17 @@ export default function Subjects() {
           <Tooltip title="Xóa">
             <Popconfirm
               title="Xóa môn học"
-              description="Bạn có chắc muốn xóa môn học này?"
+              description={
+                <div>
+                  <p>Bạn có chắc muốn xóa môn học này?</p>
+                  {record._count && record._count.chapters > 0 && (
+                    <p style={{ color: "red", marginTop: 8 }}>
+                      ⚠️ Môn học này có {record._count.chapters} chương và{" "}
+                      {record._count.questions} câu hỏi!
+                    </p>
+                  )}
+                </div>
+              }
               okText="Xóa"
               cancelText="Hủy"
               okButtonProps={{ danger: true }}
@@ -185,42 +410,44 @@ export default function Subjects() {
               <Button danger size="small" icon={<DeleteOutlined />} />
             </Popconfirm>
           </Tooltip>
-        </div>
+        </Space>
       ),
     },
   ];
 
-  const filteredSubjects = subjects.filter((s) => {
-    if (!keyword) return true;
-    const kw = keyword.toLowerCase();
-    return (
-      s.subjectCode?.toLowerCase().includes(kw) ||
-      s.subjectName?.toLowerCase().includes(kw)
-    );
-  });
-
   return (
     <div className="pl-3 pr-3">
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-      }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 16,
+        }}
+      >
         <Title level={3} className="mt-2">
           <div className="flex justify-center items-center gap-2">
-            <div className=""><Book /></div> Quản lý Môn học
+            <div className="">
+              <Book />
+            </div>{" "}
+            Quản lý Môn học (Ngân hàng câu hỏi)
           </div>
         </Title>
         <div style={{ display: "flex", gap: 8 }}>
-          <Input
+          <Input.Search
             allowClear
             prefix={<SearchOutlined />}
-            placeholder="Tìm theo mã môn học, tên môn học..."
+            placeholder="Tìm theo mã, tên môn học..."
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
+            onSearch={handleSearch}
             style={{ width: 400 }}
+            enterButton
           />
-          <Button icon={<ReloadOutlined />} onClick={fetchSubjects}>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => fetchSubjects(1, pagination.pageSize)}
+          >
             Làm mới
           </Button>
           <Button
@@ -237,44 +464,75 @@ export default function Subjects() {
         </div>
       </div>
 
+      {/* Statistics */}
+      <Card style={{ marginBottom: 16 }}>
+        <Space size="large">
+          <Statistic
+            title="Tổng số môn học"
+            value={pagination.total}
+            prefix={<BookOutlined />}
+          />
+          <Statistic
+            title="Tổng số chương"
+            value={subjects.reduce(
+              (sum, s) => sum + (s._count?.chapters || 0),
+              0
+            )}
+            prefix={<FileTextOutlined />}
+          />
+          <Statistic
+            title="Tổng số câu hỏi"
+            value={subjects.reduce(
+              (sum, s) => sum + (s._count?.questions || 0),
+              0
+            )}
+            prefix={<QuestionCircleOutlined />}
+          />
+        </Space>
+      </Card>
+
       {loading ? (
         <div style={{ textAlign: "center", padding: 60 }}>
           <Spin size="large" tip="Đang tải danh sách môn học..." />
         </div>
       ) : (
         <Table<Subject>
-          dataSource={filteredSubjects}
+          dataSource={subjects}
           columns={columns}
           rowKey="id"
           bordered
           pagination={{
-            pageSize: 10,
+            ...pagination,
             showSizeChanger: true,
             showTotal: (total) => `Tổng ${total} môn học`,
+            pageSizeOptions: ["10", "20", "50", "100"],
           }}
+          onChange={handleTableChange}
           locale={{ emptyText: "Không có môn học nào" }}
+          scroll={{ x: 1400 }}
         />
       )}
 
       {/* Modal thêm/sửa */}
       <Modal
-        title={editing ? "Sửa thông tin môn học" : "Thêm môn học mới"}
+        title={
+          <Space>
+            <BookOutlined />
+            {editing ? "Sửa thông tin môn học" : "Thêm môn học mới"}
+          </Space>
+        }
         open={modalOpen}
         onCancel={() => {
           setModalOpen(false);
           setEditing(null);
         }}
         onOk={handleSubmit}
-        okText={editing ? "Lưu" : "Tạo mới"}
+        okText={editing ? "Lưu thay đổi" : "Tạo mới"}
         cancelText="Hủy"
         width={600}
         centered
-        bodyStyle={{
-          maxHeight: "70vh", // Giới hạn chiều cao modal
-          overflowY: "auto", // Thêm scroll dọc
-        }}
       >
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
           <Form.Item
             label="Mã môn học"
             name="subjectCode"
@@ -284,37 +542,286 @@ export default function Subjects() {
                 pattern: /^[A-Z0-9]+$/i,
                 message: "Mã môn học chỉ chứa chữ cái và số",
               },
+              {
+                max: 30,
+                message: "Mã môn học tối đa 30 ký tự",
+              },
             ]}
           >
             <Input
-              placeholder="VD: IT100"
-              maxLength={20}
+              placeholder="VD: CS101"
+              maxLength={30}
               style={{ textTransform: "uppercase" }}
+              disabled={!!editing}
             />
           </Form.Item>
 
           <Form.Item
             label="Tên môn học"
             name="subjectName"
-            rules={[{ required: true, message: "Vui lòng nhập tên môn học" }]}
+            rules={[
+              { required: true, message: "Vui lòng nhập tên môn học" },
+              {
+                max: 200,
+                message: "Tên môn học tối đa 200 ký tự",
+              },
+            ]}
           >
-            <Input placeholder="VD: Cơ sở dữ liệu" maxLength={200} />
+            <Input placeholder="VD: Lập trình căn bản" maxLength={200} />
           </Form.Item>
 
           <Form.Item
-            label="Số tín chỉ"
-            name="credits"
-            rules={[{ required: true, message: "Vui lòng nhập số tín chỉ" }]}
-            initialValue={3}
+            label="Mô tả"
+            name="description"
+            rules={[
+              {
+                max: 500,
+                message: "Mô tả tối đa 500 ký tự",
+              },
+            ]}
           >
-            <InputNumber
-              min={1}
-              max={10}
-              style={{ width: "100%" }}
-              placeholder="Nhập số tín chỉ"
+            <TextArea
+              placeholder="Nhập mô tả chi tiết về môn học (không bắt buộc)"
+              rows={4}
+              maxLength={500}
+              showCount
             />
           </Form.Item>
+
+          {editing && editing._count && (
+            <Card size="small" style={{ backgroundColor: "#f0f5ff" }}>
+              <Space direction="vertical" size="small">
+                <div>
+                  <FileTextOutlined style={{ marginRight: 8 }} />
+                  Số chương: <strong>{editing._count.chapters}</strong>
+                </div>
+                <div>
+                  <QuestionCircleOutlined style={{ marginRight: 8 }} />
+                  Số câu hỏi: <strong>{editing._count.questions}</strong>
+                </div>
+              </Space>
+            </Card>
+          )}
         </Form>
+      </Modal>
+
+      {/* 🆕 Modal xem chi tiết */}
+      <Modal
+        title={
+          <Space>
+            <EyeOutlined />
+            <span>Chi tiết môn học</span>
+          </Space>
+        }
+        open={detailModalOpen}
+        onCancel={() => {
+          setDetailModalOpen(false);
+          setSelectedSubject(null);
+          setChapters([]);
+          setChapterQuestions({});
+        }}
+        footer={[
+          <Button
+            key="close"
+            onClick={() => {
+              setDetailModalOpen(false);
+              setSelectedSubject(null);
+              setChapters([]);
+              setChapterQuestions({});
+            }}
+          >
+            Đóng
+          </Button>,
+        ]}
+        width={1000}
+        centered
+        bodyStyle={{ maxHeight: "70vh", overflowY: "auto" }}
+      >
+        {detailLoading ? (
+          <div style={{ textAlign: "center", padding: 40 }}>
+            <Spin tip="Đang tải chi tiết môn học..." />
+          </div>
+        ) : selectedSubject ? (
+          <div>
+            {/* Thông tin môn học */}
+            <Card style={{ marginBottom: 16 }}>
+              <Descriptions bordered column={2} size="small">
+                <Descriptions.Item label="Mã môn học" span={1}>
+                  <Tag color="blue" style={{ fontSize: 14, fontWeight: 600 }}>
+                    {selectedSubject.subjectCode}
+                  </Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label="Tên môn học" span={1}>
+                  <strong>{selectedSubject.subjectName}</strong>
+                </Descriptions.Item>
+                <Descriptions.Item label="Mô tả" span={2}>
+                  {selectedSubject.description || (
+                    <Text type="secondary">Chưa có mô tả</Text>
+                  )}
+                </Descriptions.Item>
+                <Descriptions.Item label="Số chương">
+                  <Badge
+                      count={selectedSubject?.chapters?.length || 0}
+                    showZero
+                    color="cyan"
+                    />
+                  </Descriptions.Item>
+                <Descriptions.Item label="Số câu hỏi">
+                  <Badge
+                    count={selectedSubject._count?.questions || 0}
+                    showZero
+                    color="green"
+                  />
+                </Descriptions.Item>
+                <Descriptions.Item label="Ngày tạo">
+                  {selectedSubject.createdAt
+                    ? dayjs(selectedSubject.createdAt).format(
+                      "DD/MM/YYYY HH:mm"
+                    )
+                    : "—"}
+                </Descriptions.Item>
+                <Descriptions.Item label="Cập nhật">
+                  {selectedSubject.updatedAt
+                    ? dayjs(selectedSubject.updatedAt).format(
+                      "DD/MM/YYYY HH:mm"
+                    )
+                    : "—"}
+                </Descriptions.Item>
+              </Descriptions>
+            </Card>
+
+            {/* Danh sách chương */}
+            <Title level={5}>
+              <FolderOpenOutlined /> Danh sách chương ({chapters.length})
+            </Title>
+
+            {chapters.length === 0 ? (
+              <Empty description="Chưa có chương nào" />
+            ) : (
+              <Collapse
+                accordion
+                onChange={(key) => {
+                  if (key) {
+                    const chapterId = Number(key);
+                    fetchChapterQuestions(chapterId);
+                  }
+                }}
+              >
+                {chapters.map((chapter) => (
+                  <Panel
+                    key={chapter.id}
+                    header={
+                      <Space>
+                        <Tag color="purple">{chapter.chapterCode}</Tag>
+                        <strong>{chapter.chapterName}</strong>
+                        <Badge
+                          count={chapter._count?.questions || 0}
+                          showZero
+                          style={{ backgroundColor: "#52c41a" }}
+                        />
+                      </Space>
+                    }
+                    extra={
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        Thứ tự: {chapter.order}
+                      </Text>
+                    }
+                  >
+                    {chapter.description && (
+                      <div style={{ marginBottom: 12 }}>
+                        <Text type="secondary">{chapter.description}</Text>
+                      </div>
+                    )}
+
+                    {loadingChapters.includes(chapter.id) ? (
+                      <div style={{ textAlign: "center", padding: 20 }}>
+                        <Spin tip="Đang tải câu hỏi..." />
+                      </div>
+                    ) : chapterQuestions[chapter.id] ? (
+                      <>
+                        <Title level={5} style={{ marginTop: 16 }}>
+                          Danh sách câu hỏi (
+                          {chapterQuestions[chapter.id].length})
+                        </Title>
+                        {chapterQuestions[chapter.id].length === 0 ? (
+                          <Empty
+                            description="Chưa có câu hỏi nào"
+                            style={{ padding: 20 }}
+                          />
+                        ) : (
+                          <Table
+                            dataSource={chapterQuestions[chapter.id]}
+                            rowKey="id"
+                            size="small"
+                            pagination={false}
+                            columns={[
+                              {
+                                title: "ID",
+                                dataIndex: "id",
+                                key: "id",
+                                width: "8%",
+                              },
+                              {
+                                title: "Nội dung",
+                                dataIndex: "content",
+                                key: "content",
+                                width: "45%",
+                                ellipsis: true,
+                                render: (text: string) => (
+                                  <Tooltip title={text}>
+                                    <div
+                                      dangerouslySetInnerHTML={{
+                                        __html:
+                                          text.substring(0, 100) +
+                                          (text.length > 100 ? "..." : ""),
+                                      }}
+                                    />
+                                  </Tooltip>
+                                ),
+                              },
+                              {
+                                title: "Loại",
+                                dataIndex: "type",
+                                key: "type",
+                                width: "15%",
+                                render: renderQuestionTypeTag,
+                              },
+                              {
+                                title: "Độ khó",
+                                dataIndex: "difficulty",
+                                key: "difficulty",
+                                width: "12%",
+                                render: renderDifficultyTag,
+                              },
+                              {
+                                title: "Điểm",
+                                dataIndex: "points",
+                                key: "points",
+                                width: "10%",
+                                align: "center" as const,
+                                render: (points: number) => (
+                                  <Tag color="orange">{points}</Tag>
+                                ),
+                              },
+                              {
+                                title: "Ngày tạo",
+                                dataIndex: "createdAt",
+                                key: "createdAt",
+                                width: "12%",
+                                render: (v: string) =>
+                                  dayjs(v).format("DD/MM/YYYY"),
+                              },
+                            ]}
+                          />
+                        )}
+                      </>
+                    ) : null}
+                  </Panel>
+                ))}
+              </Collapse>
+            )}
+          </div>
+        ) : null}
       </Modal>
     </div>
   );

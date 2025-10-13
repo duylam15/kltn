@@ -14,6 +14,7 @@ import {
 	Checkbox,
 	Space,
 	Card,
+	Badge,
 } from "antd";
 import {
 	ReloadOutlined,
@@ -22,11 +23,12 @@ import {
 	DeleteOutlined,
 	UserOutlined,
 	BookOutlined,
+	InfoCircleOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
-import { GraduationCap, Layers, UserCog } from "lucide-react";
+import { GraduationCap, UserCog } from "lucide-react";
 
 const { Title } = Typography;
 const API_BASE = "http://localhost:4000/api/v1";
@@ -35,6 +37,8 @@ type User = {
 	id: number;
 	email: string;
 	fullName: string;
+	phone?: string;
+	avatarUrl?: string;
 };
 
 type Teacher = {
@@ -54,97 +58,77 @@ type Subject = {
 	credits: number;
 };
 
-type Term = {
-	id: number;
-	code: string;
-	name: string;
-	startDate: string;
-	endDate: string;
-};
-
-type CourseSection = {
+type SubjectInstructor = {
 	id: number;
 	subjectId: number;
-	termId: number;
-	sectionCode: string;
-	sectionName: string;
-	schedule: any;
-	maxStudents: number;
-	currentStudents: number;
-	status: string;
-	subject?: Subject;
-	term?: Term;
-	instructors?: any[];
-};
-
-type Instructor = {
-	sectionId: number;
 	teacherId: number;
 	role: string;
 	assignedAt: string;
-	section?: CourseSection;
+	isActive: boolean;
+	subject?: Subject;
 	teacher?: Teacher;
 };
 
 export default function Instructors() {
 	const [loading, setLoading] = useState(true);
-	const [instructors, setInstructors] = useState<Instructor[]>([]);
+	const [instructors, setInstructors] = useState<SubjectInstructor[]>([]);
 	const [teachers, setTeachers] = useState<Teacher[]>([]);
-	const [courseSections, setCourseSections] = useState<CourseSection[]>([]);
+	const [subjects, setSubjects] = useState<Subject[]>([]);
 	const [keyword, setKeyword] = useState("");
 
 	// modal thêm phân công
 	const [modalOpen, setModalOpen] = useState(false);
-	const [activeTab, setActiveTab] = useState<"byTeacher" | "bySection">("byTeacher");
+	const [activeTab, setActiveTab] = useState<"byTeacher" | "bySubject">("byTeacher");
 
 	// Thêm theo giảng viên
 	const [selectedTeacher, setSelectedTeacher] = useState<number | null>(null);
-	const [selectedSections, setSelectedSections] = useState<number[]>([]);
+	const [selectedSubjects, setSelectedSubjects] = useState<number[]>([]);
 
 	// Thêm theo môn học
-	const [selectedSection, setSelectedSection] = useState<number | null>(null);
+	const [selectedSubject, setSelectedSubject] = useState<number | null>(null);
 	const [selectedTeachers, setSelectedTeachers] = useState<number[]>([]);
 
 	// Tìm kiếm trong modal
-	const [searchSection, setSearchSection] = useState("");
+	const [searchSubject, setSearchSubject] = useState("");
 	const [searchTeacher, setSearchTeacher] = useState("");
 
 	useEffect(() => {
 		fetchInstructors();
 		fetchTeachers();
-		fetchCourseSections();
+		fetchSubjects();
 	}, []);
 
-	// Cập nhật selectedSections khi chọn giảng viên
+	// Cập nhật selectedSubjects khi chọn giảng viên
 	useEffect(() => {
 		if (selectedTeacher) {
-			const assignedSections = instructors
-				.filter((i) => i.teacherId === selectedTeacher)
-				.map((i) => i.sectionId);
-			setSelectedSections(assignedSections);
+			const assignedSubjects = instructors
+				.filter((i) => i.teacherId === selectedTeacher && i.isActive)
+				.map((i) => i.subjectId);
+			setSelectedSubjects(assignedSubjects);
 		} else {
-			setSelectedSections([]);
+			setSelectedSubjects([]);
 		}
 	}, [selectedTeacher, instructors]);
 
 	// Cập nhật selectedTeachers khi chọn môn học
 	useEffect(() => {
-		if (selectedSection) {
+		if (selectedSubject) {
 			const assignedTeachers = instructors
-				.filter((i) => i.sectionId === selectedSection)
+				.filter((i) => i.subjectId === selectedSubject && i.isActive)
 				.map((i) => i.teacherId);
 			setSelectedTeachers(assignedTeachers);
 		} else {
 			setSelectedTeachers([]);
 		}
-	}, [selectedSection, instructors]);
+	}, [selectedSubject, instructors]);
 
 	async function fetchInstructors() {
 		try {
 			setLoading(true);
-			const res = await axios.get<{ success: boolean; data: Instructor[] }>(
-				`${API_BASE}/sections-instructors`
+			const res = await axios.get<{ success: boolean; data:   SubjectInstructor[] }>(
+				`${API_BASE}/subject-instructors`
 			);
+			console.log(res.data);
 			if (res.data.success) {
 				setInstructors(res.data.data || []);
 			}
@@ -168,104 +152,159 @@ export default function Instructors() {
 		}
 	}
 
-	async function fetchCourseSections() {
+	async function fetchSubjects() {
 		try {
-			const res = await axios.get<{ success: boolean; data: CourseSection[] }>(
-				`${API_BASE}/course-sections`
+			const res = await axios.get<{ success: boolean; data: Subject[] }>(
+				`${API_BASE}/subjects`
 			);
 			if (res.data.success) {
-				setCourseSections(res.data.data || []);
+				setSubjects(res.data.data || []);
 			}
 		} catch (err) {
 			console.error("Không tải được danh sách môn học");
 		}
 	}
 
-	const handleDelete = async (sectionId: number, teacherId: number) => {
+	const handleDelete = async (subjectId: number, teacherId: number) => {
 		try {
-			await axios.delete(`${API_BASE}/sections-instructors/${sectionId}/${teacherId}`);
+			await axios.delete(
+				`${API_BASE}/subject-instructors/${subjectId}/${teacherId}`
+			);
 			toast.success("Đã xóa phân công");
 			setInstructors((prev) =>
-				prev.filter((i) => !(i.sectionId === sectionId && i.teacherId === teacherId))
+				prev.filter(
+					(i) => !(i.subjectId === subjectId && i.teacherId === teacherId)
+				)
 			);
-		} catch (err) {
-			toast.error("Không thể xóa phân công");
+		} catch (err: any) {
+			const errorMsg = err?.response?.data?.message || "Không thể xóa phân công";
+			toast.error(errorMsg);
 		}
 	};
 
 	const handleAssign = async () => {
 		try {
 			if (activeTab === "byTeacher") {
+				// Phân công nhiều môn cho 1 giảng viên
 				if (!selectedTeacher) {
 					toast.error("Vui lòng chọn giảng viên");
 					return;
 				}
 
+				if (selectedSubjects.length === 0) {
+					toast.error("Vui lòng chọn ít nhất một môn học");
+					return;
+				}
+
 				// Lấy danh sách phân công hiện tại của giảng viên
 				const currentAssignments = instructors
-					.filter((i) => i.teacherId === selectedTeacher)
-					.map((i) => i.sectionId);
+					.filter((i) => i.teacherId === selectedTeacher && i.isActive)
+					.map((i) => i.subjectId);
 
-				// Tìm các môn cần thêm (có trong selectedSections nhưng không có trong currentAssignments)
-				const toAdd = selectedSections.filter((sid) => !currentAssignments.includes(sid));
+				// Tìm các môn cần thêm
+				const toAdd = selectedSubjects.filter(
+					(sid) => !currentAssignments.includes(sid)
+				);
 
-				// Tìm các môn cần xóa (có trong currentAssignments nhưng không có trong selectedSections)
-				const toRemove = currentAssignments.filter((sid) => !selectedSections.includes(sid));
+				// Tìm các môn cần xóa
+				const toRemove = currentAssignments.filter(
+					(sid) => !selectedSubjects.includes(sid)
+				);
 
-				// Thêm phân công mới
-				for (const sectionId of toAdd) {
-					await axios.post(`${API_BASE}/sections-instructors`, {
-						sectionId,
+				// Thêm phân công mới (bulk)
+				if (toAdd.length > 0) {
+					await axios.post(`${API_BASE}/subject-instructors/bulk-assign-subjects`, {
 						teacherId: selectedTeacher,
+						subjectIds: toAdd,
 						role: "owner",
 					});
 				}
 
-				// Xóa phân công cũ
-				for (const sectionId of toRemove) {
-					await axios.delete(`${API_BASE}/sections-instructors/${sectionId}/${selectedTeacher}`);
+				// Xóa phân công cũ (bulk)
+				if (toRemove.length > 0) {
+					await axios.delete(`${API_BASE}/subject-instructors/bulk-remove-teachers`, {
+						data: {
+							subjectId: toRemove[0], // Xóa từng môn
+							teacherIds: [selectedTeacher],
+						},
+					});
+
+					// Nếu có nhiều môn cần xóa, xóa lần lượt
+					for (let i = 1; i < toRemove.length; i++) {
+						await axios.delete(`${API_BASE}/subject-instructors/bulk-remove-teachers`, {
+							data: {
+								subjectId: toRemove[i],
+								teacherIds: [selectedTeacher],
+							},
+						});
+					}
 				}
 
 				if (toAdd.length > 0 || toRemove.length > 0) {
-					toast.success(`Đã cập nhật phân công (thêm: ${toAdd.length}, xóa: ${toRemove.length})`);
+					toast.success(
+						`Đã cập nhật phân công (thêm: ${toAdd.length}, xóa: ${toRemove.length})`
+					);
 				} else {
-					toast.error("Không có thay đổi nào");
+					toast.success("Không có thay đổi nào");
 				}
 			} else {
-				if (!selectedSection) {
+				// Phân công 1 môn cho nhiều giảng viên
+				if (!selectedSubject) {
 					toast.error("Vui lòng chọn môn học");
+					return;
+				}
+
+				if (selectedTeachers.length === 0) {
+					toast.error("Vui lòng chọn ít nhất một giảng viên");
 					return;
 				}
 
 				// Lấy danh sách giảng viên hiện tại của môn học
 				const currentAssignments = instructors
-					.filter((i) => i.sectionId === selectedSection)
+					.filter((i) => i.subjectId === selectedSubject && i.isActive)
 					.map((i) => i.teacherId);
 
 				// Tìm các giảng viên cần thêm
-				const toAdd = selectedTeachers.filter((tid) => !currentAssignments.includes(tid));
+				const toAdd = selectedTeachers.filter(
+					(tid) => !currentAssignments.includes(tid)
+				);
 
 				// Tìm các giảng viên cần xóa
-				const toRemove = currentAssignments.filter((tid) => !selectedTeachers.includes(tid));
+				const toRemove = currentAssignments.filter(
+					(tid) => !selectedTeachers.includes(tid)
+				);
 
-				// Thêm phân công mới
-				for (const teacherId of toAdd) {
-					await axios.post(`${API_BASE}/sections-instructors`, {
-						sectionId: selectedSection,
-						teacherId,
-						role: "owner",
-					});
+				// Thêm phân công mới (bulk)
+				if (toAdd.length > 0) {
+					await axios.post(
+						`${API_BASE}/subject-instructors/bulk-assign-teachers`,
+						{
+							subjectId: selectedSubject,
+							teacherIds: toAdd,
+							role: "co",
+						}
+					);
 				}
 
-				// Xóa phân công cũ
-				for (const teacherId of toRemove) {
-					await axios.delete(`${API_BASE}/sections-instructors/${selectedSection}/${teacherId}`);
+				// Xóa phân công cũ (bulk)
+				if (toRemove.length > 0) {
+					await axios.delete(
+						`${API_BASE}/subject-instructors/bulk-remove-teachers`,
+						{
+							data: {
+								subjectId: selectedSubject,
+								teacherIds: toRemove,
+							},
+						}
+					);
 				}
 
 				if (toAdd.length > 0 || toRemove.length > 0) {
-					toast.success(`Đã cập nhật phân công (thêm: ${toAdd.length}, xóa: ${toRemove.length})`);
+					toast.success(
+						`Đã cập nhật phân công (thêm: ${toAdd.length}, xóa: ${toRemove.length})`
+					);
 				} else {
-					toast.error("Không có thay đổi nào");
+					toast.success("Không có thay đổi nào");
 				}
 			}
 
@@ -273,18 +312,19 @@ export default function Instructors() {
 			resetModal();
 			fetchInstructors();
 		} catch (err: any) {
-			const errorMsg = err?.response?.data?.message || "Không thể cập nhật phân công";
+			const errorMsg =
+				err?.response?.data?.message || "Không thể cập nhật phân công";
 			toast.error(errorMsg);
 		}
 	};
 
 	const resetModal = () => {
 		setSelectedTeacher(null);
-		setSelectedSections([]);
-		setSelectedSection(null);
+		setSelectedSubjects([]);
+		setSelectedSubject(null);
 		setSelectedTeachers([]);
 		setActiveTab("byTeacher");
-		setSearchSection("");
+		setSearchSubject("");
 		setSearchTeacher("");
 	};
 
@@ -292,26 +332,15 @@ export default function Instructors() {
 		{
 			title: "Môn học",
 			key: "subject",
-			render: (_: any, record: Instructor) => (
+			render: (_: any, record: SubjectInstructor) => (
 				<div>
 					<div>
-						<strong>{record.section?.subject?.subjectCode}</strong> -{" "}
-						{record.section?.subject?.subjectName}
+						<strong>{record.subject?.subjectCode}</strong> -{" "}
+						{record.subject?.subjectName}
 					</div>
 					<div style={{ fontSize: 12, color: "#666" }}>
-						{record.section?.sectionCode} - {record.section?.sectionName}
-					</div>
-				</div>
-			),
-		},
-		{
-			title: "Học kỳ",
-			key: "term",
-			render: (_: any, record: Instructor) => (
-				<div>
-					<div>{record.section?.term?.name}</div>
-					<div style={{ fontSize: 12, color: "#666" }}>
-						{record.section?.term?.code}
+						<GraduationCap size={12} style={{ display: "inline", marginRight: 4 }} />
+						{record.subject?.credits} tín chỉ
 					</div>
 				</div>
 			),
@@ -319,7 +348,7 @@ export default function Instructors() {
 		{
 			title: "Giảng viên",
 			key: "teacher",
-			render: (_: any, record: Instructor) => (
+			render: (_: any, record: SubjectInstructor) => (
 				<div>
 					<div>
 						<strong>{record.teacher?.user?.fullName}</strong>
@@ -327,6 +356,11 @@ export default function Instructors() {
 					<div style={{ fontSize: 12, color: "#666" }}>
 						{record.teacher?.teacherCode} - {record.teacher?.user?.email}
 					</div>
+					{record.teacher?.user?.phone && (
+						<div style={{ fontSize: 12, color: "#666" }}>
+							📞 {record.teacher?.user?.phone}
+						</div>
+					)}
 				</div>
 			),
 		},
@@ -342,13 +376,38 @@ export default function Instructors() {
 			render: (text: string) => <Tag color="blue">{text}</Tag>,
 		},
 		{
+			title: "Chuyên môn",
+			dataIndex: ["teacher", "specialization"],
+			key: "specialization",
+			render: (text: string) => (
+				<Tooltip title={text}>
+					<span style={{ fontSize: 12 }}>{text}</span>
+				</Tooltip>
+			),
+		},
+		{
 			title: "Vai trò",
 			dataIndex: "role",
 			key: "role",
-			render: (role: string) => (
-				<Tag color={role === "owner" ? "green" : "default"}>
-					{role === "owner" ? "Chủ nhiệm" : role}
-				</Tag>
+			render: (role: string) => {
+				const roleConfig: any = {
+					owner: { color: "green", text: "Chủ nhiệm" },
+					co: { color: "blue", text: "Đồng giảng" },
+					ta: { color: "orange", text: "Trợ giảng" },
+				};
+				const config = roleConfig[role] || { color: "default", text: role };
+				return <Tag color={config.color}>{config.text}</Tag>;
+			},
+		},
+		{
+			title: "Trạng thái",
+			dataIndex: "isActive",
+			key: "isActive",
+			render: (isActive: boolean) => (
+				<Badge
+					status={isActive ? "success" : "default"}
+					text={isActive ? "Đang hoạt động" : "Không hoạt động"}
+				/>
 			),
 		},
 		{
@@ -361,15 +420,24 @@ export default function Instructors() {
 			title: "Hành động",
 			key: "actions",
 			align: "center" as const,
-			render: (_: any, record: Instructor) => (
+			render: (_: any, record: SubjectInstructor) => (
 				<Tooltip title="Xóa phân công">
 					<Popconfirm
 						title="Xóa phân công"
-						description="Bạn có chắc muốn xóa phân công này?"
+						description={
+							<div>
+								<p>Bạn có chắc muốn xóa phân công này?</p>
+								<p style={{ color: "#ff4d4f", fontSize: 12 }}>
+									<InfoCircleOutlined /> Lưu ý: Giảng viên đang dạy lớp học của môn này sẽ không thể xóa
+								</p>
+							</div>
+						}
 						okText="Xóa"
 						cancelText="Hủy"
 						okButtonProps={{ danger: true }}
-						onConfirm={() => handleDelete(record.sectionId, record.teacherId)}
+						onConfirm={() =>
+							handleDelete(record.subjectId, record.teacherId)
+						}
 					>
 						<Button danger size="small" icon={<DeleteOutlined />} />
 					</Popconfirm>
@@ -382,26 +450,28 @@ export default function Instructors() {
 		if (!keyword) return true;
 		const kw = keyword.toLowerCase();
 		return (
-			i.section?.subject?.subjectCode?.toLowerCase().includes(kw) ||
-			i.section?.subject?.subjectName?.toLowerCase().includes(kw) ||
-			i.section?.sectionCode?.toLowerCase().includes(kw) ||
+			i.subject?.subjectCode?.toLowerCase().includes(kw) ||
+			i.subject?.subjectName?.toLowerCase().includes(kw) ||
 			i.teacher?.user?.fullName?.toLowerCase().includes(kw) ||
 			i.teacher?.teacherCode?.toLowerCase().includes(kw) ||
-			i.teacher?.department?.toLowerCase().includes(kw)
+			i.teacher?.department?.toLowerCase().includes(kw) ||
+			i.teacher?.specialization?.toLowerCase().includes(kw)
 		);
 	});
 
 	return (
 		<div className="pl-3 pr-3">
-			<div style={{
-				display: "flex",
-				justifyContent: "space-between",
-				alignItems: "center",
-				marginBottom: 16,
-			}}>
+			<div
+				style={{
+					display: "flex",
+					justifyContent: "space-between",
+					alignItems: "center",
+					marginBottom: 16,
+				}}
+			>
 				<Title level={3} className="mt-2">
 					<div className="flex items-center gap-2">
-						<UserCog /> Quản lý phân công
+						<UserCog /> Quản lý phân công giảng viên
 					</div>
 				</Title>
 				<div style={{ display: "flex", gap: 8 }}>
@@ -424,7 +494,7 @@ export default function Instructors() {
 							setModalOpen(true);
 						}}
 					>
-						Thêm phân công
+						Phân công
 					</Button>
 				</div>
 			</div>
@@ -434,10 +504,10 @@ export default function Instructors() {
 					<Spin size="large" tip="Đang tải danh sách phân công..." />
 				</div>
 			) : (
-				<Table<Instructor>
+				<Table<SubjectInstructor>
 					dataSource={filteredInstructors}
 					columns={columns}
-					rowKey={(record) => `${record.sectionId}-${record.teacherId}`}
+					rowKey={(record) => `${record.subjectId}-${record.teacherId}`}
 					bordered
 					pagination={{
 						pageSize: 10,
@@ -450,26 +520,28 @@ export default function Instructors() {
 
 			{/* Modal thêm phân công */}
 			<Modal
-				title="Thêm phân công giảng viên"
+				title="Phân công giảng viên giảng dạy môn học"
 				open={modalOpen}
 				onCancel={() => {
 					setModalOpen(false);
 					resetModal();
 				}}
 				onOk={handleAssign}
-				okText="Phân công"
+				okText="Lưu phân công"
 				cancelText="Hủy"
 				width={700}
 				centered
 				bodyStyle={{
-					maxHeight: "70vh", // Giới hạn chiều cao modal
+					maxHeight: "70vh",
 					height: "70vh",
-					overflowY: "auto", // Thêm scroll dọc
+					overflowY: "auto",
 				}}
 			>
 				<Tabs
 					activeKey={activeTab}
-					onChange={(key) => setActiveTab(key as "byTeacher" | "bySection")}
+					onChange={(key) =>
+						setActiveTab(key as "byTeacher" | "bySubject")
+					}
 					style={{ marginTop: -10 }}
 					items={[
 						{
@@ -481,9 +553,12 @@ export default function Instructors() {
 							),
 							children: (
 								<div style={{ marginTop: -20 }}>
-									<Space direction="vertical" style={{ width: "100%" }} size="small" >
-										<Card size="small" title="1. Chọn giảng viên"
-										>
+									<Space
+										direction="vertical"
+										style={{ width: "100%" }}
+										size="small"
+									>
+										<Card size="small" title="1. Chọn giảng viên">
 											<Select
 												showSearch
 												style={{ width: "100%" }}
@@ -491,7 +566,9 @@ export default function Instructors() {
 												value={selectedTeacher}
 												onChange={setSelectedTeacher}
 												filterOption={(input, option) =>
-													(option?.label ?? "").toLowerCase().includes(input.toLowerCase())
+													(option?.label ?? "")
+														.toLowerCase()
+														.includes(input.toLowerCase())
 												}
 												options={teachers.map((t) => ({
 													value: t.id,
@@ -500,44 +577,67 @@ export default function Instructors() {
 											/>
 										</Card>
 
-										<Card size="small" title="2. Chọn các môn học cần phân công">
+										<Card
+											size="small"
+											title="2. Chọn các môn học cần phân công"
+										>
 											<Input
 												allowClear
 												prefix={<SearchOutlined />}
 												placeholder="Tìm kiếm môn học..."
-												value={searchSection}
-												onChange={(e) => setSearchSection(e.target.value)}
+												value={searchSubject}
+												onChange={(e) =>
+													setSearchSubject(e.target.value)
+												}
 												style={{ marginBottom: 12 }}
 											/>
 											<Checkbox.Group
 												style={{ width: "100%" }}
-												value={selectedSections}
-												onChange={setSelectedSections}
+												value={selectedSubjects}
+												onChange={setSelectedSubjects}
 											>
-												<div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 300, overflowY: "auto" }} className="w-[100%]">
-													{courseSections
-														.filter((section) => {
-															if (!searchSection) return true;
-															const search = searchSection.toLowerCase();
+												<div
+													style={{
+														display: "flex",
+														flexDirection: "column",
+														gap: 8,
+														maxHeight: 300,
+														overflowY: "auto",
+													}}
+													className="w-[100%]"
+												>
+													{subjects
+														.filter((subject) => {
+															if (!searchSubject) return true;
+															const search =
+																searchSubject.toLowerCase();
 															return (
-																section.subject?.subjectCode?.toLowerCase().includes(search) ||
-																section.subject?.subjectName?.toLowerCase().includes(search) ||
-																section.sectionCode?.toLowerCase().includes(search) ||
-																section.sectionName?.toLowerCase().includes(search) ||
-																section.term?.name?.toLowerCase().includes(search)
+																subject.subjectCode
+																	?.toLowerCase()
+																	.includes(search) ||
+																subject.subjectName
+																	?.toLowerCase()
+																	.includes(search)
 															);
 														})
-														.map((section) => (
+														.map((subject) => (
 															<Checkbox
-																key={section.id}
-																value={section.id}
+																key={subject.id}
+																value={subject.id}
 																disabled={!selectedTeacher}
 															>
 																<div>
-																	<strong>{section.subject?.subjectCode}</strong> -{" "}
-																	{section.subject?.subjectName}
-																	<div style={{ fontSize: 12, color: "#666" }}>
-																		{section.sectionCode} - {section.sectionName} - {section.term?.name}
+																	<strong>
+																		{subject.subjectCode}
+																	</strong>{" "}
+																	- {subject.subjectName}
+																	<div
+																		style={{
+																			fontSize: 12,
+																			color: "#666",
+																		}}
+																	>
+																		{subject.credits} tín chỉ
 																	</div>
 																</div>
 															</Checkbox>
@@ -550,7 +650,7 @@ export default function Instructors() {
 							),
 						},
 						{
-							key: "bySection",
+							key: "bySubject",
 							label: (
 								<span>
 									<BookOutlined /> Theo môn học
@@ -558,31 +658,42 @@ export default function Instructors() {
 							),
 							children: (
 								<div style={{ marginTop: -20 }}>
-									<Space direction="vertical" style={{ width: "100%" }} size="small">
+									<Space
+										direction="vertical"
+										style={{ width: "100%" }}
+										size="small"
+									>
 										<Card size="small" title="1. Chọn môn học">
 											<Select
 												showSearch
 												style={{ width: "100%" }}
 												placeholder="Chọn môn học"
-												value={selectedSection}
-												onChange={setSelectedSection}
+												value={selectedSubject}
+												onChange={setSelectedSubject}
 												filterOption={(input, option) =>
-													(option?.label ?? "").toLowerCase().includes(input.toLowerCase())
+													(option?.label ?? "")
+														.toLowerCase()
+														.includes(input.toLowerCase())
 												}
-												options={courseSections.map((s) => ({
+												options={subjects.map((s) => ({
 													value: s.id,
-													label: `${s.subject?.subjectCode} - ${s.subject?.subjectName} (${s.sectionCode}) - ${s.term?.name}`,
+													label: `${s.subjectCode} - ${s.subjectName} (${s.credits} TC)`,
 												}))}
 											/>
 										</Card>
 
-										<Card size="small" title="2. Chọn các giảng viên cần phân công">
+										<Card
+											size="small"
+											title="2. Chọn các giảng viên cần phân công"
+										>
 											<Input
 												allowClear
 												prefix={<SearchOutlined />}
 												placeholder="Tìm kiếm giảng viên..."
 												value={searchTeacher}
-												onChange={(e) => setSearchTeacher(e.target.value)}
+												onChange={(e) =>
+													setSearchTeacher(e.target.value)
+												}
 												style={{ marginBottom: 12 }}
 											/>
 											<Checkbox.Group
@@ -590,25 +701,59 @@ export default function Instructors() {
 												value={selectedTeachers}
 												onChange={setSelectedTeachers}
 											>
-												<div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 300, overflowY: "auto" }} className="w-[100%]">
+												<div
+													style={{
+														display: "flex",
+														flexDirection: "column",
+														gap: 8,
+														maxHeight: 300,
+														overflowY: "auto",
+													}}
+													className="w-[100%]"
+												>
 													{teachers
 														.filter((teacher) => {
 															if (!searchTeacher) return true;
-															const search = searchTeacher.toLowerCase();
+															const search =
+																searchTeacher.toLowerCase();
 															return (
-																teacher.user?.fullName?.toLowerCase().includes(search) ||
-																teacher.teacherCode?.toLowerCase().includes(search) ||
-																teacher.department?.toLowerCase().includes(search) ||
-																teacher.position?.toLowerCase().includes(search) ||
-																teacher.specialization?.toLowerCase().includes(search)
+																teacher.user?.fullName
+																	?.toLowerCase()
+																	.includes(search) ||
+																teacher.teacherCode
+																	?.toLowerCase()
+																	.includes(search) ||
+																teacher.department
+																	?.toLowerCase()
+																	.includes(search) ||
+																teacher.position
+																	?.toLowerCase()
+																	.includes(search) ||
+																teacher.specialization
+																	?.toLowerCase()
+																	.includes(search)
 															);
 														})
 														.map((teacher) => (
-															<Checkbox key={teacher.id} value={teacher.id}>
+															<Checkbox
+																key={teacher.id}
+																value={teacher.id}
+																disabled={!selectedSubject}
+															>
 																<div>
-																	<strong>{teacher.user?.fullName}</strong> ({teacher.teacherCode})
-																	<div style={{ fontSize: 12, color: "#666" }}>
-																		{teacher.department} - {teacher.position} - {teacher.specialization}
+																	<strong>
+																		{teacher.user?.fullName}
+																	</strong>{" "}
+																	({teacher.teacherCode})
+																	<div
+																		style={{
+																			fontSize: 12,
+																			color: "#666",
+																		}}
+																	>
+																		{teacher.department} -{" "}
+																		{teacher.position} -{" "}
+																		{teacher.specialization}
 																	</div>
 																</div>
 															</Checkbox>

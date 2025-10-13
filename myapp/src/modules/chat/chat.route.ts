@@ -1,15 +1,24 @@
 import { Router } from "express";
-import validate from "../../middlewares/validate";
 import {
     createChatRoomSchema,
     updateChatRoomSchema,
+    getChatRoomByContextSchema, // 👈 Thêm import
 } from "./chat.validation";
 import * as chatController from "./chat.controller";
+import validate from "@/middlewares/validate";
 const router = Router();
 
 // 📌 CRUD ChatRoom
 router.get("/", chatController.getAllChatRooms);
-router.get("/:id", chatController.getChatRoomById);
+
+// ⚠️ ĐẶT /by-context TRƯỚC /:id
+router.get(
+    "/by-context",
+    validate(getChatRoomByContextSchema),
+    chatController.getChatRoomByContext
+);
+
+router.get("/:id", chatController.getChatRoomById); // 👈 Route này phải sau
 router.post("/", validate(createChatRoomSchema), chatController.createChatRoom);
 router.put(
     "/:id",
