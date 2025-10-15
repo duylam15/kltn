@@ -1,31 +1,31 @@
 import { Router } from "express";
-import userRoute from "../modules/user/user.route";
-import studentRoute from "../modules/student/student.route";
-import teacherRoute from "../modules/teacher/teacher.route";
-import subjectRoute from "../modules/subject/subject.route";
-import sectionEnrollmentRoute from "../modules/sectionEnrollment/sectionEnrollment.route";
-import termRoute from "../modules/term/term.route";
-import courseSectionRoute from "../modules/courseSection/courseSection.route";
-import sectionInstructorRoute from "../modules/sectionInstructor/sectionInstructor.route";
-import sectionGroupRoute from "../modules/sectionGroup/sectionGroup.route";
-import authRoutes from "../modules/auth/auth.routes";
-import materialRoutes from "../modules/materials/materials.route";
-import attendanceRoute from "../modules/attendance/attendance.route";
-import roleRoute from "../modules/role/role.route";
-import permissionRoute from "../modules/permission/permission.route";
-import assignmentRoute from "../modules/assignment/assignment.route";
-import questionRoute from "../modules/questions/questions.route";
-import sectionAssignmentRoute from "../modules/sectionAssignment/sectionAssignment.route";
-import assignmentQuestionRoute from "../modules/assignmentQuestion/assignmentQuestion.route";
-import questionChoiceRoute from "../modules/questionChoice/questionChoice.route";
+import userRoute from "../modules/UserManagement/user/user.route";
+import studentRoute from "../modules/UserManagement/student/student.route";
+import teacherRoute from "../modules/UserManagement/teacher/teacher.route";
+import subjectRoute from "../modules/CourseSectionManagement/subject/subject.route";
+import sectionEnrollmentRoute from "../modules/CourseSectionManagement/sectionEnrollment/sectionEnrollment.route";
+import termRoute from "../modules/CourseSectionManagement/term/term.route";
+import courseSectionRoute from "../modules/CourseSectionManagement/courseSection/courseSection.route";
+import sectionInstructorRoute from "../modules/CourseSectionManagement/sectionInstructor/sectionInstructor.route";
+import sectionGroupRoute from "../modules/CourseSectionManagement/sectionGroup/sectionGroup.route";
+import authRoutes from "../modules/Auth/auth/auth.routes";
+import materialRoutes from "../modules/MaterialsLearing/materials/materials.route";
+import attendanceRoute from "../modules/AttendanceSystem/attendance/attendance.route";
+import roleRoute from "../modules/Auth/role/role.route";
+import permissionRoute from "../modules/Auth/permission/permission.route";
+import assignmentRoute from "../modules/AssignmentAssessment/assignment/assignment.route";
+import questionRoute from "../modules/AssignmentAssessment/questions/questions.route";
+import sectionAssignmentRoute from "../modules/AssignmentAssessment/sectionAssignment/sectionAssignment.route";
+import assignmentQuestionRoute from "../modules/AssignmentAssessment/assignmentQuestion/assignmentQuestion.route";
+import questionChoiceRoute from "../modules/AssignmentAssessment/questionChoice/questionChoice.route";
 import chatRoutes from "../modules/chat/chat.route";
 import notificationRoute from "../modules/notification/notification.route";
-import gradeColumnRoute from "../modules/gradeColumn/gradeColumn.route";
-import gradeSummaryRoute from "../modules/gradeSummary/gradeSummary.route";
-import gradeFormulaRoute from "../modules/gradeFormula/gradeFormula.route";
-import gradeRoute from "../modules/grade/grade.route";
-import gradeTemplateRoute from "../modules/gradeTemplate/gradeTemplate.route";
-
+import gradeColumnRoute from "../modules/GradeManagement/gradeColumn/gradeColumn.route";
+import gradeRoute from "../modules/GradeManagement/grade/grade.route";
+import chapterRoute from "../modules/AssignmentAssessment/chapter/chapter.route";
+import questionSubjectRoute from "../modules/AssignmentAssessment/questionSubject/questionSubject.route";
+import assignmentGeneratorRouter from "../modules/AssignmentAssessment/assignmentGenerator/assignmentGenerator.route";
+import subjectInstructorRoute from "@/modules/CourseSectionManagement/subjectInstructor/subjectInstructor.route";
 
 const router = Router();
 
@@ -52,11 +52,9 @@ router.use("/questions-choices", questionChoiceRoute);
 router.use("/chats", chatRoutes);
 router.use("/notifications", notificationRoute);
 router.use("/grade-columns", gradeColumnRoute);
-router.use("/grade-summary", gradeSummaryRoute);
-router.use("/grade-formulas", gradeFormulaRoute);
-router.use("/grade-template", gradeTemplateRoute);
 router.use("/grades", gradeRoute);
-
-
-
+router.use("/chapters", chapterRoute);
+router.use("/question-subjects", questionSubjectRoute);
+router.use("/assignment-generator", assignmentGeneratorRouter);
+router.use("/subject-instructors", subjectInstructorRoute);
 export default router;

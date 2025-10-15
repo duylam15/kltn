@@ -16,6 +16,10 @@ import {
 	Col,
 	Checkbox,
 	Divider,
+	Space,
+	Card,
+	Statistic,
+	InputNumber,
 } from "antd";
 import {
 	ReloadOutlined,
@@ -25,6 +29,9 @@ import {
 	DeleteOutlined,
 	BookOutlined,
 	ApartmentOutlined,
+	FilterOutlined,
+	ClearOutlined,
+	ThunderboltOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -33,7 +40,7 @@ import { FileQuestion } from "lucide-react";
 import { useAuth } from "../../context/authContext";
 import { v4 as uuidv4 } from "uuid";
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 const { Option } = Select;
 const API_BASE = "http://localhost:4000/api/v1";
 
@@ -48,8 +55,8 @@ type Assignment = {
 	passingScore?: number;
 	timeLimit?: number;
 	maxAttempts?: number;
-	createdBy?: number;              // ← THÊM
-	originalAssignmentId?: number;   // ← THÊM
+	createdBy?: number;
+	originalAssignmentId?: string;
 	shuffleQuestions?: boolean;
 	showAnswersAfterSubmit?: boolean;
 	allowLateSubmission?: boolean;
@@ -67,8 +74,41 @@ type Question = {
 	id: number;
 	content: string;
 	type: string;
-	difficulty?: string;
+	difficulty?: "easy" | "medium" | "hard";
 	points?: number;
+	subjectId?: number;
+	chapterId?: number;
+	subject?: {
+		id: number;
+		subjectCode: string;
+		subjectName: string;
+	};
+	chapter?: {
+		id: number;
+		chapterCode: string;
+		chapterName: string;
+	};
+};
+
+type QuestionSubject = {
+	id: number;
+	subjectCode: string;
+	subjectName: string;
+};
+
+type Chapter = {
+	id: number;
+	subjectId: number;
+	chapterCode: string;
+	chapterName: string;
+};
+
+// 🆕 Type cho auto generate
+type ChapterRule = {
+	chapterId: number;
+	easy: { count: number; pointPerQuestion: number };
+	medium: { count: number; pointPerQuestion: number };
+	hard: { count: number; pointPerQuestion: number };
 };
 
 export default function Assignments() {
@@ -94,14 +134,42 @@ export default function Assignments() {
 	const [loadingQuestions, setLoadingQuestions] = useState(false);
 	const [questionKeyword, setQuestionKeyword] = useState("");
 
-	const { user } = useAuth(); // ✅ thêm dòng này
-	  const teacherId = user?.id; // ID của giáo viên hiện tại
+	// 🆕 State cho filter câu hỏi
+	const [questionSubjects, setQuestionSubjects] = useState<QuestionSubject[]>([]);
+	const [chapters, setChapters] = useState<Chapter[]>([]);
+	const [selectedSubjectId, setSelectedSubjectId] = useState<number | undefined>();
+	const [selectedChapterId, setSelectedChapterId] = useState<number | undefined>();
+	const [selectedDifficulty, setSelectedDifficulty] = useState<string | undefined>();
+	const [selectedType, setSelectedType] = useState<string | undefined>();
+
+	// 🆕 State cho auto generate modal
+	const [autoGenModalOpen, setAutoGenModalOpen] = useState(false);
+	const [autoGenForm] = Form.useForm<any>();
+	const [generatingQuestions, setGeneratingQuestions] = useState(false);
+
+	const { user } = useAuth();
+	const teacherId = user?.id;
 
 	useEffect(() => {
 		fetchAssignments();
 		fetchSections();
-		fetchQuestions();
+		fetchQuestionSubjects();
 	}, []);
+
+	// 🆕 Fetch câu hỏi với filter
+	useEffect(() => {
+		fetchQuestions();
+	}, [selectedSubjectId, selectedChapterId, selectedDifficulty, selectedType]);
+
+	// 🆕 Load chapters khi chọn subject
+	useEffect(() => {
+		if (selectedSubjectId) {
+			fetchChaptersBySubject(selectedSubjectId);
+		} else {
+			setChapters([]);
+			setSelectedChapterId(undefined);
+		}
+	}, [selectedSubjectId]);
 
 	async function fetchAssignments() {
 		try {
@@ -112,7 +180,6 @@ export default function Assignments() {
 			if (res.data.success) {
 				setAssignments(res.data.data || []);
 			}
-			console.log(assignments);
 		} catch {
 			toast.error("Không tải được danh sách bài tập");
 		} finally {
@@ -133,16 +200,67 @@ export default function Assignments() {
 		}
 	}
 
-	async function fetchQuestions() {
+	// 🆕 Fetch question subjects
+	async function fetchQuestionSubjects() {
 		try {
-			const res = await axios.get<{ success: boolean; data: Question[] }>(
-				`${API_BASE}/questions`
+			const res = await axios.get<{
+				success: boolean;
+				data: QuestionSubject[];
+				meta: any;
+			}>(
+				`${API_BASE}/question-subjects?limit=100`
 			);
 			if (res.data.success) {
-				setQuestions(res.data.data || []);
+				setQuestionSubjects(res.data.data || []);
 			}
 		} catch {
+			toast.error("Không tải được danh sách môn học");
+		}
+	}
+
+	// 🆕 Fetch chapters by subject
+	async function fetchChaptersBySubject(subjectId: number) {
+		try {
+			const res = await axios.get<{ success: boolean; data: Chapter[] }>(
+				`${API_BASE}/question-subjects/${subjectId}/chapters`
+			);
+			if (res.data.success) {
+				setChapters(res.data.data || []);
+			}
+		} catch {
+			toast.error("Không tải được danh sách chương");
+			setChapters([]);
+		}
+	}
+
+	// 🆕 Fetch questions với filter
+	async function fetchQuestions() {
+		try {
+			setLoadingQuestions(true);
+			const params: any = { page: 1, limit: 1000 };
+
+			if (selectedSubjectId) params.subjectId = selectedSubjectId;
+			if (selectedChapterId) params.chapterId = selectedChapterId;
+			if (selectedDifficulty) params.difficulty = selectedDifficulty;
+			if (selectedType) params.type = selectedType;
+
+			const res = await axios.get<{
+				success: boolean;
+				data: Question[] | { items: Question[] };
+			}>(`${API_BASE}/questions`, { params });
+
+			if (res.data.success) {
+				// Handle cả 2 format response
+				const items = Array.isArray(res.data.data)
+					? res.data.data
+					: (res.data.data as any).items || [];
+				setQuestions(items);
+			}
+		} catch (error) {
+			console.error("Error fetching questions:", error);
 			toast.error("Không tải được danh sách câu hỏi");
+		} finally {
+			setLoadingQuestions(false);
 		}
 	}
 
@@ -159,12 +277,10 @@ export default function Assignments() {
 	const handleSubmit = async () => {
 		try {
 			const values = await form.validateFields();
-			const uniqueCode = uuidv4(); // 👈 mã ngẫu nhiên
+			const uniqueCode = uuidv4();
 
 			const payload = {
-				// nếu sectionId optional thì chỉ thêm nếu có nhập
 				...(values.sectionId ? { sectionId: Number(values.sectionId) } : {}),
-
 				title: values.title.trim(),
 				description: values.description?.trim(),
 				type: values.type,
@@ -176,7 +292,7 @@ export default function Assignments() {
 				shuffleQuestions: values.shuffleQuestions || false,
 				showAnswersAfterSubmit: values.showAnswersAfterSubmit || false,
 				allowLateSubmission: values.allowLateSubmission || false,
-				createdBy: teacherId, // hoặc lấy từ context, token decode
+				createdBy: teacherId,
 				originalAssignmentId: uniqueCode
 			};
 
@@ -188,7 +304,6 @@ export default function Assignments() {
 					payload
 				);
 				assignmentId = editing.id;
-				console.log(res);
 				toast.success("Đã cập nhật bài tập");
 			} else {
 				const res = await axios.post(`${API_BASE}/assignments`, payload);
@@ -196,7 +311,6 @@ export default function Assignments() {
 				toast.success("Đã tạo bài tập mới");
 			}
 
-			// Gán câu hỏi
 			await saveQuestionAssignments(assignmentId);
 
 			setModalOpen(false);
@@ -204,6 +318,7 @@ export default function Assignments() {
 			form.resetFields();
 			setTempSelectedQuestionIds([]);
 			setAssignedQuestionIds([]);
+			resetFilters();
 			fetchAssignments();
 		} catch (err: any) {
 			if (err?.errorFields) return;
@@ -213,21 +328,16 @@ export default function Assignments() {
 		}
 	};
 
-
-	// Lưu gán câu hỏi - chỉ xử lý thay đổi
 	const saveQuestionAssignments = async (assignmentId: number) => {
 		try {
-			// Tìm câu hỏi cần thêm (có trong temp nhưng không có trong assigned ban đầu)
 			const toAdd = tempSelectedQuestionIds.filter(
 				(id) => !assignedQuestionIds.includes(id)
 			);
 
-			// Tìm câu hỏi cần xóa (có trong assigned ban đầu nhưng không có trong temp)
 			const toRemove = assignedQuestionIds.filter(
 				(id) => !tempSelectedQuestionIds.includes(id)
 			);
 
-			// Thực hiện các API call
 			const addPromises = toAdd.map((questionId) =>
 				axios.post(
 					`${API_BASE}/assignments-questions/assignments/${assignmentId}/questions/${questionId}`
@@ -252,7 +362,6 @@ export default function Assignments() {
 		}
 	};
 
-	// Mở modal gán lớp
 	const openAssignModal = async (assignment: Assignment) => {
 		setSelectedAssignment(assignment);
 		try {
@@ -272,7 +381,6 @@ export default function Assignments() {
 		setAssignModalOpen(true);
 	};
 
-	// Mở modal tạo/sửa và load câu hỏi đã gán
 	const openCreateEditModal = async (assignment?: Assignment) => {
 		if (assignment) {
 			setEditing(assignment);
@@ -281,7 +389,6 @@ export default function Assignments() {
 				dueDate: assignment.dueDate ? dayjs(assignment.dueDate) : null,
 			});
 
-			// Load câu hỏi đã gán từ API
 			setLoadingQuestions(true);
 			try {
 				const res = await axios.get<{
@@ -296,7 +403,6 @@ export default function Assignments() {
 				);
 
 				if (res.data.success && res.data.data) {
-					// Lấy danh sách questionId từ response
 					const questionIds = res.data.data.map((item) => item.questionId);
 					setAssignedQuestionIds(questionIds);
 					setTempSelectedQuestionIds(questionIds);
@@ -318,10 +424,58 @@ export default function Assignments() {
 			setAssignedQuestionIds([]);
 			setTempSelectedQuestionIds([]);
 		}
+		resetFilters();
 		setModalOpen(true);
 	};
 
-	// Toggle checkbox tạm thời cho sections
+	// 🆕 Mở modal auto generate
+	const openAutoGenModal = (assignment?: Assignment) => {
+		if (assignment) {
+			setEditing(assignment);
+		} else {
+			setEditing(null);
+			form.resetFields();
+		}
+		autoGenForm.resetFields();
+		setAutoGenModalOpen(true);
+	};
+
+	// 🆕 Handle auto generate
+	const handleAutoGenerate = async () => {
+		try {
+			const values = await autoGenForm.validateFields();
+
+			// Validate assignment exists
+			if (!editing) {
+				toast.error("Vui lòng tạo bài tập trước khi tự động tạo câu hỏi");
+				return;
+			}
+
+			setGeneratingQuestions(true);
+
+			// Gọi API auto generate
+			const res = await axios.post(`${API_BASE}/assignment-generator/generate`, {
+				assignmentId: editing.id,
+				subjectId: values.subjectId,
+				totalScore: 10,
+				chapterRules: values.chapterRules || [],
+			});
+
+			if (res.data.success) {
+				toast.success(`Đã tự động tạo ${res.data.data.totalQuestionsAdded} câu hỏi!`);
+				setAutoGenModalOpen(false);
+				autoGenForm.resetFields();
+				// Refresh assignment
+				fetchAssignments();
+			}
+		} catch (err: any) {
+			if (err?.errorFields) return;
+			toast.error(err?.response?.data?.message || "Không thể tự động tạo câu hỏi");
+		} finally {
+			setGeneratingQuestions(false);
+		}
+	};
+
 	const toggleTempSelection = (sectionId: number, checked: boolean) => {
 		if (checked) {
 			setTempSelectedSectionIds((prev) => [...prev, sectionId]);
@@ -330,7 +484,6 @@ export default function Assignments() {
 		}
 	};
 
-	// Toggle checkbox tạm thời cho questions
 	const toggleTempQuestionSelection = (questionId: number, checked: boolean) => {
 		if (checked) {
 			setTempSelectedQuestionIds((prev) => [...prev, questionId]);
@@ -339,7 +492,6 @@ export default function Assignments() {
 		}
 	};
 
-	// Lưu gán lớp - gọi API
 	const handleSaveAssignment = async () => {
 		if (!selectedAssignment) return;
 
@@ -376,6 +528,39 @@ export default function Assignments() {
 		} finally {
 			setSavingAssignment(false);
 		}
+	};
+
+	// 🆕 Reset filters
+	const resetFilters = () => {
+		setSelectedSubjectId(undefined);
+		setSelectedChapterId(undefined);
+		setSelectedDifficulty(undefined);
+		setSelectedType(undefined);
+		setQuestionKeyword("");
+	};
+
+	// 🎨 Render difficulty tag
+	const renderDifficultyTag = (difficulty?: string) => {
+		const config: Record<string, { color: string; text: string }> = {
+			easy: { color: "green", text: "Dễ" },
+			medium: { color: "orange", text: "Trung bình" },
+			hard: { color: "red", text: "Khó" },
+		};
+		if (!difficulty) return null;
+		const diff = config[difficulty] || { color: "default", text: difficulty };
+		return <Tag color={diff.color}>{diff.text}</Tag>;
+	};
+
+	// 🎨 Render type tag
+	const renderTypeTag = (type: string) => {
+		const config: Record<string, { color: string; text: string }> = {
+			multiple_choice: { color: "blue", text: "Trắc nghiệm" },
+			essay: { color: "purple", text: "Tự luận" },
+			coding: { color: "cyan", text: "Lập trình" },
+			true_false: { color: "geekblue", text: "Đúng/Sai" },
+		};
+		const t = config[type] || { color: "default", text: type };
+		return <Tag color={t.color}>{t.text}</Tag>;
 	};
 
 	const columns = [
@@ -429,6 +614,15 @@ export default function Assignments() {
 							icon={<EditOutlined />}
 							size="small"
 							onClick={() => openCreateEditModal(record)}
+						/>
+					</Tooltip>
+					<Tooltip title="Tự động tạo câu hỏi">
+						<Button
+							icon={<ThunderboltOutlined />}
+							size="small"
+							type="primary"
+							ghost
+							onClick={() => openAutoGenModal(record)}
 						/>
 					</Tooltip>
 					<Tooltip title="Xóa">
@@ -524,7 +718,7 @@ export default function Assignments() {
 				/>
 			)}
 
-			{/* Modal thêm/sửa - 2 cột */}
+			{/* Modal thêm/sửa - với filter câu hỏi */}
 			<Modal
 				title={editing ? "Sửa thông tin bài tập" : "Thêm bài tập mới"}
 				open={modalOpen}
@@ -533,28 +727,28 @@ export default function Assignments() {
 					setEditing(null);
 					setTempSelectedQuestionIds([]);
 					setAssignedQuestionIds([]);
-					setQuestionKeyword("");
+					resetFilters();
 				}}
 				onOk={handleSubmit}
 				okText={editing ? "Lưu" : "Tạo mới"}
 				cancelText="Hủy"
-				width={1200}
+				width={1400}
 				centered
 				bodyStyle={{
-					maxHeight: "70vh", overflowY: "auto", overflowX: "hidden",
+					maxHeight: "75vh",
+					overflowY: "auto",
+					overflowX: "hidden",
 				}}
 			>
-
 				<Row gutter={24}>
 					{/* Cột trái: Thông tin bài tập */}
-					<Col span={12}>
+					<Col span={10}>
 						<Title level={5} style={{ marginBottom: 12 }}>Thông tin bài tập</Title>
 
-						{/* Form compact */}
 						<Form
 							form={form}
 							layout="vertical"
-							className="[&_.ant-form-item]:mb-3" // ✅ ép margin-bottom chỉ còn ~12px
+							className="[&_.ant-form-item]:mb-3"
 						>
 							<Form.Item
 								label="Tiêu đề"
@@ -579,7 +773,8 @@ export default function Assignments() {
 									<Option value="quiz">Quiz</Option>
 									<Option value="project">Project</Option>
 									<Option value="exam">Exam</Option>
-								</Select>							</Form.Item>
+								</Select>
+							</Form.Item>
 
 							<Form.Item label="Hạn nộp" name="dueDate" className="mb-3">
 								<DatePicker
@@ -619,20 +814,140 @@ export default function Assignments() {
 								<Checkbox>Cho phép nộp muộn</Checkbox>
 							</Form.Item>
 						</Form>
-
 					</Col>
 
-					{/* Cột phải: Danh sách câu hỏi */}
-					<Col span={12}>
-						<Title level={5}>Câu hỏi</Title>
+					{/* Cột phải: Danh sách câu hỏi với filter */}
+					<Col span={14}>
+						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+							<Title level={5} style={{ margin: 0 }}>Câu hỏi</Title>
+							<Space>
+								<Button
+									icon={<ThunderboltOutlined />}
+									size="small"
+									type="primary"
+									onClick={() => openAutoGenModal(editing || undefined)}
+									disabled={!editing}
+								>
+									Tự động tạo
+								</Button>
+								<Button
+									icon={<ClearOutlined />}
+									size="small"
+									onClick={resetFilters}
+								>
+									Xóa bộ lọc
+								</Button>
+							</Space>
+						</div>
+
+						{/* 🆕 Bộ lọc */}
+						<Card size="small" style={{ marginBottom: 12, backgroundColor: "#fafafa" }}>
+							<Space direction="vertical" style={{ width: "100%" }} size="small">
+								<Row gutter={8}>
+									<Col span={12}>
+										<Text type="secondary" style={{ fontSize: 12 }}>Môn học:</Text>
+										<Select
+											allowClear
+											placeholder="Chọn môn học"
+											value={selectedSubjectId}
+											onChange={setSelectedSubjectId}
+											style={{ width: "100%" }}
+											size="small"
+										>
+											{questionSubjects.map((s) => (
+												<Option key={s.id} value={s.id}>
+													{s.subjectCode} - {s.subjectName}
+												</Option>
+											))}
+										</Select>
+									</Col>
+									<Col span={12}>
+										<Text type="secondary" style={{ fontSize: 12 }}>Chương:</Text>
+										<Select
+											allowClear
+											placeholder="Chọn chương"
+											value={selectedChapterId}
+											onChange={setSelectedChapterId}
+											disabled={!selectedSubjectId}
+											style={{ width: "100%" }}
+											size="small"
+										>
+											{chapters.map((c) => (
+												<Option key={c.id} value={c.id}>
+													{c.chapterCode} - {c.chapterName}
+												</Option>
+											))}
+										</Select>
+									</Col>
+								</Row>
+								<Row gutter={8}>
+									<Col span={12}>
+										<Text type="secondary" style={{ fontSize: 12 }}>Độ khó:</Text>
+										<Select
+											allowClear
+											placeholder="Chọn độ khó"
+											value={selectedDifficulty}
+											onChange={setSelectedDifficulty}
+											style={{ width: "100%" }}
+											size="small"
+										>
+											<Option value="easy">Dễ</Option>
+											<Option value="medium">Trung bình</Option>
+											<Option value="hard">Khó</Option>
+										</Select>
+									</Col>
+									<Col span={12}>
+										<Text type="secondary" style={{ fontSize: 12 }}>Loại câu hỏi:</Text>
+										<Select
+											allowClear
+											placeholder="Chọn loại"
+											value={selectedType}
+											onChange={setSelectedType}
+											style={{ width: "100%" }}
+											size="small"
+										>
+											<Option value="multiple_choice">Trắc nghiệm</Option>
+											<Option value="essay">Tự luận</Option>
+											<Option value="coding">Lập trình</Option>
+											<Option value="true_false">Đúng/Sai</Option>
+										</Select>
+									</Col>
+								</Row>
+							</Space>
+						</Card>
+
+						{/* Search */}
 						<Input
 							allowClear
 							prefix={<SearchOutlined />}
-							placeholder="Tìm câu hỏi..."
+							placeholder="Tìm theo nội dung câu hỏi..."
 							value={questionKeyword}
 							onChange={(e) => setQuestionKeyword(e.target.value)}
 							style={{ marginBottom: 12 }}
+							size="small"
 						/>
+
+						{/* Thống kê */}
+						<Card size="small" style={{ marginBottom: 12 }}>
+							<Row gutter={16}>
+								<Col span={12}>
+									<Statistic
+										title="Tổng số câu"
+										value={questions.length}
+										valueStyle={{ fontSize: 20 }}
+									/>
+								</Col>
+								<Col span={12}>
+									<Statistic
+										title="Đã chọn"
+										value={tempSelectedQuestionIds.length}
+										valueStyle={{ fontSize: 20, color: "#1890ff" }}
+									/>
+								</Col>
+							</Row>
+						</Card>
+
+						{/* Danh sách câu hỏi */}
 						<div
 							style={{
 								maxHeight: 400,
@@ -647,7 +962,11 @@ export default function Assignments() {
 									<Spin tip="Đang tải câu hỏi..." />
 								</div>
 							) : filteredQuestions.length === 0 ? (
-								<p style={{ textAlign: "center", color: "#999" }}>Không có câu hỏi nào</p>
+								<div style={{ textAlign: "center", padding: 20, color: "#999" }}>
+									<FilterOutlined style={{ fontSize: 32, marginBottom: 8 }} />
+									<p>Không tìm thấy câu hỏi phù hợp</p>
+									<Button size="small" onClick={resetFilters}>Xóa bộ lọc</Button>
+								</div>
 							) : (
 								filteredQuestions.map((q) => {
 									const checked = tempSelectedQuestionIds.includes(q.id);
@@ -679,13 +998,26 @@ export default function Assignments() {
 													style={{ marginTop: 4, cursor: "pointer" }}
 												/>
 												<div style={{ flex: 1 }}>
-													<div style={{ fontWeight: 500, marginBottom: 4 }}>
-														{q.content}
-													</div>
-													<div style={{ fontSize: 12, color: "#666" }}>
-														{q.type && <Tag color="blue">{q.type}</Tag>}
-														{q.difficulty && <Tag color="orange">{q.difficulty}</Tag>}
+													<div
+														style={{ fontWeight: 500, marginBottom: 4 }}
+														dangerouslySetInnerHTML={{
+															__html: q.content.substring(0, 100) + (q.content.length > 100 ? "..." : "")
+														}}
+													/>
+													<div style={{ fontSize: 12 }}>
+														{renderTypeTag(q.type)}
+														{renderDifficultyTag(q.difficulty)}
 														{q.points && <Tag color="green">{q.points} điểm</Tag>}
+														{q.subject && (
+															<Tag color="blue" icon={<BookOutlined />}>
+																{q.subject.subjectCode}
+															</Tag>
+														)}
+														{q.chapter && (
+															<Tag color="purple">
+																{q.chapter.chapterCode}
+															</Tag>
+														)}
 													</div>
 												</div>
 											</div>
@@ -694,11 +1026,125 @@ export default function Assignments() {
 								})
 							)}
 						</div>
-						<div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
-							Đã chọn: {tempSelectedQuestionIds.length} câu hỏi
-						</div>
 					</Col>
 				</Row>
+			</Modal>
+
+			{/* 🆕 Modal tự động tạo câu hỏi */}
+			<Modal
+				title={
+					<Space>
+						<ThunderboltOutlined />
+						Tự động tạo câu hỏi
+					</Space>
+				}
+				open={autoGenModalOpen}
+				onCancel={() => {
+					setAutoGenModalOpen(false);
+					autoGenForm.resetFields();
+				}}
+				onOk={handleAutoGenerate}
+				okText="Tạo câu hỏi"
+				cancelText="Hủy"
+				confirmLoading={generatingQuestions}
+				width={800}
+				centered
+			>
+				<Form form={autoGenForm} layout="vertical">
+					<Form.Item
+						label="Môn học"
+						name="subjectId"
+						rules={[{ required: true, message: "Vui lòng chọn môn học" }]}
+					>
+						<Select placeholder="Chọn môn học" onChange={(value) => {
+							fetchChaptersBySubject(value);
+							autoGenForm.setFieldValue("chapterRules", []);
+						}}>
+							{questionSubjects.map((s) => (
+								<Option key={s.id} value={s.id}>
+									{s.subjectCode} - {s.subjectName}
+								</Option>
+							))}
+						</Select>
+					</Form.Item>
+
+					<Divider>Cấu hình câu hỏi theo chương</Divider>
+
+					<Form.List name="chapterRules">
+						{(fields, { add, remove }) => (
+							<>
+								{fields.map(({ key, name, ...restField }) => (
+									<Card key={key} size="small" style={{ marginBottom: 12 }}>
+										<Row gutter={16}>
+											<Col span={24}>
+												<Form.Item
+													{...restField}
+													name={[name, "chapterId"]}
+													label="Chương"
+													rules={[{ required: true }]}
+												>
+													<Select placeholder="Chọn chương">
+														{chapters.map((c) => (
+															<Option key={c.id} value={c.id}>
+																{c.chapterCode} - {c.chapterName}
+															</Option>
+														))}
+													</Select>
+												</Form.Item>
+											</Col>
+										</Row>
+
+										<Row gutter={8}>
+											<Col span={8}>
+												<Text strong>Dễ:</Text>
+												<Form.Item {...restField} name={[name, "easy", "count"]} label="Số câu">
+													<InputNumber min={0} style={{ width: "100%" }} />
+												</Form.Item>
+												<Form.Item {...restField} name={[name, "easy", "pointPerQuestion"]} label="Điểm/câu">
+													<InputNumber min={0} step={0.5} style={{ width: "100%" }} />
+												</Form.Item>
+											</Col>
+
+											<Col span={8}>
+												<Text strong>Trung bình:</Text>
+												<Form.Item {...restField} name={[name, "medium", "count"]} label="Số câu">
+													<InputNumber min={0} style={{ width: "100%" }} />
+												</Form.Item>
+												<Form.Item {...restField} name={[name, "medium", "pointPerQuestion"]} label="Điểm/câu">
+													<InputNumber min={0} step={0.5} style={{ width: "100%" }} />
+												</Form.Item>
+											</Col>
+
+											<Col span={8}>
+												<Text strong>Khó:</Text>
+												<Form.Item {...restField} name={[name, "hard", "count"]} label="Số câu">
+													<InputNumber min={0} style={{ width: "100%" }} />
+												</Form.Item>
+												<Form.Item {...restField} name={[name, "hard", "pointPerQuestion"]} label="Điểm/câu">
+													<InputNumber min={0} step={0.5} style={{ width: "100%" }} />
+												</Form.Item>
+											</Col>
+										</Row>
+
+										<Button danger size="small" onClick={() => remove(name)}>
+											Xóa chương
+										</Button>
+									</Card>
+								))}
+
+								<Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+									Thêm chương
+								</Button>
+							</>
+						)}
+					</Form.List>
+
+					<Card size="small" style={{ marginTop: 16, backgroundColor: "#fff7e6" }}>
+						<Text type="warning">
+							⚠️ Tổng điểm phải bằng 10. Hệ thống sẽ tự động kiểm tra khi tạo.
+						</Text>
+					</Card>
+				</Form>
 			</Modal>
 
 			{/* Modal gán lớp */}

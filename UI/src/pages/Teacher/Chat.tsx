@@ -4,6 +4,7 @@ import { io, Socket } from "socket.io-client";
 import { useAuth } from "../../context/authContext";
 import { MoreVertical, Send, Users, Smile } from "lucide-react";
 import EmojiPicker, { type EmojiClickData } from "emoji-picker-react";
+import axios from "axios";
 
 type Sender = {
   id: number;
@@ -24,28 +25,64 @@ export default function Chat() {
   const [content, setContent] = useState("");
   const [socket, setSocket] = useState<Socket | null>(null);
   const [showEmoji, setShowEmoji] = useState(false);
+  const [roomId, setRoomId] = useState<number | null>(null); // 👈 Thêm state cho roomId
+  const [loading, setLoading] = useState(true); // 👈 Loading state
 
-  const path = window.location.pathname;
-  const id = Number(path.split("/")[3]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 👤 user login
   const { user } = useAuth();
   const currentUserId = user?.id;
+  const path = window.location.pathname;
+  const sectionId = Number(path.split("/")[3]);
 
-  // Lấy lịch sử tin nhắn
+  // 🔹 Lấy roomId từ API /by-context
   useEffect(() => {
-    fetch(`http://localhost:4000/api/v1/chats/${id}/messages`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success) {
-          setMessages(data.data);
+    const fetchRoomId = async () => {
+      try {
+        const response = await axios.get(
+          `http://localhost:4000/api/v1/chats/by-context`,
+          { params: { sectionId } }
+        );
+        if (response.data.success && response.data.data) {
+          setRoomId(response.data.data.id);
+        } else {
+          console.error("Không tìm thấy phòng chat cho sectionId:", sectionId);
         }
-      });
-  }, [id]);
+      } catch (error) {
+        console.error("Lỗi khi lấy roomId:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Socket realtime
+    fetchRoomId();
+  }, [sectionId]);
+
+  // 🔹 Lấy lịch sử tin nhắn khi có roomId
   useEffect(() => {
+    if (!roomId) return;
+
+    const fetchMessages = async () => {
+      try {
+        const response = await axios.get(
+          `http://localhost:4000/api/v1/chats/${roomId}/messages`
+        );
+        if (response.data.success) {
+          setMessages(response.data.data);
+        }
+      } catch (error) {
+        console.error("Lỗi khi lấy tin nhắn:", error);
+      }
+    };
+
+    fetchMessages();
+  }, [roomId]);
+
+  // 🔹 Socket realtime
+  useEffect(() => {
+    if (!roomId) return;
+
     const newSocket = io("http://localhost:4000", {
       withCredentials: true,
     });
@@ -53,7 +90,7 @@ export default function Chat() {
 
     newSocket.on("connect", () => {
       newSocket.emit("joinUser", currentUserId);
-      newSocket.emit("joinRoom", Number(id));
+      newSocket.emit("joinRoom", roomId);
     });
 
     newSocket.on("newMessage", (msg: Message) => {
@@ -63,18 +100,21 @@ export default function Chat() {
     return () => {
       newSocket.disconnect();
     };
-  }, [id]);
+  }, [roomId, currentUserId]);
 
-  // Gửi tin nhắn
-  const handleSend = () => {
-    if (!content.trim()) return;
-    fetch(`http://localhost:4000/api/v1/chats/${id}/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ senderId: currentUserId, content }),
-    })
-      .then((res) => res.json())
-      .then(() => setContent(""));
+  // 🔹 Gửi tin nhắn
+  const handleSend = async () => {
+    if (!content.trim() || !roomId) return;
+
+    try {
+      await axios.post(
+        `http://localhost:4000/api/v1/chats/${roomId}/messages`,
+        { senderId: currentUserId, content }
+      );
+      setContent("");
+    } catch (error) {
+      console.error("Lỗi khi gửi tin nhắn:", error);
+    }
   };
 
   useEffect(() => {
@@ -92,6 +132,24 @@ export default function Chat() {
     setContent((prev) => prev + emojiData.emoji);
     setShowEmoji(false);
   };
+
+  // 🔹 Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-150px)]">
+        <div className="text-gray-500">Đang tải phòng chat...</div>
+      </div>
+    );
+  }
+
+  // 🔹 Không tìm thấy phòng
+  if (!roomId) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-150px)]">
+        <div className="text-red-500">Không tìm thấy phòng chat</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-[calc(100vh-150px)] bg-white rounded-tl-xl rounded-tr-xl shadow border border-gray-200">
@@ -119,9 +177,8 @@ export default function Chat() {
         {messages.map((m) => (
           <div
             key={m.id}
-            className={`flex items-end gap-2 ${
-              m.senderId === currentUserId ? "justify-end" : "justify-start"
-            }`}
+            className={`flex items-end gap-2 ${m.senderId === currentUserId ? "justify-end" : "justify-start"
+              }`}
           >
             {m.senderId !== currentUserId && (
               <img
@@ -140,17 +197,15 @@ export default function Chat() {
                 </span>
               )}
               <div
-                className={`px-3 py-2 rounded-l-xl rounded-r-xl ${
-                  m.senderId === currentUserId
+                className={`px-3 py-2 rounded-l-xl rounded-r-xl ${m.senderId === currentUserId
                     ? "bg-blue-600 text-white"
                     : "bg-gray-100 text-gray-800"
-                }`}
+                  }`}
               >
                 <div className="text-sm break-words">{m.content}</div>
                 <div
-                  className={`text-[10px] mt-1 ${
-                    m.senderId === currentUserId ? "text-blue-100" : "text-gray-400"
-                  }`}
+                  className={`text-[10px] mt-1 ${m.senderId === currentUserId ? "text-blue-100" : "text-gray-400"
+                    }`}
                 >
                   {dayjs(m.createdAt).format("HH:mm")}
                 </div>

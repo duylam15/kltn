@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import * as chatService from "./chat.service";
+import { io } from "@/server";
 
-import { io } from "../../server"; // 👈 socket instance
 
 export async function sendMessage(req: Request, res: Response) {
     const roomId = Number(req.params.id);
@@ -29,8 +29,26 @@ export async function sendMessage(req: Request, res: Response) {
     res.json({ success: true, data: message });
 }
 
+// Thêm vào cuối file chat.controller.ts (trước export)
+export async function getChatRoomByContext(req: Request, res: Response) {
+    const { sectionId, groupId, assignmentId } = req.query;
 
+    const params: any = {};
+    if (sectionId) params.sectionId = Number(sectionId);
+    if (groupId) params.groupId = Number(groupId);
+    if (assignmentId) params.assignmentId = Number(assignmentId);
 
+    const data = await chatService.getChatRoomByContext(params);
+    
+    if (!data) {
+        return res.status(404).json({ 
+            success: false, 
+            message: "Không tìm thấy phòng chat" 
+        });
+    }
+
+    res.json({ success: true, data });
+}
 
 export async function getAllChatRooms(req: Request, res: Response) {
     const data = await chatService.getAllChatRooms();
