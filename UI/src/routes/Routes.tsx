@@ -28,6 +28,8 @@ import Notifications from "../pages/Admin/Notifications";
 import Reports from "../pages/Admin/Reports";
 import Roles from "../pages/Admin/Roles";
 import CoursesAdmin from "../pages/Admin/CoursesAdmin";
+import AdminStats from "../pages/Admin/AdminStats";
+
 
 
 // Route guards
@@ -171,7 +173,7 @@ export const router = createBrowserRouter([
     ),
     errorElement: <Error />,
     children: [
-      { index: true, element: <Reports /> },
+      { index: true, element: <AdminStats /> },
       { path: "notifications", element: <Notifications /> },
       { path: "reports", element: <Reports /> },
       { path: "roles", element: <Roles /> },
