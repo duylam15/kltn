@@ -23,9 +23,8 @@ import notificationRoute from "../modules/notification/notification.route";
 import gradeColumnRoute from "../modules/GradeManagement/gradeColumn/gradeColumn.route";
 import gradeRoute from "../modules/GradeManagement/grade/grade.route";
 import chapterRoute from "../modules/AssignmentAssessment/chapter/chapter.route";
-import questionSubjectRoute from "../modules/AssignmentAssessment/questionSubject/questionSubject.route";
 import assignmentGeneratorRouter from "../modules/AssignmentAssessment/assignmentGenerator/assignmentGenerator.route";
-import subjectInstructorRoute from "@/modules/CourseSectionManagement/subjectInstructor/subjectInstructor.route";
+import subjectInstructorRoute from '@/modules/CourseSectionManagement/subjectInstructor/subjectInstructor.route';
 
 const router = Router();
 
@@ -54,7 +53,7 @@ router.use("/notifications", notificationRoute);
 router.use("/grade-columns", gradeColumnRoute);
 router.use("/grades", gradeRoute);
 router.use("/chapters", chapterRoute);
-router.use("/question-subjects", questionSubjectRoute);
 router.use("/assignment-generator", assignmentGeneratorRouter);
 router.use("/subject-instructors", subjectInstructorRoute);
+
 export default router;

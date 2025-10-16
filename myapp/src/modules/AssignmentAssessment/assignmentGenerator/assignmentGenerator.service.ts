@@ -134,7 +134,7 @@ export async function generateAssignmentQuestions(config: GenerateConfig) {
     }
 
     // 3. Kiểm tra subject tồn tại
-    const subject = await prisma.questionSubject.findUnique({
+    const subject = await prisma.subject.findUnique({
         where: { id: config.subjectId },
     });
 

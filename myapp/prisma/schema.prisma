@@ -176,9 +176,11 @@ model Subject {
   subjectCode String @unique @db.VarChar(30)
   subjectName String @db.VarChar(200)
   credits     Int    @default(3)
-
+  description String?        @db.Text
   courseSections CourseSection[]
   subjectInstructors  SubjectInstructor[]  // Thêm relation này
+  chapters  Chapter[]
+  questions Question[]
 
   @@index([subjectCode])
 }
@@ -383,6 +385,7 @@ model Assignment {
   maxScore               Float     @default(100)
   passingScore           Float?
   timeLimit              Int?
+  isPublic           Boolean          @default(false)
   maxAttempts            Int?      @default(1)
   shuffleQuestions       Boolean   @default(false)
   showAnswersAfterSubmit Boolean   @default(false)
@@ -434,7 +437,7 @@ model Question {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  subject     QuestionSubject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  subject     Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
   chapter     Chapter?         @relation(fields: [chapterId], references: [id], onDelete: SetNull)
   assignments AssignmentQuestion[]
   choices     QuestionChoice[]
@@ -471,20 +474,6 @@ enum DifficultyLevel {
   hard
 }
 
-// Model quản lý môn học cho câu hỏi
-model QuestionSubject {
-  id          Int      @id @default(autoincrement())
-  subjectCode String   @unique @db.VarChar(30)
-  subjectName String   @db.VarChar(200)
-  description String?  @db.Text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  chapters  Chapter[]
-  questions Question[]
-
-  @@index([subjectCode])
-}
 
 // Model quản lý chương
 model Chapter {
@@ -497,7 +486,7 @@ model Chapter {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  subject   QuestionSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   questions Question[]
 
   @@unique([subjectId, chapterCode])

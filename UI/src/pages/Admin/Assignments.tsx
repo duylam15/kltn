@@ -208,7 +208,7 @@ export default function Assignments() {
 				data: QuestionSubject[];
 				meta: any;
 			}>(
-				`${API_BASE}/question-subjects?limit=100`
+				`${API_BASE}/subjects?limit=100`
 			);
 			if (res.data.success) {
 				setQuestionSubjects(res.data.data || []);
@@ -222,7 +222,7 @@ export default function Assignments() {
 	async function fetchChaptersBySubject(subjectId: number) {
 		try {
 			const res = await axios.get<{ success: boolean; data: Chapter[] }>(
-				`${API_BASE}/question-subjects/${subjectId}/chapters`
+				`${API_BASE}/questions/${subjectId}/chapters`
 			);
 			if (res.data.success) {
 				setChapters(res.data.data || []);

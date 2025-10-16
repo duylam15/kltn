@@ -32,10 +32,8 @@ export default function LayoutTeacher() {
   // Menu cho thanh navigation dọc (sidebar) - giống Google Classroom
   const sidebarMenu = [
     { to: "/teacher", label: "Màn hình chính", icon: Home, end: true },
-    { to: "/teacher/calendar", label: "Lịch", icon: Calendar },
-    { to: "/teacher/archived", label: "Đã đăng ký", icon: Archive, chevron: true },
-    { to: "/teacher/todo", label: "Việc cần làm", icon: ClipboardList },
-    { to: "/teacher/settings", label: "Cài đặt", icon: Settings },
+    { to: "/teacher/materials", label: "Tài liệu", icon: BookOpen },
+    { to: "/teacher/assignments", label: "Bài tập", icon: BookOpen },
   ];
 
   const { user, logout } = useAuth();
@@ -221,9 +219,6 @@ export default function LayoutTeacher() {
                     <span className="whitespace-nowrap overflow-hidden">{item.label}</span>
                   )}
                 </div>
-                {item.chevron && !sidebarCollapsed && (
-                  <ChevronDown className="h-4 w-4 text-gray-400 group-hover:text-gray-600 flex-shrink-0" />
-                )}
               </NavLink>
             ))}
           </nav>

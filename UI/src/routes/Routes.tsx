@@ -39,6 +39,7 @@ import Error from "./Error";
 import RequirePermission from "./RequirePermission";
 import Students from "../pages/Admin/Students";
 import Teachers from "../pages/Admin/Teachers";
+import MaterialsTeacher from "../pages/Teacher/MaterialsTeacher";
 import CourseLayoutStudent from "../layouts/CourseLayoutStudent";
 import OverviewAdmin from "../pages/Admin/OverviewAdmin";
 import Instructors from "../pages/Admin/Instructors";
@@ -57,6 +58,7 @@ import GradesStudent from "../pages/Student/GradesStudent";
 import OverviewStudent from "../pages/Student/OverviewStudent";
 import DashboardStudent from "../pages/Student/DashboardStudent";
 import AssignmentsDetailsStudent from "../pages/Student/AssignmentsDetailsStudent";
+import AssignmentsTeacher2 from "../pages/Teacher/AssignmentsTeacher2";
 
 export const router = createBrowserRouter([
   // ========== Root check auth ==========
@@ -157,6 +159,14 @@ export const router = createBrowserRouter([
           { path: "assignments", element: <AssignmentsTeacher /> },
           { path: "grades", element: <GradesTeacher /> },
         ],
+      },
+      {
+        path: "materials",
+        element: <MaterialsTeacher />,
+      },
+      {
+        path: "assignments",
+        element: <AssignmentsTeacher2 />,
       },
     ],
   },

@@ -5,6 +5,7 @@ export const createSubject = async (data: {
     subjectCode: string;
     subjectName: string;
     credits?: number;
+    description?: string;
 }) => {
     const existingSubject = await prisma.subject.findUnique({
         where: { subjectCode: data.subjectCode },
@@ -16,6 +17,7 @@ export const createSubject = async (data: {
             subjectCode: data.subjectCode,
             subjectName: data.subjectName,
             credits: data.credits || 3,
+            // description: data.description || "",
         },
     });
 };
@@ -39,6 +41,24 @@ export const listSubjects = async (params: {
             orderBy: { subjectCode: "asc" },
             skip: (params.page - 1) * params.limit,
             take: params.limit,
+            include: {
+                chapters: {
+                    orderBy: { order: "asc" },
+                    include: {
+                        _count: {
+                            select: {
+                                questions: true,
+                            },
+                        },
+                    },
+                },
+                _count: {
+                    select: {
+                        chapters: true,
+                        questions: true,
+                    },
+                },
+            },
         }),
         prisma.subject.count({ where }),
     ]);
@@ -55,6 +75,23 @@ export const getSubject = (id: number) =>
                     term: true,
                 },
             },
+            chapters: {
+                orderBy: { order: "asc" },
+                include: {
+                    _count: {
+                        select: {
+                            questions: true,
+                        },
+                    },
+                },
+            },
+            _count: {
+                select: {
+                    chapters: true,
+                    questions: true,
+                    courseSections: true,
+                },
+            },
         },
     });
 
@@ -64,6 +101,7 @@ export const updateSubject = (
         subjectCode?: string;
         subjectName?: string;
         credits?: number;
+        description?: string;
     }
 ) =>
     prisma.subject.update({
@@ -71,5 +109,38 @@ export const updateSubject = (
         data,
     });
 
-export const deleteSubject = (id: number) =>
-    prisma.subject.delete({ where: { id } });
+export const deleteSubject = async (id: number) => {
+    // Kiểm tra xem có chapters hoặc questions không
+    const subject = await prisma.subject.findUnique({
+        where: { id },
+        include: {
+            _count: {
+                select: {
+                    chapters: true,
+                    questions: true,
+                    courseSections: true,
+                },
+            },
+        },
+    });
+
+    if (!subject) {
+        throw new ApiError(404, "Subject not found");
+    }
+
+    if (subject._count.courseSections > 0) {
+        throw new ApiError(
+            400,
+            `Cannot delete subject. It has ${subject._count.courseSections} course section(s).`
+        );
+    }
+
+    if (subject._count.chapters > 0 || subject._count.questions > 0) {
+        throw new ApiError(
+            400,
+            `Cannot delete subject. It has ${subject._count.chapters} chapter(s) and ${subject._count.questions} question(s).`
+        );
+    }
+
+    return prisma.subject.delete({ where: { id } });
+};

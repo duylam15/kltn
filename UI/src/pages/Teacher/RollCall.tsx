@@ -771,6 +771,7 @@ const { user } = useAuth(); // ✅ thêm dòng này
         centered
       >
         {selectedSession && (
+          
           <div style={{ textAlign: "center" }} className="flex justify-center items-center flex-col">
             <img
               src={`http://localhost:4000${selectedSession.qrCodeUrl}`}

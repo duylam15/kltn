@@ -4,6 +4,7 @@ export const createSubjectSchema = z.object({
     body: z.object({
         subject_code: z.string().min(1).max(30),
         subject_name: z.string().min(1).max(200),
+        description: z.string().min(1).max(500).optional(),
         credits: z.number().int().positive().optional(),
     }),
 });

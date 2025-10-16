@@ -80,3 +80,12 @@ export const getById = catchAsync(async (req: Request, res: Response) => {
         data,
     });
 });
+
+export const getChapters = catchAsync(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const id = Number(req.params.id);
+        const chapters = await service.getChaptersBySubject(id);
+        sendResponse(res, { success: true, data: chapters });
+    }
+);
+

@@ -35,4 +35,9 @@ router.get(
     controller.getById
 );
 
+router.get(
+    "/:id/chapters",
+    controller.getChapters
+);
+
 export default router;

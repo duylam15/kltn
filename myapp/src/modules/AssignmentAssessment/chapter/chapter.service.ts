@@ -10,7 +10,7 @@ export const createChapter = async (data: {
     order?: number;
 }) => {
     // Kiểm tra subject tồn tại
-    const subject = await prisma.questionSubject.findUnique({
+    const subject = await prisma.subject.findUnique({
         where: { id: data.subjectId },
     });
     if (!subject) throw new ApiError(404, "Question subject not found");

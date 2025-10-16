@@ -1,11 +1,25 @@
 import { prisma } from "@/prisma/client";
 import ApiError from "@/utils/ApiError";
 
+export const getChaptersBySubject = (subjectId: number) =>
+    prisma.chapter.findMany({
+        where: { subjectId },
+        orderBy: { order: "asc" },
+        include: {
+            _count: {
+                select: {
+                    questions: true,
+                },
+            },
+        },
+    });
+
+
 // question.service.ts
 export async function createQuestion(data: any) {
     // 🆕 Validate subjectId nếu có
     if (data.subjectId) {
-        const subject = await prisma.questionSubject.findUnique({
+        const subject = await prisma.subject.findUnique({
             where: { id: data.subjectId },
         });
         if (!subject) {
@@ -73,7 +87,7 @@ export async function updateQuestion(id: number, data: any) {
 
     // 🆕 Validate subjectId nếu có
     if (data.subjectId !== undefined && data.subjectId !== null) {
-        const subject = await prisma.questionSubject.findUnique({
+        const subject = await prisma.subject.findUnique({
             where: { id: data.subjectId },
         });
         if (!subject) {
