@@ -33,8 +33,8 @@ export default function LayoutAdmin() {
 
 	const sidebarMenu = [
 		// Tổng quan
-		{ to: "/admin", label: "Báo cáo", icon: LineChart, end: true },
-		{ to: "/admin/reports", label: "Thống kê", icon: ClipboardList },
+		{ to: "/admin", label: "Thống kê", icon: LineChart, end: true },
+		{ to: "/admin/reports", label: "Báo cáo", icon: ClipboardList },
 
 		// Quản lý học tập
 		{ to: "/admin/subjects", label: "Môn học", icon: Book },

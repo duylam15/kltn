@@ -24,7 +24,10 @@ import gradeColumnRoute from "../modules/GradeManagement/gradeColumn/gradeColumn
 import gradeRoute from "../modules/GradeManagement/grade/grade.route";
 import chapterRoute from "../modules/AssignmentAssessment/chapter/chapter.route";
 import assignmentGeneratorRouter from "../modules/AssignmentAssessment/assignmentGenerator/assignmentGenerator.route";
-import subjectInstructorRoute from '@/modules/CourseSectionManagement/subjectInstructor/subjectInstructor.route';
+import subjectInstructorRoute from "@/modules/CourseSectionManagement/subjectInstructor/subjectInstructor.route";
+import statsRoute from "../modules/stats/stats.admin.routes";
+import catalogRoute from "../modules/catalog/catalog.routes";
+
 
 const router = Router();
 
@@ -55,5 +58,6 @@ router.use("/grades", gradeRoute);
 router.use("/chapters", chapterRoute);
 router.use("/assignment-generator", assignmentGeneratorRouter);
 router.use("/subject-instructors", subjectInstructorRoute);
-
+router.use("/stats", statsRoute);
+router.use("/catalog", catalogRoute);
 export default router;
