@@ -49,18 +49,21 @@ const API_BASE = "http://localhost:4000/api/v1";
 
 type Material = {
 	id: number;
+	materialId: number;
 	title: string;
 	description?: string;
 	fileName?: string;
 	filePath?: string;
 	fileType?: string;
 	fileSize?: number;
-	originalMaterialId?: string;
-	isPublic: boolean;
 	uploadedBy: number;
 	uploadedAt: string;
-	updatedAt?: string;
-	downloadCount?: number;
+	isPublic: boolean;
+	uploader?: {
+		fullName: string;
+		email: string;
+	};
+	originalMaterialId?: string;
 };
 
 type Section = {
@@ -80,7 +83,7 @@ export default function MaterialsTeacher() {
 	const { user } = useAuth();
 	const userId = user?.id;
 	const teacherId = user?.teacher?.id;
-	console.log("teacherId", teacherId);	
+	console.log("teacherId", teacherId);		
 
 	const [loading, setLoading] = useState(true);
 	const [materials, setMaterials] = useState<Material[]>([]);
@@ -143,56 +146,59 @@ export default function MaterialsTeacher() {
 		}
 	};
 
-	const fetchAllMaterials = async () => {
-		try {
-			setLoadingLibrary(true);
 
-			const [allRes, myRes] = await Promise.all([
-				axios.get(`${API_BASE}/materials?is_public=true`),
-				axios.get(`${API_BASE}/materials/teacher/${teacherId}`)
-			]);
+ // ====== SAO CHÉP TÀI LIỆU  ======
+async function copyOne(materialId: number, forceDuplicate = false) {
+  await axios.post(`${API_BASE}/materials/copy`, {
+  materialId,
+  userId,  // 👈 thuộc "tủ của tôi"
+});
+}
 
-			if (allRes.data.success && myRes.data.success) {
-				const allMats = allRes.data.data;
-				const myMats = myRes.data.data;
 
-				// Lấy originalMaterialId của tài liệu đã copy
-				const myOriginalMaterialIds = new Set(
-					myMats
-						.filter((m: Material) => m.originalMaterialId)
-						.map((m: Material) => m.originalMaterialId)
-				);
 
-				// Lọc bỏ tài liệu của chính mình (không phải copy)
-				const otherMaterials = allMats.filter((m: Material) => {
-					return !(m.uploadedBy === teacherId && !m.originalMaterialId);
-				});
 
-				// Nhóm theo rootId, chỉ lấy 1 đại diện
-				const materialsByRootId = new Map<string, Material>();
-				otherMaterials.forEach((m: Material) => {
-					const rootId = m.originalMaterialId || m.id.toString();
-					if (!materialsByRootId.has(rootId) || !m.originalMaterialId) {
-						materialsByRootId.set(rootId, m);
-					}
-				});
 
-				// Lọc bỏ những rootId đã copy
-				const availableMaterials = Array.from(materialsByRootId.values())
-					.filter(material => {
-						const rootId = material.originalMaterialId || material.id.toString();
-						return !myOriginalMaterialIds.has(rootId);
-					});
 
-				setAllMaterials(availableMaterials);
-			}
-		} catch (err) {
-			console.error("Lỗi fetch materials:", err);
-			toast.error("Không tải được danh sách tài liệu");
-		} finally {
-			setLoadingLibrary(false);
-		}
-	};
+  const handleCopyMaterials = async () => {
+  if (selectedMaterialIds.length === 0) {
+    toast.error("Vui lòng chọn ít nhất 1 tài liệu");
+    return;
+  }
+
+  try {
+    for (const id of selectedMaterialIds) {
+      await copyOne(id);  
+    }
+
+    toast.success(`Đã xử lý sao chép ${selectedMaterialIds.length} tài liệu`);
+    setLibraryModalOpen(false);
+    setSelectedMaterialIds([]);
+    setLibraryKeyword("");
+    fetchData(); // refresh "tủ của tôi"
+  } catch (e: any) {
+    if (e?.message !== "cancelled") {
+      toast.error(e?.response?.data?.message || "Không thể sao chép tài liệu");
+    }
+  }
+};
+
+
+  const fetchAllMaterials = async () => {
+    try {
+      setLoadingLibrary(true);
+      const { data } = await axios.get(`${API_BASE}/materials/public`, {
+  params: { page: 1, size: 50, userId }, // 👈 gửi userId hiện tại
+});
+
+      if (data?.success) setAllMaterials(data.data || []);
+    } catch (err) {
+      toast.error("Không tải được danh sách tài liệu chung");
+    } finally {
+      setLoadingLibrary(false);
+    }
+  };
+
 
 	const handleTogglePublic = async (materialId: number, isPublic: boolean) => {
 		try {
@@ -225,9 +231,8 @@ export default function MaterialsTeacher() {
 			formData.append("file", file);
 			formData.append("title", values.title);
 			formData.append("description", values.description || "");
-			formData.append("uploadedBy", teacherId.toString());
-			formData.append("originalMaterialId", uniqueCode);
 			formData.append("isPublic", values.isPublic ? "true" : "false");
+			formData.append("userId", String(userId));
 
 			await axios.post(`${API_BASE}/materials`, formData, {
 				headers: { "Content-Type": "multipart/form-data" },
@@ -296,43 +301,7 @@ export default function MaterialsTeacher() {
 		}
 	};
 
-	const handleCopyMaterials = async () => {
-		if (selectedMaterialIds.length === 0) {
-			toast.error("Vui lòng chọn ít nhất 1 tài liệu");
-			return;
-		}
-
-		try {
-			const selectedMaterials = allMaterials.filter((m) =>
-				selectedMaterialIds.includes(m.id)
-			);
-
-			const createPromises = selectedMaterials.map(async (material) => {
-				return axios.post(`${API_BASE}/materials`, {
-					title: material.title,
-					description: material.description,
-					fileName: material.fileName,
-					filePath: material.filePath,
-					fileSize: material.fileSize,
-					fileType: material.fileType,
-					uploadedBy: teacherId,
-					originalMaterialId: material.originalMaterialId || material.id.toString(),
-					isPublic: false, // Mặc định không chia sẻ khi copy
-				});
-			});
-
-			await Promise.all(createPromises);
-
-			toast.success(`Đã sao chép ${selectedMaterialIds.length} tài liệu`);
-			setLibraryModalOpen(false);
-			setSelectedMaterialIds([]);
-			setLibraryKeyword("");
-			fetchData();
-		} catch (err: any) {
-			console.error("Lỗi copy:", err);
-			toast.error(err.response?.data?.message || "Không thể sao chép tài liệu");
-		}
-	};
+	
 
 	const handleView = (material: Material) => {
 		if (material.filePath) {
@@ -898,6 +867,23 @@ export default function MaterialsTeacher() {
 												{record.description}
 											</div>
 										)}
+									</div>
+								),
+							},{
+								title: "Người tải lên",
+								key: "uploader",
+								width: 150,
+								render: (_: any, record: Material) => (
+									<div
+										style={{
+											display: "flex",
+											gap: 8,
+											alignItems: "center",
+										}}
+									>
+										<div style={{ fontWeight: 500 }}>
+											{record.uploader?.fullName || "Không rõ"}
+										</div>
 									</div>
 								),
 							},
