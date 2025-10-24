@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "@fingerprintjs/fingerprintjs": "^5.0.1",
+    "geoip-lite": "^1.4.10",
+    "ua-parser-js": "^2.0.6"
+  },
+  "devDependencies": {
+    "@types/geoip-lite": "^1.4.4"
+  }
+}

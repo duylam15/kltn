@@ -636,6 +636,39 @@ model AttendanceScoreRule {
   @@unique([sectionId, status], map: "uniq_section_status_rule")
 }
 
+
+model AttendanceNonce {
+  id         Int      @id @default(autoincrement())
+  sessionId  Int
+  value      String   @unique
+  expiresAt  DateTime
+  used       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
+model DeviceFingerprint {
+  id         Int      @id @default(autoincrement())
+  studentId  Int
+  deviceId   String   // hash ổn định từ client
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  @@unique([studentId, deviceId])
+}
+
+model AttendanceLog {
+  id         Int      @id @default(autoincrement())
+  studentId  Int?
+  sessionId  Int?
+  ipAddress  String?
+  userAgent  String?
+  ipCountry  String?
+  ipCity     String?
+  flags      String?  // JSON text: {ipMismatch:true,...}
+  note       String?
+  createdAt  DateTime @default(now())
+}
+
+
 // ============================================================
 // NHÓM 7: HỆ THỐNG XEM ĐIỂM & ĐÁNH GIÁ (Grade Management)
 // ============================================================

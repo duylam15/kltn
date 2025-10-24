@@ -30,4 +30,11 @@ router.get(
     "/sessions/:sessionId/warnings",
     attendanceController.getWarningAttendances
 );
+
+// ký payload (HMAC)
+router.post("/sign", attendanceController.signPayload);
+
+// Cấp nonce cho client để ký payload
+router.get("/session/:sessionId/nonce", attendanceController.issueNonce);
+
 export default router;
