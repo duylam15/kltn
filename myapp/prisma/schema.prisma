@@ -122,7 +122,16 @@ model Student {
   enrollments   SectionEnrollment[]
   submissions   Submission[]
   learningPaths LearningPath[]
+
+  // Quan hệ ngược với Attendance.student
   attendances   Attendance[]
+
+  // Quan hệ ngược với DeviceFingerprint.student
+  deviceFingerprints DeviceFingerprint[]
+
+  // Quan hệ ngược với AttendanceLog.student
+  attendanceLogs AttendanceLog[]
+
   studentGrades StudentGrade[]
 
   @@index([status])
@@ -594,9 +603,20 @@ model AttendanceSession {
   maxCheckInsPerIP   Int     @default(3)
   allowedDevices     Json?
 
+  // QUAN HỆ
   section      CourseSection                @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  // 1-n: một buổi điểm danh có nhiều Attendance
   attendances  Attendance[]
+
+  // 1-n: buổi điểm danh có thể liên kết với GradeColumnAttendanceSession (giữ nguyên của bạn)
   gradeColumns GradeColumnAttendanceSession[]
+
+  // 1-n: thêm để đối xứng với AttendanceNonce.session
+  nonces       AttendanceNonce[]
+
+  // 1-n: thêm để đối xứng với AttendanceLog.session
+  logs         AttendanceLog[]
 }
 
 model Attendance {
@@ -606,13 +626,13 @@ model Attendance {
   status      AttendanceStatus @default(present)
   checkedInAt DateTime         @default(now())
 
-  latitude   Float?
-  longitude  Float?
-  distance   Float?
-  ipAddress  String?  @db.VarChar(45)
-  deviceInfo String?  @db.VarChar(255)
-  isValid    Boolean  @default(true)
-  userAgent  String?  @db.VarChar(500)
+  latitude    Float?
+  longitude   Float?
+  distance    Float?
+  ipAddress   String?  @db.VarChar(45)
+  deviceInfo  String?  @db.VarChar(255)
+  isValid     Boolean  @default(true)
+  userAgent   String?  @db.VarChar(500)
 
   score       Float?
   adjustedBy  Int?
@@ -636,37 +656,46 @@ model AttendanceScoreRule {
   @@unique([sectionId, status], map: "uniq_section_status_rule")
 }
 
-
 model AttendanceNonce {
-  id         Int      @id @default(autoincrement())
+  value      String   @id
   sessionId  Int
-  value      String   @unique
+  session    AttendanceSession @relation(fields: [sessionId], references: [id])
   expiresAt  DateTime
   used       Boolean  @default(false)
   createdAt  DateTime @default(now())
+
+  // không cần back field ở đây vì đã có `AttendanceSession.nonces`
 }
 
 model DeviceFingerprint {
   id         Int      @id @default(autoincrement())
   studentId  Int
-  deviceId   String   // hash ổn định từ client
-  userAgent  String?
+  deviceId   String
+  userAgent  String
   createdAt  DateTime @default(now())
-  @@unique([studentId, deviceId])
+
+  student    Student  @relation(fields: [studentId], references: [id])
+
+  @@unique([studentId, deviceId], name: "studentId_deviceId")
 }
 
 model AttendanceLog {
   id         Int      @id @default(autoincrement())
-  studentId  Int?
-  sessionId  Int?
-  ipAddress  String?
-  userAgent  String?
+  studentId  Int
+  sessionId  Int
+  ipAddress  String
+  userAgent  String
   ipCountry  String?
   ipCity     String?
-  flags      String?  // JSON text: {ipMismatch:true,...}
+  flags      String?   // JSON string (as text); bạn có thể đổi sang Json nếu muốn
   note       String?
   createdAt  DateTime @default(now())
+
+  student    Student           @relation(fields: [studentId], references: [id])
+  session    AttendanceSession @relation(fields: [sessionId], references: [id])
 }
+
+
 
 
 // ============================================================

@@ -50,4 +50,13 @@ app.get("/health", (req, res) => {
 app.use(notFound);
 app.use(errorHandler);
 
+import { cleanupOldNonces } from "./cron/cleanupNonces";
+
+// Khởi động cron job dọn nonce cũ
+setInterval(() => {
+  cleanupOldNonces()
+    .catch(err => console.error("cleanupOldNonces error:", err));
+}, 5 * 60 * 1000); // 5 phút dọn một lần
+
+
 export default app;
