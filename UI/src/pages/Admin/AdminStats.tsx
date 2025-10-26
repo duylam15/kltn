@@ -1,774 +1,861 @@
-// src/pages/AdminStats.tsx
 import { useEffect, useMemo, useState } from "react";
 import {
   Card, Tabs, Form, Select, DatePicker, Button, Space, Row, Col,
-  Statistic, Table, Tag, Tooltip, Divider, Badge, Typography, message
+  Statistic, Table, Tag, Tooltip, Divider, Typography, message, Segmented, Empty, Spin
 } from "antd";
+import {
+  BarChartOutlined, LineChartOutlined, ClockCircleOutlined,
+  PieChartOutlined, ReloadOutlined
+} from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import axios from "axios";
-import dayjs, { Dayjs } from "dayjs";
+import type { Dayjs } from "dayjs";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip,
-  Legend, LineChart, Line, ScatterChart, Scatter
+  Legend, LineChart, Line, AreaChart, Area
 } from "recharts";
+import { PrettyTooltip } from "../../components/PrettyTooltip";
 
-const { RangePicker } = DatePicker;
-const { Title, Text } = Typography;
+/** --------------------------------------
+ *  Types from backend
+ *  -------------------------------------- */
+type CatalogTerm = { id:number; code:string; name:string; startDate:string; endDate:string };
+type CatalogSubject = { id:number; subjectCode:string; subjectName:string };
+type CatalogTeacher = { id:number; code:string; fullName:string };
+type CatalogSection = { id:number; sectionCode:string; sectionName:string; subjectId:number; termId:number; teacherIds:number[] };
 
-/** =========
- *  API endpoints:
- *  - GET http://localhost:4000/api/v1/catalog/catalog?scopes=terms,subjects,sections,teachers
- *  - GET http://localhost:4000/api/v1/stats/grades?sectionIds=1,2
- *  - GET http://localhost:4000/api/v1/stats/grade-buckets?mode=section&ids=1,2&scheme=vn10
- *  - GET http://localhost:4000/api/v1/stats/attendance?mode=section&ids=1,2&from&to
- ========= **/
-
-/* ---------- Types ---------- */
-type Term = { id:number; code:string; name:string; startDate?:string; endDate?:string };
-type Subject = { id:number; subjectCode:string; subjectName:string };
-type Section = {
-  id:number; sectionCode:string; sectionName?:string; subjectId:number; termId:number;
-  teacherIds:number[]; // cần backend trả về
-};
-type Teacher = { id:number; code?:string; fullName:string };
-
-type GradeRow = {
-  sectionId:number; studentId:number; studentCode:string; studentName:string; total10:number;
+type TotalRow = {
+  sectionId:number;
+  studentId:number;
+  studentCode:string;
+  studentName:string;
+  total10:number;
 };
 
-type BucketBar = { label:string; count:number };
+type Bucket = { label:string; from:number; to:number };
 
-type AttendanceRow = {
-  sectionId:number; present:number; late:number; excused:number; absent:number; rate:number; // 0..100
+type BucketSeriesRes = {
+  scheme:string;
+  buckets: Bucket[];
+  total: number;
+  series: { label:string; count:number }[];
 };
 
-/* ---------- Config ---------- */
-const API_BASE = "http://localhost:4000/api/v1";
-const PASS_5 = 5.0;
-const EXCELLENT_8 = 8.0;
+type AttendanceItem = { sectionId:number; present:number; late:number; excused:number; absent:number; total:number; rate:number };
 
-/* ---------- Helpers ---------- */
-function isBeforeTwoThirds(term?: Term, now = dayjs()): boolean {
-  if (!term?.startDate || !term?.endDate) return true;
-  const start = dayjs(term.startDate);
-  const end = dayjs(term.endDate);
-  if (!start.isValid() || !end.isValid() || !end.isAfter(start)) return true;
-  const twoThirds = start.add((end.diff(start, "day") * 2) / 3, "day");
-  return now.isBefore(twoThirds);
-}
+/** --------------------------------------
+ *  API base
+ *  -------------------------------------- */
+const API_BASE = "http://localhost:4000/api/v1"; // ⚠️ chỉnh nếu backend khác
 
-function computePassExcellent(grades: GradeRow[]) {
-  const bySection: Record<number, { total:number; pass:number; excellent:number; avg:number; sum:number }> = {};
-  grades.forEach(g => {
-    const s = (bySection[g.sectionId] ??= { total:0, pass:0, excellent:0, avg:0, sum:0 });
-    s.total += 1;
-    s.sum += g.total10 ?? 0;
-    if ((g.total10 ?? 0) >= PASS_5) s.pass += 1;
-    if ((g.total10 ?? 0) >= EXCELLENT_8) s.excellent += 1;
-  });
-  for (const k of Object.keys(bySection)) {
-    const s = bySection[+k];
-    s.avg = s.total ? +(s.sum / s.total).toFixed(2) : 0;
-  }
-  return bySection;
-}
-
-function computeCompareBySubject(grades: GradeRow[], sections: Section[], subjectId?: number) {
-  const secs = subjectId ? sections.filter(s => s.subjectId === subjectId) : sections;
-  const secSet = new Set(secs.map(s => s.id));
-  const agg: Record<number, { sectionId:number; avg:number; total:number; subjectId:number }> = {};
-  grades.forEach(g => {
-    if (!secSet.has(g.sectionId)) return;
-    const sec = secs.find(x=>x.id===g.sectionId)!;
-    const a = (agg[g.sectionId] ??= { sectionId:g.sectionId, avg:0, total:0, subjectId: sec.subjectId });
-    a.avg = +( ((a.avg * a.total) + (g.total10 ?? 0)) / (a.total + 1) ).toFixed(2);
-    a.total += 1;
-  });
-  return Object.values(agg);
-}
-
-function buildCorrelationData(grades: GradeRow[], attendance: AttendanceRow[]) {
-  const bySectionAttend = new Map(attendance.map(a => [a.sectionId, a.rate]));
-  const bySectionGrade: Record<number, { avg:number; n:number }> = {};
-  grades.forEach(g => {
-    const b = (bySectionGrade[g.sectionId] ??= { avg:0, n:0 });
-    b.avg = ((b.avg * b.n) + (g.total10 ?? 0)) / (b.n + 1);
-    b.n += 1;
-  });
-  return Object.entries(bySectionGrade).map(([sid, v]) => ({
-    sectionId: +sid,
-    avgGrade: +v.avg.toFixed(2),
-    attendRate: +(bySectionAttend.get(+sid) ?? 0).toFixed(2),
-  }));
-}
-
-function makeEarlyAlerts(grades: GradeRow[], attendance: AttendanceRow[], sections: Section[], terms: Term[]) {
-  const attendBySec = new Map<number, AttendanceRow>(attendance.map(a => [a.sectionId, a]));
-  const termById = new Map<number, Term>(terms.map(t => [t.id, t]));
-  const alerts: Array<{ sectionId:number; studentId:number; studentCode:string; studentName:string; total10:number; attendRate:number; status:"Nguy cơ"; reason:string }> = [];
-  grades.forEach(g => {
-    const sec = sections.find(s => s.id === g.sectionId);
-    const term = termById.get(sec?.termId ?? -1);
-    const shouldShow = isBeforeTwoThirds(term, dayjs());
-    const att = attendBySec.get(g.sectionId)?.rate ?? 0;
-    const risk = (att < 70) || ((g.total10 ?? 0) < 5.5);
-    if (risk && shouldShow) {
-      const reasons = [];
-      if (att < 70) reasons.push(`attendance ${att.toFixed(1)}% < 70%`);
-      if ((g.total10 ?? 0) < 5.5) reasons.push(`total10 ${g.total10?.toFixed(2)} < 5.5`);
-      alerts.push({
-        sectionId: g.sectionId,
-        studentId: g.studentId,
-        studentCode: g.studentCode,
-        studentName: g.studentName,
-        total10: +(g.total10 ?? 0).toFixed(2),
-        attendRate: +att.toFixed(2),
-        status: "Nguy cơ",
-        reason: reasons.join(" & "),
-      });
-    }
-  });
-  return alerts;
-}
-
-/** Term series: mặc định theo các sections đang chọn; tuỳ chọn theo môn/GV */
-function buildTermSeries(
-  grades: GradeRow[], sections: Section[], terms: Term[],
-  scope: { sectionIds?: number[]; subjectId?: number; teacherId?: number } = {}
-) {
-  let secPool = sections;
-  if (scope.sectionIds?.length) secPool = secPool.filter(s => scope.sectionIds!.includes(s.id));
-  if (scope.subjectId) secPool = secPool.filter(s => s.subjectId === scope.subjectId);
-  if (scope.teacherId) secPool = secPool.filter(s => (s.teacherIds || []).includes(scope.teacherId||0));
-
-  const secById = new Map(secPool.map(s => [s.id, s]));
-  const termAgg: Record<number, { sum:number; n:number }> = {};
-  for (const g of grades) {
-    const sec = secById.get(g.sectionId);
-    if (!sec) continue;
-    const a = (termAgg[sec.termId] ??= { sum:0, n:0 });
-    a.sum += g.total10 ?? 0;
-    a.n += 1;
-  }
-  const termMap = new Map(terms.map(t => [t.id, t]));
-  return Object.entries(termAgg)
-    .map(([termId, v]) => ({
-      termId: +termId,
-      term: termMap.get(+termId)?.name ?? String(termId),
-      avg: +(v.sum / Math.max(1, v.n)).toFixed(2),
-      count: v.n
-    }))
-    .sort((a,b)=>a.termId-b.termId);
-}
-function buildYoYSeries(termSeries: {termId:number; term:string; avg:number; count:number}[]) {
-  return termSeries.map(t => ({ term: t.term, avg: t.avg, count: t.count }));
-}
-
-/** Outliers (theo section) */
-function avgBySection(grades: GradeRow[]) {
-  const m: Record<number,{sum:number;n:number}> = {};
-  grades.forEach(g => {
-    const a = (m[g.sectionId] ??= {sum:0,n:0});
-    a.sum += g.total10 ?? 0; a.n += 1;
-  });
-  return Object.entries(m).map(([sid,v])=>({
-    sectionId:+sid,
-    avg: +(v.sum / Math.max(1,v.n)).toFixed(2),
-    count: v.n
-  }));
-}
-function detectOutliersZ(data: {sectionId:number; avg:number; count:number}[], z=2) {
-  const avgs = data.map(d=>d.avg);
-  const mu = avgs.reduce((s,v)=>s+v,0)/Math.max(1,avgs.length);
-  const sd = Math.sqrt(avgs.reduce((s,v)=>s+(v-mu)*(v-mu),0)/Math.max(1,avgs.length));
-  return data.map(d=>{
-    const zscore = sd ? (d.avg - mu)/sd : 0;
-    const tag = Math.abs(zscore) >= z ? (zscore>0 ? "Cao bất thường" : "Thấp bất thường") : "Bình thường";
-    return { ...d, z: +zscore.toFixed(2), status: tag, mean:+mu.toFixed(2), sd:+sd.toFixed(2) };
-  }).sort((a,b)=>Math.abs(b.z)-Math.abs(a.z));
-}
-
-/** Pass theo Giảng viên */
-function computePassByTeacher(grades: GradeRow[], sections: Section[], teacherIdFilter?: number) {
-  const mapSecTeachers = new Map<number, number[]>(
-    sections.map(s => [s.id, s.teacherIds || []])
-  );
-  const agg: Record<number, { teacherId:number; total:number; pass:number; excellent:number; sum:number; avg:number }> = {};
-  for (const g of grades) {
-    const tIds = mapSecTeachers.get(g.sectionId) || [];
-    for (const tid of tIds) {
-      if (teacherIdFilter && tid !== teacherIdFilter) continue;
-      const a = (agg[tid] ??= { teacherId: tid, total: 0, pass: 0, excellent: 0, sum: 0, avg: 0 });
-      a.total += 1;
-      const sc = g.total10 ?? 0;
-      a.sum += sc;
-      if (sc >= 5) a.pass += 1;
-      if (sc >= 8) a.excellent += 1;
-    }
-  }
-  Object.values(agg).forEach(a => { a.avg = a.total ? +(a.sum / a.total).toFixed(2) : 0; });
-  return Object.values(agg);
-}
-
-/* ---------- Component ---------- */
-export default function AdminStats() {
-  const [form] = Form.useForm();
-
-  // Catalog
-  const [terms, setTerms] = useState<Term[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [sections, setSections] = useState<Section[]>([]);
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
-
-  // Data
-  const [grades, setGrades] = useState<GradeRow[]>([]);
-  const [buckets, setBuckets] = useState<BucketBar[]>([]);
-  const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
-
-  // UI state
+/** --------------------------------------
+ *  Catalog hooks
+ *  -------------------------------------- */
+function useCatalog() {
   const [loading, setLoading] = useState(false);
+  const [terms, setTerms] = useState<CatalogTerm[]>([]);
+  const [subjects, setSubjects] = useState<CatalogSubject[]>([]);
+  const [teachers, setTeachers] = useState<CatalogTeacher[]>([]);
+  const [sections, setSections] = useState<CatalogSection[]>([]);
 
-  // Load catalog
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await axios.get(`${API_BASE}/catalog/catalog`, {
-          params: { scopes: "terms,subjects,sections,teachers" }
-        });
-        setTerms(data.terms ?? []);
-        setSubjects(data.subjects ?? []);
-        setSections(data.sections ?? []);
-        setTeachers(data.teachers ?? []);
-      } catch (e:any) {
-        message.error(e?.message || "Không tải được danh mục");
-      }
-    })();
-  }, []);
-
-  /* ---- Fetchers ---- */
-  const fetchAll = async () => {
-    const pickedSections: number[] = form.getFieldValue("sectionIds") || [];
-    const subjectId: number | undefined = form.getFieldValue("subjectId");
-    const teacherId: number | undefined = form.getFieldValue("teacherId");
-    const range: [Dayjs, Dayjs] | undefined = form.getFieldValue("range");
-
-    // Lọc section theo Subject/GV
-    let secPool = sections;
-    if (subjectId) secPool = secPool.filter(s => s.subjectId === subjectId);
-    if (teacherId) secPool = secPool.filter(s => (s.teacherIds || []).includes(teacherId));
-
-    const sectionIds = pickedSections.length
-      ? pickedSections.filter(id => secPool.some(s => s.id === id))
-      : secPool.map(s => s.id);
-
-    if (!sectionIds.length) {
-      message.info("Không có học phần phù hợp bộ lọc.");
-      return;
-    }
-
-    setLoading(true);
+  const reload = async () => {
     try {
-      const [gRes, bRes, aRes] = await Promise.all([
-        axios.get(`${API_BASE}/stats/grades`, { params: { sectionIds: sectionIds.join(",") } }),
-        axios.get(`${API_BASE}/stats/grade-buckets`, { params: { mode: "section", ids: sectionIds.join(","), scheme: "vn10" } }),
-        axios.get(`${API_BASE}/stats/attendance`, {
-          params: {
-            mode: "section",
-            ids: sectionIds.join(","),
-            from: range?.[0] ? range[0].toISOString() : undefined,
-            to: range?.[1] ? range[1].toISOString() : undefined
-          }
-        })
-      ]);
-
-      setGrades(gRes.data?.items ?? []);
-      setBuckets(bRes.data?.series ?? []);
-      setAttendance(aRes.data?.items ?? []);
+      setLoading(true);
+      const { data } = await axios.get(`${API_BASE}/catalog/catalog`, {
+        params: { scopes: "terms,subjects,sections,teachers" },
+      });
+      setTerms(data.terms || []);
+      setSubjects(data.subjects || []);
+      setTeachers(data.teachers || []);
+      setSections(data.sections || []);
     } catch (e:any) {
-      message.error(e?.message || "Không tải được số liệu");
-    } finally {
-      setLoading(false);
-    }
+      message.error(e?.response?.data?.message || "Không tải được danh mục");
+    } finally { setLoading(false); }
   };
 
-  /* ---- Derived ---- */
-  const passExcellentBySection = useMemo(() => computePassExcellent(grades), [grades]);
+  useEffect(() => { reload(); }, []);
 
-  const passExcellentTiles = useMemo(() => {
-    const vals = Object.values(passExcellentBySection);
-    const total = vals.reduce((s, v) => s + v.total, 0);
-    const pass = vals.reduce((s, v) => s + v.pass, 0);
-    const excellent = vals.reduce((s, v) => s + v.excellent, 0);
-    const avg = total ? +(vals.reduce((s, v) => s + v.sum, 0) / total).toFixed(2) : 0;
-    return {
-      totalStudents: total,
-      passRate: total ? +((pass / total) * 100).toFixed(2) : 0,
-      excellentRate: total ? +((excellent / total) * 100).toFixed(2) : 0,
-      avgScore: avg
-    };
-  }, [passExcellentBySection]);
+  const teacherById = useMemo(() => new Map(teachers.map(t => [t.id, t])), [teachers]);
+  const subjectById = useMemo(() => new Map(subjects.map(s => [s.id, s])), [subjects]);
+  const termById    = useMemo(() => new Map(terms.map(t => [t.id, t])), [terms]);
 
-  const compareSameSubject = useMemo(() => {
-    const subjectId: number | undefined = form.getFieldValue("subjectId");
-    return computeCompareBySubject(grades, sections, subjectId);
-  }, [grades, sections, form]);
+  return { loading, terms, subjects, teachers, sections, teacherById, subjectById, termById, reload };
+}
 
-  const correlationData = useMemo(() => buildCorrelationData(grades, attendance), [grades, attendance]);
-  const earlyAlerts = useMemo(() => makeEarlyAlerts(grades, attendance, sections, terms), [grades, attendance, sections, terms]);
-
-  // Outliers
-  const sectionAvg = useMemo(() => avgBySection(grades), [grades]);
-  const outliers = useMemo(() => detectOutliersZ(sectionAvg, 2), [sectionAvg]);
-
-  // Pass theo GV
-  const teacherIdPick: number | undefined = Form.useWatch("teacherId", form);
-  const passByTeacher = useMemo(
-    () => computePassByTeacher(grades, sections, teacherIdPick || undefined),
-    [grades, sections, teacherIdPick]
+function SectionOption({
+  s, subjectById, termById, teacherById
+}:{
+  s:CatalogSection; subjectById:Map<number,CatalogSubject>;
+  termById:Map<number,CatalogTerm>; teacherById:Map<number,CatalogTeacher>
+}) {
+  const subject = subjectById.get(s.subjectId);
+  const term = termById.get(s.termId);
+  const tNames = s.teacherIds.map(id => teacherById.get(id)?.fullName).filter(Boolean).join(", ");
+  return (
+    <div className="flex flex-col">
+      <div><b>{s.sectionName}</b> <Tag color="blue" style={{ marginLeft: 6 }}>{s.sectionCode}</Tag></div>
+      <div style={{ fontSize:12, opacity:.85 }}>
+        {subject ? `${subject.subjectCode} – ${subject.subjectName}` : "(No subject)"} · {term ? term.code : ""}
+        {tNames ? ` · GV: ${tNames}` : ""}
+      </div>
+    </div>
   );
+}
 
-  // SectionIds đang chọn (phục vụ YoY theo selection)
-  const selectedSectionIds = Form.useWatch("sectionIds", form) as number[] | undefined;
-
-  // YoY theo selection (MẶC ĐỊNH)
-  const yoyBySelection = useMemo(() => {
-    const list = buildTermSeries(grades, sections, terms, {
-      sectionIds: selectedSectionIds && selectedSectionIds.length ? selectedSectionIds : undefined
-    });
-    return buildYoYSeries(list);
-  }, [grades, sections, terms, selectedSectionIds]);
-
-  // YoY theo Môn/GV
-  const yoyBySubjectTeacher = useMemo(() => {
-    const subjectId: number | undefined = form.getFieldValue("subjectId");
-    const teacherId: number | undefined = form.getFieldValue("teacherId");
-    const list = buildTermSeries(grades, sections, terms, { subjectId, teacherId });
-    return buildYoYSeries(list);
-  }, [grades, sections, terms, form]);
-
-  /* ---- Columns ---- */
-  const passBySectionCols: ColumnsType<any> = [
-    { title: "Section", dataIndex: "sectionId", width: 100 },
-    { title: "Sĩ số", dataIndex: "total", width: 90 },
-    {
-      title: "Tỉ lệ đạt (≥5)",
-      dataIndex: "pass",
-      render: (_:any, r:any) => <Tag color="blue">{((r.pass / Math.max(1, r.total)) * 100).toFixed(1)}%</Tag>
-    },
-    {
-      title: "Tỉ lệ giỏi (≥8)",
-      dataIndex: "excellent",
-      render: (_:any, r:any) => <Tag color="green">{((r.excellent / Math.max(1, r.total)) * 100).toFixed(1)}%</Tag>
-    },
-    { title: "Điểm TB", dataIndex: "avg", render: (v:number) => <Tag color={v>=8?'green':v>=6.5?'geekblue':v>=5?'gold':'red'}>{v}</Tag> },
-  ];
-
-  const compareCols: ColumnsType<any> = [
-    { title: "Section", dataIndex: "sectionId", width: 100 },
-    { title: "Điểm TB", dataIndex: "avg", width: 120, render: (v:number)=> <Tag color={v>=8?'green':v>=6.5?'geekblue':v>=5?'gold':'red'}>{v}</Tag> },
-    { title: "Số SV", dataIndex: "total", width: 100 },
-  ];
-
-  const earlyAlertCols: ColumnsType<any> = [
-    { title: "Section", dataIndex: "sectionId", width: 90 },
-    { title: "Mã SV", dataIndex: "studentCode", width: 110 },
-    { title: "Họ tên", dataIndex: "studentName", ellipsis: true },
-    { title: "Điểm (10)", dataIndex: "total10", width: 100, render: (v:number)=> <Tag color={v<5.5?'red':'gold'}>{v}</Tag> },
-    { title: "Điểm danh (%)", dataIndex: "attendRate", width: 130, render: (v:number)=> <Tag color={v<70?'red':'gold'}>{v}</Tag> },
-    { title: "Trạng thái", dataIndex: "status", width: 110, render: ()=> <Badge status="error" text="Nguy cơ" /> },
-    { title: "Lý do", dataIndex: "reason", ellipsis: true }
-  ];
+/** --------------------------------------
+ *  Main
+ *  -------------------------------------- */
+export default function AdminStats() {
+  const { loading: catLoading, sections, subjects, teacherById, subjectById, termById, reload } = useCatalog();
+  const [activeKey, setActiveKey] = useState("grades");
 
   return (
-    <Space direction="vertical" size="large" style={{ width:"100%" }}>
-      <Card>
-        <Form form={form} layout="inline" onFinish={fetchAll}>
-          <Form.Item name="termId" label="Học kỳ" style={{ minWidth: 240, marginBottom: 8 }}>
-            <Select allowClear options={terms.map(t => ({ value: t.id, label: t.name }))} placeholder="Chọn học kỳ" />
-          </Form.Item>
-          <Form.Item name="subjectId" label="Môn học" style={{ minWidth: 280, marginBottom: 8 }}>
+    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      {/* Hero header */}
+      <Row gutter={[16,16]} className="card-glass">
+        <Col xs={24}>
+          <Card
+            bordered
+            title={
+              <Space align="center">
+                <span style={{
+                  display:"inline-flex",width:36,height:36,alignItems:"center",justifyContent:"center",
+                  borderRadius:12,background:"linear-gradient(135deg,#6c5ce7,#8e79ff)",color:"#fff"
+                }}>📊</span>
+                <span>Thống kê học tập & chuyên cần</span>
+              </Space>
+            }
+            extra={<Button type="primary" icon={<ReloadOutlined />} onClick={reload}>Làm mới danh mục</Button>}
+          >
+            
+          </Card>
+        </Col>
+      </Row>
+
+      <Tabs activeKey={activeKey} onChange={setActiveKey}
+        items={[
+          { key: "grades",   label: <Space><LineChartOutlined />Điểm trung bình</Space>, children:
+            <GradesTab sections={sections} subjectById={subjectById} termById={termById} teacherById={teacherById} catalogLoading={catLoading} />
+          },
+          { key: "buckets",  label: <Space><PieChartOutlined />Phân bố điểm</Space>, children:
+            <BucketsTab sections={sections} subjects={subjects} catalogLoading={catLoading} />
+          },
+          { key: "attendance", label: <Space><ClockCircleOutlined />Chuyên cần</Space>, children:
+            <AttendanceTab sections={sections} subjects={subjects} catalogLoading={catLoading} />
+          },
+          { key: "dept", label: <Space><BarChartOutlined />Tổng quan Khoa</Space>, children:
+            <DepartmentTab sections={sections} subjects={subjects} subjectById={subjectById} termById={termById} catalogLoading={catLoading} />
+          },
+        ]}
+      />
+    </Space>
+  );
+}
+
+/** --------------------------------------
+ *  Tab: Grades
+ *  -------------------------------------- */
+function GradesTab({
+  sections, subjectById, termById, teacherById, catalogLoading
+}:{
+  sections: CatalogSection[];
+  subjectById: Map<number,CatalogSubject>;
+  termById: Map<number,CatalogTerm>;
+  teacherById: Map<number,CatalogTeacher>;
+  catalogLoading:boolean;
+}) {
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState<TotalRow[]>([]);
+
+  const groupedBySection = useMemo(() => {
+    const map = new Map<number, TotalRow[]>();
+    for (const r of items) {
+      const arr = map.get(r.sectionId) ?? [];
+      arr.push(r); map.set(r.sectionId, arr);
+    }
+    return map;
+  }, [items]);
+
+  const statsBySection = useMemo(() => {
+    const ret: Record<number, { n:number; avg:number; min:number; max:number }> = {};
+    groupedBySection.forEach((rows, secId) => {
+      const vals = rows.map(r => r.total10);
+      const n = vals.length || 1;
+      const avg = +(vals.reduce((a,b)=>a+b,0) / n).toFixed(2);
+      const min = Math.min(...vals);
+      const max = Math.max(...vals);
+      ret[secId] = { n, avg, min, max };
+    });
+    return ret;
+  }, [groupedBySection]);
+
+  const onFetch = async () => {
+    const sectionIds:number[] = form.getFieldValue("sectionIds") || [];
+    if (!sectionIds.length) return message.warning("Chọn ít nhất 1 lớp (section)");
+    try {
+      setLoading(true);
+      const { data } = await axios.get(`${API_BASE}/stats/grades`, { params: { sectionIds: sectionIds.join(",") } });
+      setItems(data.items || []);
+    } catch (e:any) {
+      message.error(e?.response?.data?.message || "Không tải được điểm");
+    } finally { setLoading(false); }
+  };
+
+  const columns: ColumnsType<TotalRow & { sectionLabel:string }> = [
+    { title: "Mã SV", dataIndex: "studentCode", width: 120 },
+    { title: "Họ tên", dataIndex: "studentName" },
+    { title: "Lớp", dataIndex: "sectionLabel", width: 240 },
+    { title: "Điểm TB (10)", dataIndex: "total10", width: 140, align:"right",
+      render: (v:number)=> (
+        <Tag
+          color={v>=8?"green":v>=6.5?"geekblue":v>=5?"gold":"red"}
+          style={{ borderRadius:8, padding:"2px 8px", minWidth:64, textAlign:"center" }}
+        >
+          {v.toFixed(2)}
+        </Tag>
+      )
+    }
+  ];
+
+  const dataSource = useMemo(() => {
+    const secLabel = (id:number) => {
+      const s = sections.find(x=>x.id===id);
+      if (!s) return String(id);
+      const subj = subjectById.get(s.subjectId);
+      const term = termById.get(s.termId);
+      const tNames = s.teacherIds.map(tid => teacherById.get(tid)?.fullName).filter(Boolean).join(", ");
+      return `${s.sectionName} · ${subj?.subjectCode ?? ""} · ${term?.code ?? ""}${tNames?" · "+tNames:""}`;
+    };
+    return items.map(r => ({ ...r, key: `${r.sectionId}-${r.studentId}`, sectionLabel: secLabel(r.sectionId) }));
+  }, [items, sections, subjectById, termById, teacherById]);
+
+  const chartData = useMemo(() => {
+    const rows: { section:string; avg:number }[] = [];
+    groupedBySection.forEach((list, secId) => {
+      const st = statsBySection[secId];
+      const s = sections.find(x=>x.id===secId);
+      rows.push({ section: s?.sectionName || String(secId), avg: st?.avg || 0 });
+    });
+    return rows.sort((a,b)=>a.section.localeCompare(b.section));
+  }, [groupedBySection, statsBySection, sections]);
+
+  // KPI values
+  const values = items.map(i => i.total10 ?? 0);
+  const avg = values.length ? +(values.reduce((a,b)=>a+b,0)/values.length).toFixed(2) : 0;
+  const pass = values.filter(v=>v>=5).length;
+  const excellent = values.filter(v=>v>=8).length;
+
+  return (
+    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <Card className="card-glass sticky-filters">
+        <Form form={form} layout="vertical" onFinish={onFetch}>
+          <Form.Item name="sectionIds" label="Chọn lớp (Section)" tooltip="Có thể chọn nhiều lớp để so sánh">
             <Select
-              allowClear showSearch optionFilterProp="label"
-              options={subjects.map(s => ({ value: s.id, label: `${s.subjectCode} — ${s.subjectName}` }))}
-              placeholder="Chọn môn để so sánh lớp"
-            />
-          </Form.Item>
-          <Form.Item name="teacherId" label="Giảng viên" style={{ minWidth: 260, marginBottom: 8 }}>
-            <Select
-              allowClear showSearch optionFilterProp="label"
-              options={teachers.map(t => ({ value: t.id, label: t.fullName }))}
-              placeholder="Lọc theo GV (tùy chọn)"
-            />
-          </Form.Item>
-          <Form.Item name="sectionIds" label="Học phần" style={{ minWidth: 360, marginBottom: 8 }}>
-            <Select
-              mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn >=1 học phần"
+              mode="multiple"
+              maxTagCount="responsive"
+              loading={catalogLoading}
+              allowClear
+              placeholder="Tìm theo tên lớp, mã lớp, môn học..."
+              optionFilterProp="label"
               options={sections.map(s => ({
                 value: s.id,
-                label: `${s.sectionName || s.sectionCode} • ${subjects.find(sb=>sb.id===s.subjectId)?.subjectCode ?? 'SUBJ'}`
+                label: `${s.sectionName} (${s.sectionCode})`,
+                section: s,
               }))}
+              optionRender={(opt) => {
+                // @ts-ignore
+                const sec:CatalogSection = opt.data.section;
+                return <SectionOption s={sec} subjectById={subjectById} termById={termById} teacherById={teacherById} />;
+              }}
             />
           </Form.Item>
-          <Form.Item name="range" label="Khoảng TG (điểm danh)">
-            <RangePicker />
-          </Form.Item>
           <Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading}>Chạy thống kê</Button>
+            <Space>
+              <Button type="primary" htmlType="submit" icon={<LineChartOutlined />} loading={loading}>
+                Xem thống kê
+              </Button>
+            </Space>
           </Form.Item>
         </Form>
       </Card>
 
-      {/* KPI Tiles */}
-      <Row gutter={16}>
-        <Col xs={24} md={6}><Card><Statistic title="Tổng số SV (đang chọn)" value={passExcellentTiles.totalStudents} /></Card></Col>
-        <Col xs={24} md={6}><Card><Statistic title="Tỉ lệ đạt (≥5)" value={passExcellentTiles.passRate} precision={2} suffix="%" /></Card></Col>
-        <Col xs={24} md={6}><Card><Statistic title="Tỉ lệ giỏi (≥8)" value={passExcellentTiles.excellentRate} precision={2} suffix="%" /></Card></Col>
-        <Col xs={24} md={6}><Card><Statistic title="Điểm trung bình" value={passExcellentTiles.avgScore} precision={2} /></Card></Col>
+      {/* KPI tiles */}
+      <Row gutter={[16,16]}>
+        <Col xs={24} md={6}>
+          <Card className="card-glass">
+            <div className="kpi-tile">
+              <div>
+                <div style={{opacity:.7,fontSize:12}}>Số bản ghi</div>
+                <div style={{fontWeight:700,fontSize:24}}>{items.length}</div>
+              </div>
+              <div className="kpi-icon">📄</div>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} md={6}>
+          <Card className="card-glass">
+            <div className="kpi-tile">
+              <div>
+                <div style={{opacity:.7,fontSize:12}}>Điểm TB</div>
+                <div style={{fontWeight:700,fontSize:24}}>{avg}</div>
+              </div>
+              <div style={{height:38}}>
+                <ResponsiveContainer width={80} height={38}>
+                  <AreaChart data={values.map((v,i)=>({i,v}))}>
+                    <defs>
+                      <linearGradient id="gAvg" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#6c5ce7" stopOpacity={0.7}/>
+                        <stop offset="100%" stopColor="#6c5ce7" stopOpacity={0.1}/>
+                      </linearGradient>
+                    </defs>
+                    <Area dataKey="v" stroke="#6c5ce7" fill="url(#gAvg)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} md={6}>
+          <Card className="card-glass">
+            <div className="kpi-tile">
+              <div>
+                <div style={{opacity:.7,fontSize:12}}>≥ 5 điểm</div>
+                <div style={{fontWeight:700,fontSize:24}}>{pass}</div>
+              </div>
+              <div className="kpi-icon">✅</div>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} md={6}>
+          <Card className="card-glass">
+            <div className="kpi-tile">
+              <div>
+                <div style={{opacity:.7,fontSize:12}}>≥ 8 điểm</div>
+                <div style={{fontWeight:700,fontSize:24}}>{excellent}</div>
+              </div>
+              <div className="kpi-icon">🏆</div>
+            </div>
+          </Card>
+        </Col>
       </Row>
 
-      <Tabs
-        defaultActiveKey="pass"
-        items={[
-          /* 1) Tỉ lệ đạt theo học phần / GV — TAB TRONG TAB */
-          {
-            key: "pass",
-            label: "Tỉ lệ đạt theo học phần / GV",
-            children: (
-              <Card>
-                <Tabs
-                  defaultActiveKey="bySection" // MẶC ĐỊNH: Học phần
-                  items={[
-                    {
-                      key: "bySection",
-                      label: "Học phần",
-                      children: (
-                        <Row gutter={[16,16]}>
-                          <Col xs={24} md={14}>
-                            <div style={{ height: 360 }}>
-                              <ResponsiveContainer>
-                                <BarChart data={Object.entries(passExcellentBySection).map(([sectionId, v])=>({
-                                  sectionId:+sectionId, pass:v.pass, excellent:v.excellent, total:v.total
-                                }))}>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="sectionId" />
-                                  <YAxis />
-                                  <RTooltip />
-                                  <Legend />
-                                  <Bar dataKey="pass" name="Số SV đạt (≥5)" fill="#1677ff" />
-                                  <Bar dataKey="excellent" name="Số SV giỏi (≥8)" fill="#52c41a" />
-                                </BarChart>
-                              </ResponsiveContainer>
-                            </div>
-                          </Col>
-                          <Col xs={24} md={10}>
-                            <Table
-                              size="small" rowKey="sectionId" pagination={{ pageSize: 8 }}
-                              columns={passBySectionCols}
-                              dataSource={Object.entries(passExcellentBySection).map(([sectionId, v]) => ({
-                                sectionId: +sectionId, total: v.total, pass: v.pass, excellent: v.excellent, avg: v.avg,
-                              }))}
-                            />
-                          </Col>
-                        </Row>
-                      )
-                    },
-                    {
-                      key: "byTeacher",
-                      label: "Giảng viên",
-                      children: (
-                        <>
-                          <Text type="secondary">
-                            {teacherIdPick ? `Đang lọc theo GV: ${teachers.find(t=>t.id===teacherIdPick)?.fullName ?? teacherIdPick}` : "Hiển thị tất cả GV từ các học phần đang chọn"}
-                          </Text>
-                          <Divider />
-                          <Row gutter={[16,16]}>
-                            <Col xs={24} md={14}>
-                              <div style={{ height: 320 }}>
-                                <ResponsiveContainer>
-                                  <BarChart data={passByTeacher.map(x => ({
-                                    teacherId: x.teacherId,
-                                    passRate: +(x.total ? (x.pass/x.total)*100 : 0).toFixed(1),
-                                    excellentRate: +(x.total ? (x.excellent/x.total)*100 : 0).toFixed(1),
-                                    avg: x.avg
-                                  }))}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="teacherId" />
-                                    <YAxis domain={[0,100]} />
-                                    <RTooltip />
-                                    <Legend />
-                                    <Bar dataKey="passRate" name="Đạt (≥5) %" fill="#1677ff" />
-                                    <Bar dataKey="excellentRate" name="Giỏi (≥8) %" fill="#52c41a" />
-                                  </BarChart>
-                                </ResponsiveContainer>
-                              </div>
-                            </Col>
-                            <Col xs={24} md={10}>
-                              <Table
-                                size="small" rowKey="teacherId" pagination={{ pageSize: 8 }}
-                                columns={[
-                                  { title:"GV", dataIndex:"teacherId", render:(id:number)=> teachers.find(t=>t.id===id)?.fullName ?? id },
-                                  { title:"Sĩ số", dataIndex:"total", width:90 },
-                                  { title:"Đạt (≥5)", render:(_:any,r:any)=><Tag color="blue">{((r.pass/Math.max(1,r.total))*100).toFixed(1)}%</Tag> },
-                                  { title:"Giỏi (≥8)", render:(_:any,r:any)=><Tag color="green">{((r.excellent/Math.max(1,r.total))*100).toFixed(1)}%</Tag> },
-                                  { title:"Điểm TB", dataIndex:"avg", render:(v:number)=><Tag color={v>=8?'green':v>=6.5?'geekblue':v>=5?'gold':'red'}>{v}</Tag> },
-                                ]}
-                                dataSource={computePassByTeacher(grades, sections, teacherIdPick || undefined)}
-                              />
-                            </Col>
-                          </Row>
-                        </>
-                      )
-                    }
+      <Row gutter={[16,16]}>
+        <Col xs={24} lg={10}>
+          <Card className="card-glass" title="Điểm trung bình theo lớp" bodyStyle={{ height: 360 }}>
+            {loading ? <Spin /> : chartData.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                  <defs>
+                    <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#6c5ce7" stopOpacity={0.9}/>
+                      <stop offset="100%" stopColor="#6c5ce7" stopOpacity={0.3}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="section" angle={-15} textAnchor="end" height={60} />
+                  <YAxis domain={[0, 10]} />
+                  <RTooltip content={<PrettyTooltip />} />
+                  <Legend />
+                  <Bar dataKey="avg" name="Điểm TB (10)" fill="url(#barGrad)" radius={[8,8,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <Empty description="Chưa có dữ liệu" />}
+          </Card>
+          <div style={{ marginTop: 12, display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+            <Card size="small" className="card-glass">
+              <Statistic title="Điểm thấp nhất" value={(values.length ? Math.min(...values) : 0).toFixed(2)} />
+            </Card>
+            <Card size="small" className="card-glass">
+              <Statistic title="Điểm cao nhất" value={(values.length ? Math.max(...values) : 0).toFixed(2)} />
+            </Card>
+          </div>
+        </Col>
+        <Col xs={24} lg={14}>
+          <Card className="card-glass" title={<Space><BarChartOutlined />Danh sách điểm theo sinh viên</Space>}>
+            <Table
+              size="middle"
+              rowKey={(r)=>`${r.sectionId}-${r.studentId}`}
+              loading={loading}
+              dataSource={dataSource}
+              columns={columns}
+              pagination={{ pageSize: 10, showSizeChanger: true }}
+            />
+          </Card>
+        </Col>
+      </Row>
+    </Space>
+  );
+}
+
+/** --------------------------------------
+ *  Tab: Buckets
+ *  -------------------------------------- */
+function BucketsTab({ sections, subjects, catalogLoading }:{
+  sections:CatalogSection[]; subjects:CatalogSubject[]; catalogLoading:boolean
+}) {
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<BucketSeriesRes | null>(null);
+
+  const onFetch = async () => {
+    const mode = form.getFieldValue("mode") || "section";
+    const ids = form.getFieldValue("ids") as number[] || [];
+    const scheme = form.getFieldValue("scheme") || "vn10";
+    if (!ids.length) return message.warning("Chọn ít nhất 1 mục");
+    try {
+      setLoading(true);
+      const { data } = await axios.get(`${API_BASE}/stats/grade-buckets`, {
+        params: { mode, ids: ids.join(","), scheme }
+      });
+      setData(data);
+    } catch (e:any) {
+      message.error(e?.response?.data?.message || "Không tải được phân bố điểm");
+    } finally { setLoading(false); }
+  };
+
+  const chartData = useMemo(
+    () => data?.series?.map((s, i) => ({ idx: i+1, label: s.label, count: s.count })) || [],
+    [data]
+  );
+
+  const mode = Form.useWatch("mode", form) || "section";
+
+  return (
+    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <Card className="card-glass sticky-filters">
+        <Form form={form} layout="vertical" onFinish={onFetch} initialValues={{ mode: "section", scheme: "vn10" }}>
+          <Row gutter={12}>
+            <Col xs={24} md={6}>
+              <Form.Item name="mode" label="Chế độ">
+                <Segmented
+                  options={[
+                    { label: "Theo lớp (Section)", value: "section" },
+                    { label: "Theo môn (Subject)", value: "subject" },
                   ]}
                 />
-              </Card>
-            )
-          },
-
-          /* 2) Phân bố điểm (Histogram) */
-          {
-            key: "hist",
-            label: "Phân bố điểm (Histogram)",
-            children: (
-              <Card>
-                <Row gutter={[16,16]}>
-                  <Col xs={24} md={16}>
-                    <div style={{ height: 360 }}>
-                      <ResponsiveContainer>
-                        <BarChart data={buckets}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="label" />
-                          <YAxis allowDecimals={false} />
-                          <RTooltip />
-                          <Legend />
-                          <Bar dataKey="count" name="Số SV" fill="#722ed1" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </Col>
-                  <Col xs={24} md={8}>
-                    <Title level={5}>Gợi ý đọc</Title>
-                    <ul style={{ marginTop: 8 }}>
-                      <li>Lệch trái (nhiều &lt;5) → đề khó/thiếu hỗ trợ.</li>
-                      <li>Lệch phải (nhiều 8–10) → đề dễ/chấm rộng, cân nhắc chuẩn hóa.</li>
-                    </ul>
-                  </Col>
-                </Row>
-              </Card>
-            )
-          },
-
-          /* 3) Tỉ lệ điểm danh trung bình */
-          {
-            key: "att",
-            label: "Tỉ lệ điểm danh trung bình",
-            children: (
-              <Card>
-                <Row gutter={[16,16]}>
-                  <Col xs={24} md={16}>
-                    <div style={{ height: 360 }}>
-                      <ResponsiveContainer>
-                        <BarChart data={attendance}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="sectionId" />
-                          <YAxis domain={[0,100]} />
-                          <RTooltip />
-                          <Legend />
-                          <Bar dataKey="rate" name="Đi học (%)" fill="#faad14" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </Col>
-                  <Col xs={24} md={8}>
-                    <Table
-                      size="small" rowKey="sectionId" pagination={{ pageSize: 8 }}
-                      columns={[
-                        { title:"Section", dataIndex:"sectionId", width:90 },
-                        { title:"Present", dataIndex:"present", width:90 },
-                        { title:"Late", dataIndex:"late", width:90 },
-                        { title:"Excused", dataIndex:"excused", width:90 },
-                        { title:"Absent", dataIndex:"absent", width:90 },
-                        { title:"Đi học (%)", dataIndex:"rate", width:110, render:(v:number)=><Tag color={v>=85?"green":v>=70?"gold":"red"}>{v}</Tag> },
-                      ]}
-                      dataSource={attendance}
-                    />
-                  </Col>
-                </Row>
-              </Card>
-            )
-          },
-
-          /* 4) So sánh lớp cùng môn / năm */
-          {
-            key: "compare",
-            label: "So sánh lớp cùng môn / năm",
-            children: (
-              <Card>
-                <Space direction="vertical" style={{ width:"100%" }} size="middle">
-                  <Tooltip title="Chọn 'Môn học' ở bộ lọc để so sánh các section thuộc cùng môn">
-                    <Text type="secondary">Chọn môn ở bộ lọc để chuẩn hóa so sánh.</Text>
-                  </Tooltip>
-                  <Row gutter={[16,16]}>
-                    <Col xs={24} md={16}>
-                      <div style={{ height: 360 }}>
-                        <ResponsiveContainer>
-                          <LineChart data={compareSameSubject}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="sectionId" />
-                            <YAxis domain={[0,10]} />
-                            <RTooltip />
-                            <Legend />
-                            <Line type="monotone" dataKey="avg" name="Điểm TB" stroke="#13c2c2" />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </Col>
-                    <Col xs={24} md={8}>
-                      <Table
-                        size="small" rowKey="sectionId" pagination={{ pageSize: 8 }}
-                        columns={compareCols} dataSource={compareSameSubject}
-                      />
-                    </Col>
-                  </Row>
-                </Space>
-              </Card>
-            )
-          },
-
-          /* 5) So sánh năm/kỳ — TAB TRONG TAB (mặc định theo selection) */
-          {
-            key: "yoy",
-            label: "So sánh năm/kỳ (term)",
-            children: (
-              <Card>
-                <Tabs
-                  defaultActiveKey="bySelection" // MẶC ĐỊNH: theo các section đang chọn
-                  items={[
-                    {
-                      key: "bySelection",
-                      label: "Theo học phần đang chọn",
-                      children: (
-                        <Row gutter={[16,16]}>
-                          <Col xs={24} md={16}>
-                            <div style={{height:360}}>
-                              <ResponsiveContainer>
-                                <LineChart data={yoyBySelection}>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="term" />
-                                  <YAxis domain={[0,10]} />
-                                  <RTooltip />
-                                  <Legend />
-                                  <Line type="monotone" dataKey="avg" name="Điểm TB (term)" stroke="#eb2f96" />
-                                </LineChart>
-                              </ResponsiveContainer>
-                            </div>
-                          </Col>
-                          <Col xs={24} md={8}>
-                            <Table
-                              size="small" rowKey="term" pagination={{pageSize:8}}
-                              columns={[
-                                { title:"Kỳ", dataIndex:"term" },
-                                { title:"Điểm TB", dataIndex:"avg", render:(v:number)=><Tag color={v>=8?"green":v>=6.5?"geekblue":v>=5?"gold":"red"}>{v}</Tag> },
-                                { title:"Số bản ghi", dataIndex:"count" },
-                              ]}
-                              dataSource={yoyBySelection}
-                            />
-                          </Col>
-                        </Row>
-                      )
-                    },
-                    {
-                      key: "bySubjectTeacher",
-                      label: "Theo Môn / GV",
-                      children: (
-                        <>
-                          <Text type="secondary">
-                            Dùng bộ lọc phía trên để chọn <b>Môn</b> hoặc <b>Giảng viên</b>, sau đó bấm <b>Chạy thống kê</b>.
-                          </Text>
-                          <Divider />
-                          <Row gutter={[16,16]}>
-                            <Col xs={24} md={16}>
-                              <div style={{height:360}}>
-                                <ResponsiveContainer>
-                                  <LineChart data={yoyBySubjectTeacher}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="term" />
-                                    <YAxis domain={[0,10]} />
-                                    <RTooltip />
-                                    <Legend />
-                                    <Line type="monotone" dataKey="avg" name="Điểm TB (term)" stroke="#722ed1" />
-                                  </LineChart>
-                                </ResponsiveContainer>
-                              </div>
-                            </Col>
-                            <Col xs={24} md={8}>
-                              <Table
-                                size="small" rowKey="term" pagination={{pageSize:8}}
-                                columns={[
-                                  { title:"Kỳ", dataIndex:"term" },
-                                  { title:"Điểm TB", dataIndex:"avg", render:(v:number)=><Tag color={v>=8?"green":v>=6.5?"geekblue":v>=5?"gold":"red"}>{v}</Tag> },
-                                  { title:"Số bản ghi", dataIndex:"count" },
-                                ]}
-                                dataSource={yoyBySubjectTeacher}
-                              />
-                            </Col>
-                          </Row>
-                        </>
-                      )
-                    }
-                  ]}
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item name="ids" label={mode === "section" ? "Chọn lớp" : "Chọn môn"}>
+                <Select
+                  mode="multiple"
+                  maxTagCount="responsive"
+                  loading={catalogLoading}
+                  options={(mode === "section" ? sections : subjects).map((x:any) => ({
+                    value: x.id,
+                    label: mode === "section" ? `${x.sectionName} (${x.sectionCode})` : `${x.subjectCode} – ${x.subjectName}`
+                  }))}
+                  showSearch optionFilterProp="label" placeholder="Chọn nhiều mục để tổng hợp"
                 />
-              </Card>
-            )
-          },
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={6}>
+              <Form.Item name="scheme" label="Thang điểm">
+                <Select options={[{ value: "vn10", label: "VN (0–10)" }]} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" icon={<PieChartOutlined />} loading={loading}>
+              Xem phân bố
+            </Button>
+          </Form.Item>
+        </Form>
+      </Card>
 
-          /* 6) Phát hiện ngoại lệ */
-          {
-            key: "outlier",
-            label: "Phát hiện ngoại lệ",
-            children: (
-              <Card>
-                <Space direction="vertical" size="middle" style={{width:"100%"}}>
-                  <Text type="secondary">Dò outlier theo Z-score (|z| ≥ 2) dựa trên điểm TB theo section.</Text>
-                  <Row gutter={[16,16]}>
-                    <Col xs={24} md={16}>
-                      <div style={{height:360}}>
-                        <ResponsiveContainer>
-                          <ScatterChart>
-                            <CartesianGrid />
-                            <XAxis dataKey="sectionId" name="Section" />
-                            <YAxis dataKey="avg" name="Điểm TB" domain={[0,10]} />
-                            <RTooltip />
-                            <Legend />
-                            <Scatter name="Điểm TB (section)" data={sectionAvg} fill="#1890ff" />
-                          </ScatterChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </Col>
-                    <Col xs={24} md={8}>
-                      <Table
-                        size="small" rowKey="sectionId" pagination={{pageSize:8}}
-                        columns={[
-                          { title:"Section", dataIndex:"sectionId", width:90 },
-                          { title:"Điểm TB", dataIndex:"avg", render:(v:number)=><Tag color={v>=8?'green':v>=6.5?'geekblue':v>=5?'gold':'red'}>{v}</Tag> },
-                          { title:"Z", dataIndex:"z" },
-                          { title:"Trạng thái", dataIndex:"status", render:(t:string)=>
-                            t==="Bình thường" ? <Tag>{t}</Tag> :
-                            t==="Cao bất thường" ? <Tag color="green">{t}</Tag> :
-                            <Tag color="red">{t}</Tag>
-                          },
-                          { title:"Số SV", dataIndex:"count" }
-                        ]}
-                        dataSource={outliers}
-                      />
-                    </Col>
-                  </Row>
+      <Row gutter={[16,16]}>
+        <Col xs={24} lg={10}>
+          <Card className="card-glass" title="Tổng quan">
+            <Row gutter={16}>
+              <Col span={12}><Statistic title="Tổng bài ghi nhận" value={data?.total || 0} /></Col>
+              <Col span={12}><Statistic title="Số nhóm" value={data?.series?.length || 0} /></Col>
+            </Row>
+          </Card>
+        </Col>
+        <Col xs={24} lg={14}>
+          <Card className="card-glass" title="Phân bố theo nhóm điểm" bodyStyle={{ height: 360 }}>
+            {loading ? <Spin /> : chartData.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                  <defs>
+                    <linearGradient id="barGrad2" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#8e79ff" stopOpacity={0.9}/>
+                      <stop offset="100%" stopColor="#8e79ff" stopOpacity={0.3}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" />
+                  <YAxis allowDecimals={false} />
+                  <RTooltip content={<PrettyTooltip />} />
+                  <Legend />
+                  <Bar dataKey="count" name="Số SV" fill="url(#barGrad2)" radius={[8,8,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <Empty description="Chưa có dữ liệu" />}
+          </Card>
+        </Col>
+      </Row>
+    </Space>
+  );
+}
+
+/** --------------------------------------
+ *  Tab: Attendance
+ *  -------------------------------------- */
+function AttendanceTab({ sections, subjects, catalogLoading }:{
+  sections:CatalogSection[]; subjects:CatalogSubject[]; catalogLoading:boolean
+}) {
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState<AttendanceItem[]>([]);
+
+  const mode = Form.useWatch("mode", form) || "section";
+
+  const onFetch = async () => {
+    const mode = form.getFieldValue("mode") || "section";
+    const ids:number[] = form.getFieldValue("ids") || [];
+    const range: [Dayjs, Dayjs] | undefined = form.getFieldValue("range");
+    if (!ids.length) return message.warning("Chọn ít nhất 1 mục");
+    try {
+      setLoading(true);
+      const params:any = { mode, ids: ids.join(",") };
+      if (range) { params.from = range[0].startOf("day").toISOString(); params.to = range[1].endOf("day").toISOString(); }
+      const { data } = await axios.get(`${API_BASE}/stats/attendance`, { params });
+      setItems(data.items || []);
+    } catch (e:any) {
+      message.error(e?.response?.data?.message || "Không tải được chuyên cần");
+    } finally { setLoading(false); }
+  };
+
+  const columns: ColumnsType<AttendanceItem & { sectionLabel:string }> = [
+    { title: mode === "section" ? "Lớp" : "Môn", dataIndex: "sectionLabel" },
+    { title: "Có mặt", dataIndex: "present", align: "right", width: 100 },
+    { title: "Trễ", dataIndex: "late", align: "right", width: 80 },
+    { title: "Có phép", dataIndex: "excused", align: "right", width: 100 },
+    { title: "Vắng", dataIndex: "absent", align: "right", width: 80 },
+    { title: "Tổng", dataIndex: "total", align: "right", width: 90 },
+    { title: "Tỷ lệ (%)", dataIndex: "rate", align: "right", width: 110, render: (v:number)=>(
+      <Tag color={v>=90?"green":v>=80?"geekblue":v>=65?"gold":"red"} style={{borderRadius:8,padding:"2px 8px"}}>
+        {v.toFixed(2)}
+      </Tag>
+    )},
+  ];
+
+  const dataSource = useMemo(() => {
+    const secName = (id:number) => sections.find(s=>s.id===id)?.sectionName || String(id);
+    return items.map(it => ({ ...it, key: it.sectionId, sectionLabel: secName(it.sectionId) }));
+  }, [items, sections]);
+
+  const chartData = useMemo(() => dataSource.map(it => ({ section: it.sectionLabel, rate: it.rate })), [dataSource]);
+
+  return (
+    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <Card className="card-glass sticky-filters">
+        <Form form={form} layout="vertical" onFinish={onFetch} initialValues={{ mode: "section" }}>
+          <Row gutter={12}>
+            <Col xs={24} md={6}>
+              <Form.Item name="mode" label="Chế độ">
+                <Segmented options={[{ label: "Theo lớp", value: "section" }, { label: "Theo môn", value: "subject" }]} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={10}>
+              <Form.Item name="ids" label={mode === "section" ? "Chọn lớp" : "Chọn môn"}>
+                <Select
+                  mode="multiple"
+                  maxTagCount="responsive"
+                  loading={catalogLoading}
+                  options={(mode === "section" ? sections : subjects).map((x:any) => ({
+                    value: x.id,
+                    label: mode === "section" ? `${x.sectionName} (${x.sectionCode})` : `${x.subjectCode} – ${x.subjectName}`
+                  }))}
+                  showSearch optionFilterProp="label" placeholder="Chọn mục để tổng hợp"
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="range" label="Khoảng thời gian">
+                <DatePicker.RangePicker allowEmpty={[true,true]} style={{ width: "100%" }} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" icon={<ClockCircleOutlined />} loading={loading}>
+              Xem chuyên cần
+            </Button>
+          </Form.Item>
+        </Form>
+      </Card>
+
+      <Row gutter={[16,16]}>
+        <Col xs={24} lg={10}>
+          <Card className="card-glass" title="Tỷ lệ chuyên cần theo lớp" bodyStyle={{ height: 360 }}>
+            {loading ? <Spin /> : chartData.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                  <defs>
+                    <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#8e79ff" stopOpacity={0.9}/>
+                      <stop offset="100%" stopColor="#8e79ff" stopOpacity={0.25}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="section" angle={-15} textAnchor="end" height={60} />
+                  <YAxis domain={[0,100]} />
+                  <RTooltip content={<PrettyTooltip />} />
+                  <Legend />
+                  <Line type="monotone" dataKey="rate" name="Tỷ lệ (%)" stroke="#8e79ff" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : <Empty description="Chưa có dữ liệu" />}
+          </Card>
+        </Col>
+        <Col xs={24} lg={14}>
+          <Card className="card-glass" title="Bảng chi tiết">
+            <Table
+              size="middle"
+              rowKey={(r)=>String(r.sectionId)}
+              loading={loading}
+              dataSource={dataSource}
+              columns={columns}
+              pagination={{ pageSize: 10, showSizeChanger: true }}
+            />
+          </Card>
+        </Col>
+      </Row>
+    </Space>
+  );
+}
+
+/** --------------------------------------
+ *  Tab: Department Overview
+ *  -------------------------------------- */
+function DepartmentTab({
+  sections, subjects, subjectById, termById, catalogLoading
+}:{
+  sections:CatalogSection[]; subjects:CatalogSubject[];
+  subjectById: Map<number,CatalogSubject>;
+  termById: Map<number,CatalogTerm>;
+  catalogLoading:boolean;
+}) {
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+  const [grades, setGrades] = useState<TotalRow[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceItem[]>([]);
+
+  // Filter helpers
+  const filteredSections = useMemo(() => {
+    const termId:number|undefined = form.getFieldValue("termId");
+    const subjectIds:number[] = form.getFieldValue("subjectIds") || [];
+    let list = sections;
+    if (termId) list = list.filter(s => s.termId === termId);
+    if (subjectIds?.length) list = list.filter(s => subjectIds.includes(s.subjectId));
+    return list;
+  }, [sections, form]);
+
+  const onFetch = async () => {
+    const chosenSections = filteredSections;
+    if (!chosenSections.length) return message.warning("Không có lớp nào khớp bộ lọc");
+    const sectionIds = chosenSections.map(s => s.id);
+    try {
+      setLoading(true);
+      const [gRes, aRes] = await Promise.all([
+        axios.get(`${API_BASE}/stats/grades`, { params: { sectionIds: sectionIds.join(",") } }),
+        axios.get(`${API_BASE}/stats/attendance`, { params: { mode: "section", ids: sectionIds.join(",") } })
+      ]);
+      setGrades(gRes.data.items || []);
+      setAttendance(aRes.data.items || []);
+    } catch (e:any) {
+      message.error(e?.response?.data?.message || "Không tải được dữ liệu khoa");
+    } finally { setLoading(false); }
+  };
+
+  // Aggregations by subject
+  const bySubject = useMemo(() => {
+    const secById = new Map(filteredSections.map(s => [s.id, s]));
+    const map = new Map<number, TotalRow[]>();
+    for (const r of grades) {
+      const sec = secById.get(r.sectionId); if (!sec) continue;
+      const arr = map.get(sec.subjectId) ?? []; arr.push(r); map.set(sec.subjectId, arr);
+    }
+    return map; // subjectId -> rows
+  }, [grades, filteredSections]);
+
+  const subjectSummary = useMemo(() => {
+    const rows: { key:string; subjectId:number; subject:string; n:number; avg:number; pass:number; excellent:number }[] = [];
+    bySubject.forEach((list, subId) => {
+      const subj = subjectById.get(subId);
+      const vals = list.map(x=>x.total10);
+      const n = vals.length || 1;
+      const avg = +(vals.reduce((a,b)=>a+b,0)/n).toFixed(2);
+      const pass = list.filter(x=>x.total10 >= 5).length;
+      const excellent = list.filter(x=>x.total10 >= 8).length;
+      rows.push({ key: String(subId), subjectId: subId, subject: `${subj?.subjectCode ?? subId} – ${subj?.subjectName ?? ""}`, n: vals.length, avg, pass, excellent });
+    });
+    return rows.sort((a,b)=>a.subject.localeCompare(b.subject));
+  }, [bySubject, subjectById]);
+
+  const top5 = useMemo(()=>[...subjectSummary].sort((a,b)=>b.avg - a.avg).slice(0,5),[subjectSummary]);
+  const bottom5 = useMemo(()=>[...subjectSummary].sort((a,b)=>a.avg - b.avg).slice(0,5),[subjectSummary]);
+
+  // Attendance join by section -> subject
+  const attendanceBySubject = useMemo(() => {
+    const secById = new Map(filteredSections.map(s => [s.id, s]));
+    const agg = new Map<number, { present:number; late:number; excused:number; absent:number; total:number }>();
+    for (const it of attendance) {
+      const sec = secById.get(it.sectionId); if (!sec) continue;
+      const cur = agg.get(sec.subjectId) || { present:0, late:0, excused:0, absent:0, total:0 };
+      cur.present += it.present; cur.late += it.late; cur.excused += it.excused; cur.absent += it.absent; cur.total += it.total; agg.set(sec.subjectId, cur);
+    }
+    return agg; // subjectId -> totals
+  }, [attendance, filteredSections]);
+
+  const attendanceChart = useMemo(() => {
+    const rows: { subject:string; rate:number }[] = [];
+    attendanceBySubject.forEach((v, subId) => {
+      const subj = subjectById.get(subId);
+      const denom = v.total || 1; const rate = +(((v.present + v.late) / denom) * 100).toFixed(2);
+      rows.push({ subject: `${subj?.subjectCode ?? subId}`, rate });
+    });
+    return rows.sort((a,b)=>a.subject.localeCompare(b.subject));
+  }, [attendanceBySubject, subjectById]);
+
+  const exportCSV = () => {
+    const header = ["SubjectCode-Name","N","Avg10","Pass(>=5)","Excellent(>=8)"];
+    const lines = [header.join(","), ...subjectSummary.map(r => [r.subject.replaceAll(","," "), r.n, r.avg, r.pass, r.excellent].join(","))];
+    const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `department-summary.csv`; a.click(); URL.revokeObjectURL(url);
+  };
+
+  const columns: ColumnsType<any> = [
+    { title: "Môn học", dataIndex: "subject", ellipsis: true },
+    { title: "Số SV", dataIndex: "n", align:"right", width: 100 },
+    { title: "Điểm TB (10)", dataIndex: "avg", align:"right", width: 140, render:(v:number)=>(<Tag color={v>=8?"green":v>=6.5?"geekblue":v>=5?"gold":"red"} style={{borderRadius:8,padding:"2px 8px"}}>{v.toFixed(2)}</Tag>) },
+    { title: ">=5", dataIndex: "pass", align:"right", width: 100 },
+    { title: ">=8", dataIndex: "excellent", align:"right", width: 100 },
+  ];
+
+  return (
+    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <Card className="card-glass sticky-filters">
+        <Form form={form} layout="vertical" onFinish={onFetch}>
+          <Row gutter={12}>
+            <Col xs={24} md={6}>
+              <Form.Item name="termId" label="Học kỳ">
+                <Select
+                  allowClear
+                  loading={catalogLoading}
+                  options={[...termById.values()].map((t:any)=>({ value: t.id, label: `${t.code} – ${t.name}` }))}
+                  showSearch optionFilterProp="label"
+                  placeholder="Chọn học kỳ"
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item name="subjectIds" label="Môn học (tùy chọn)">
+                <Select
+                  mode="multiple"
+                  maxTagCount="responsive"
+                  loading={catalogLoading}
+                  options={subjects.map(s=>({ value: s.id, label: `${s.subjectCode} – ${s.subjectName}` }))}
+                  showSearch optionFilterProp="label"
+                  placeholder="Không chọn = tất cả môn trong học kỳ"
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={6}>
+              <Form.Item label=" ">
+                <Space>
+                  <Button type="primary" htmlType="submit" icon={<BarChartOutlined />} loading={loading}>Tổng hợp</Button>
+                  <Button onClick={exportCSV}>Xuất CSV</Button>
                 </Space>
-              </Card>
-            )
-          }
-        ]}
-      />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Card>
+
+      <Row gutter={[16,16]}>
+        <Col xs={24} lg={8}>
+          <Card className="card-glass" title="Chỉ số chính">
+            <Row gutter={16}>
+              <Col span={12}><Statistic title="Số môn" value={subjectSummary.length} /></Col>
+              <Col span={12}><Statistic title="Số lớp (section)" value={filteredSections.length} /></Col>
+            </Row>
+            <Divider />
+            <Row gutter={16}>
+              <Col span={12}>
+                <Statistic
+                  title="Điểm TB toàn khoa"
+                  value={(subjectSummary.reduce((a,b)=>a+b.avg*(b.n||0),0) / (subjectSummary.reduce((a,b)=>a+(b.n||0),0) || 1)).toFixed(2)}
+                />
+              </Col>
+              <Col span={12}>
+                <Statistic
+                  title="Tỷ lệ >=5 (ước tính)"
+                  value={((subjectSummary.reduce((a,b)=>a+b.pass,0) / (subjectSummary.reduce((a,b)=>a+b.n,0) || 1)) * 100).toFixed(1) + "%"}
+                />
+              </Col>
+            </Row>
+          </Card>
+        </Col>
+        <Col xs={24} lg={16}>
+          <Card className="card-glass" title="Điểm trung bình theo môn" bodyStyle={{ height: 360 }}>
+            {loading ? <Spin /> : subjectSummary.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={subjectSummary} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                  <defs>
+                    <linearGradient id="barGrad3" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#6c5ce7" stopOpacity={0.9}/>
+                      <stop offset="100%" stopColor="#6c5ce7" stopOpacity={0.3}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="subject" tick={{ fontSize: 12 }} interval={0} angle={-15} textAnchor="end" height={80} />
+                  <YAxis domain={[0,10]} />
+                  <RTooltip content={<PrettyTooltip />} />
+                  <Legend />
+                  <Bar dataKey="avg" name="Điểm TB (10)" fill="url(#barGrad3)" radius={[8,8,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <Empty description="Chưa có dữ liệu" />}
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={[16,16]}>
+        <Col xs={24} lg={12}>
+          <Card className="card-glass" title="Top 5 môn theo điểm TB">
+            <Table size="small" dataSource={top5} columns={columns} pagination={false} />
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card className="card-glass" title="Bottom 5 môn theo điểm TB">
+            <Table size="small" dataSource={bottom5} columns={columns} pagination={false} />
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={[16,16]}>
+        <Col xs={24}>
+          <Card className="card-glass" title="Chuyên cần theo môn" bodyStyle={{ height: 360 }}>
+            {loading ? <Spin /> : attendanceChart.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={attendanceChart} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="subject" interval={0} angle={-15} textAnchor="end" height={80} />
+                  <YAxis domain={[0,100]} />
+                  <RTooltip content={<PrettyTooltip />} />
+                  <Legend />
+                  <Line type="monotone" dataKey="rate" name="Tỷ lệ (%)" stroke="#8e79ff" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : <Empty description="Chưa có dữ liệu" />}
+          </Card>
+        </Col>
+      </Row>
     </Space>
   );
 }
