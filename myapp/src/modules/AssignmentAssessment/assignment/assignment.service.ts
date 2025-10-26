@@ -1,22 +1,125 @@
+import { queue } from "@/middlewares/queue";
 import { prisma } from "@/prisma/client";
-import { AssignmentType } from "@prisma/client";
+import { AssignmentType, ProgrammingLanguage } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
 
+// Lưu 1 câu trả lời code và đẩy vào queue judge
+export async function submitCodeAnswer(data: {
+    studentId: number;
+    assignmentId: number;
+    questionId: number;
+    codeAnswer: string;
+    language: string;
+}) {
+    const submission = await prisma.submission.upsert({
+        where: {
+            assignmentId_studentId: {
+                assignmentId: data.assignmentId,
+                studentId: data.studentId,
+            },
+        },
+        update: {},
+        create: {
+            assignmentId: data.assignmentId,
+            studentId: data.studentId,
+            startedAt: new Date(),
+        },
+    });
+
+    const answer = await prisma.submissionAnswer.upsert({
+        where: {
+            submissionId_questionId: {
+                submissionId: submission.id,
+                questionId: data.questionId,
+            },
+        },
+        update: {
+            codeAnswer: data.codeAnswer,
+            language: data.language as any,
+            judgeStatus: "queued",
+        },
+        create: {
+            codeAnswer: data.codeAnswer,
+            language: data.language as any,
+            judgeStatus: "queued",
+            submission: { connect: { id: submission.id } },
+            question: { connect: { id: data.questionId } },
+        },
+    });
+
+    // Đẩy job sang worker
+    await queue.add("judge", { answerId: answer.id });
+
+    return answer;
+}
+
+// Folder (project) submission
+export async function submitProjectAnswer(data: {
+    studentId: number;
+    assignmentId: number;
+    questionId: number;
+    filePath: string;
+}) {
+    const submission = await prisma.submission.upsert({
+        where: {
+            assignmentId_studentId: {
+                assignmentId: data.assignmentId,
+                studentId: data.studentId,
+            },
+        },
+        update: {},
+        create: {
+            assignmentId: data.assignmentId,
+            studentId: data.studentId,
+            startedAt: new Date(),
+        },
+    });
+
+    const answer = await prisma.submissionAnswer.create({
+        data: {
+            submissionId: submission.id,
+            questionId: data.questionId,
+            filePath: data.filePath,
+            isFolder: true,
+            judgeStatus: "queued",
+        },
+    });
+
+    await queue.add("judge", { answerId: answer.id });
+
+    return answer;
+}
+
+export async function getAnswerStatus(answerId: number) {
+    return prisma.submissionAnswer.findUnique({
+        where: { id: answerId },
+        select: {
+            id: true,
+            judgeStatus: true,
+            score: true,
+            maxScore: true,
+            stdoutLog: true,
+            stderrLog: true,
+            testResults: true,
+        },
+    });
+}
+
 export async function getAssignmentsBySection(sectionId: number) {
-  return prisma.assignment.findMany({
-    where: {
-      sectionLinks: {
-        some: { sectionId },
-      },
-    },
-    include: {
-      sectionLinks: {
-        include: { section: true },
-      },
-      questions: true,
-      submissions: true,
-    },
-  });
+    return prisma.assignment.findMany({
+        where: {
+            sectionLinks: {
+                some: { sectionId },
+            },
+        },
+        include: {
+            sectionLinks: {
+                include: { section: true },
+            },
+            questions: true,
+            submissions: true,
+        },
+    });
 }
 
 export async function createAssignment(data: {
@@ -84,7 +187,7 @@ export async function getAssignmentsBySectionForStudent(
     }
 
     // Lấy tất cả assignments của section
-    const assignments = await prisma.assignment.findMany({
+    const assignments = (await prisma.assignment.findMany({
         where: whereClause,
         include: {
             sectionLinks: {
@@ -124,14 +227,14 @@ export async function getAssignmentsBySectionForStudent(
                             questionId: true,
                             score: true,
                             maxScore: true,
-                            isCorrect: true,
+                            judgeStatus: true,
                         },
                     },
                 },
             },
         },
         orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
-    }) as any[];
+    })) as any[];
 
     // Map và thêm thông tin status
     const result = assignments.map((assignment) => {
@@ -161,7 +264,7 @@ export async function getAssignmentsBySectionForStudent(
 
         // Calculate total points
         const totalPoints = assignment.questions.reduce(
-            (sum:any, aq:any) => sum + aq.question.points,
+            (sum: any, aq: any) => sum + aq.question.points,
             0
         );
 
@@ -236,7 +339,6 @@ export async function deleteAssignment(id: number) {
     return prisma.assignment.delete({ where: { id } });
 }
 
-
 export async function getAllAssignments(filter: any) {
     return prisma.assignment.findMany({
         where: {
@@ -261,7 +363,6 @@ export async function getAllAssignments(filter: any) {
         },
     });
 }
-
 
 export async function getAssignmentById(id: number) {
     return prisma.assignment.findUnique({
@@ -326,13 +427,82 @@ export async function startAssignment(studentId: number, assignmentId: number) {
     }
 }
 
+async function calculateAnswerScore(answer: {
+    questionId: number;
+    selectedChoices?: number[];
+    essayAnswer?: string;
+    codeAnswer?: string;
+}) {
+    const question = await prisma.question.findUnique({
+        where: { id: answer.questionId },
+        include: {
+            choices: true,
+        },
+    });
+
+    if (!question) {
+        return { score: 0, maxScore: 0 };
+    }
+
+    const maxScore = question.points;
+    let score = 0;
+
+    // Multiple choice questions
+    if (question.type === "multiple_choice" && answer.selectedChoices) {
+        const correctChoices = question.choices
+            .filter((c) => c.isCorrect)
+            .map((c) => c.id);
+
+        const selectedChoices = answer.selectedChoices || [];
+
+        // Kiểm tra số lượng đáp án đúng
+        const correctCount = correctChoices.length;
+
+        // Số đáp án đúng được chọn
+        const correctSelected = selectedChoices.filter((id) =>
+            correctChoices.includes(id)
+        ).length;
+
+        // Số đáp án sai được chọn
+        const wrongSelected = selectedChoices.length - correctSelected;
+
+        // Tính điểm: chỉ đúng hoàn toàn mới được điểm
+        if (
+            correctSelected === correctCount &&
+            wrongSelected === 0 &&
+            selectedChoices.length === correctCount
+        ) {
+            score = maxScore;
+        } else {
+            score = 0;
+        }
+    }
+
+    // Essay questions - không tự động chấm
+    if (question.type === "essay") {
+        score = 0; // Cần giáo viên chấm thủ công
+    }
+
+    // Code questions - sẽ được judge riêng
+    if (question.type === "coding") {
+        score = 0; // Sẽ được cập nhật sau khi judge
+    }
+
+    return {
+        score,
+        maxScore,
+        isAutoGraded: question.type === "multiple_choice" || question.type === "coding",
+    };
+}
+
+// Cập nhật hàm submitAssignment
 export async function submitAssignment(
     studentId: number,
     assignmentId: number,
     answers: any[]
 ) {
     try {
-        // Tìm hoặc tạo submission
+        // 1. Tìm hoặc tạo submission
         const submission = await prisma.submission.upsert({
             where: {
                 assignmentId_studentId: {
@@ -353,9 +523,18 @@ export async function submitAssignment(
             },
         });
 
-        // Lưu từng câu trả lời
+        let totalScore = 0;
+        let totalMaxScore = 0;
+        let allAutoGraded = true;
+        const answerResults = [];
+
+        // 2. Lưu từng câu trả lời và tính điểm
         for (const ans of answers) {
-            await prisma.submissionAnswer.upsert({
+            // Tính điểm cho câu trả lời
+            const scoreResult = await calculateAnswerScore(ans);
+
+            // Lưu câu trả lời
+            const savedAnswer = await prisma.submissionAnswer.upsert({
                 where: {
                     submissionId_questionId: {
                         submissionId: submission.id,
@@ -363,27 +542,172 @@ export async function submitAssignment(
                     },
                 },
                 update: {
-                    selectedChoices: ans.selectedChoices || null,
-                    essayAnswer: ans.essayAnswer || null,
                     codeAnswer: ans.codeAnswer || null,
-                    language: ans.language || null,
+                    language: ans.language
+                        ? (ans.language as ProgrammingLanguage)
+                        : null,
+                    selectedChoices: ans.selectedChoices
+                        ? { set: ans.selectedChoices }
+                        : { set: [] },
+                    score: scoreResult.score,
+                    maxScore: scoreResult.maxScore,
+                    judgeStatus:
+                        ans.codeAnswer && ans.language ? "queued" : "running",
                 },
                 create: {
-                    submissionId: submission.id,
-                    questionId: ans.questionId,
-                    selectedChoices: ans.selectedChoices || null,
-                    essayAnswer: ans.essayAnswer || null,
                     codeAnswer: ans.codeAnswer || null,
-                    language: ans.language || null,
+                    language: ans.language
+                        ? (ans.language as ProgrammingLanguage)
+                        : null,
+                    selectedChoices: ans.selectedChoices
+                        ? { set: ans.selectedChoices }
+                        : { set: [] },
+                    score: scoreResult.score,
+                    maxScore: scoreResult.maxScore,
+                    judgeStatus:
+                        ans.codeAnswer && ans.language ? "queued" : "running",
+                    submission: { connect: { id: submission.id } },
+                    question: { connect: { id: ans.questionId } },
                 },
+                include: {
+                    question: {
+                        select: {
+                            id: true,
+                            type: true,
+                            content: true,
+                            points: true,
+                            choices: {
+                                select: {
+                                    id: true,
+                                    content: true,
+                                    isCorrect: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+
+            // Đẩy code questions vào queue để judge
+            if (ans.codeAnswer && ans.language) {
+                await queue.add("judge", { answerId: savedAnswer.id });
+                allAutoGraded = false;
+            }
+
+            // Nếu là essay, cần chấm thủ công
+            if (savedAnswer.question.type === "essay") {
+                allAutoGraded = false;
+            }
+
+            totalScore += scoreResult.score;
+            totalMaxScore += scoreResult.maxScore;
+
+            answerResults.push({
+                answerId: savedAnswer.id,
+                questionId: savedAnswer.questionId,
+                questionType: savedAnswer.question.type,
+                questionContent: savedAnswer.question.content,
+                score: scoreResult.score,
+                maxScore: scoreResult.maxScore,
+                isCorrect: scoreResult.score === scoreResult.maxScore,
+                selectedChoices: savedAnswer.selectedChoices,
+                correctChoices: savedAnswer.question.choices
+                    .filter((c) => c.isCorrect)
+                    .map((c) => c.id),
+                needsManualGrading: savedAnswer.question.type === "essay",
+                isBeingJudged:
+                    savedAnswer.question.type === "coding" &&
+                    savedAnswer.judgeStatus === "queued",
+                judgeStatus: savedAnswer.judgeStatus,
             });
         }
 
-        // Trả về submission với answers
-        return await prisma.submission.findUnique({
+        // 3. Cập nhật tổng điểm cho submission
+        const updatedSubmission = await prisma.submission.update({
             where: { id: submission.id },
-            include: { answers: true },
+            data: {
+                score: totalScore,
+                maxScore: totalMaxScore,
+                autoGraded: allAutoGraded,
+                gradedAt: allAutoGraded ? new Date() : null,
+            },
+            include: {
+                answers: {
+                    include: {
+                        question: {
+                            select: {
+                                id: true,
+                                type: true,
+                                content: true,
+                                points: true,
+                            },
+                        },
+                    },
+                },
+                assignment: {
+                    select: {
+                        id: true,
+                        title: true,
+                        maxScore: true,
+                        passingScore: true,
+                        showAnswersAfterSubmit: true,
+                    },
+                },
+            },
         });
+
+        // 4. Kiểm tra đạt/không đạt
+        const isPassing = updatedSubmission.assignment.passingScore
+            ? totalScore >= updatedSubmission.assignment.passingScore
+            : true;
+
+        // 5. Trả về kết quả chi tiết
+        return {
+            submission: {
+                id: updatedSubmission.id,
+                assignmentId: updatedSubmission.assignmentId,
+                assignmentTitle: updatedSubmission.assignment.title,
+                studentId: updatedSubmission.studentId,
+                startedAt: updatedSubmission.startedAt,
+                completedAt: updatedSubmission.completedAt,
+                submittedAt: updatedSubmission.submittedAt,
+                score: totalScore,
+                maxScore: totalMaxScore,
+                percentage:
+                    totalMaxScore > 0
+                        ? Math.round((totalScore / totalMaxScore) * 100)
+                        : 0,
+                isPassing,
+                autoGraded: allAutoGraded,
+                gradedAt: updatedSubmission.gradedAt,
+                needsManualGrading: !allAutoGraded,
+            },
+            answers: answerResults,
+            summary: {
+                totalQuestions: answers.length,
+                answeredQuestions: answers.length,
+                correctQuestions: answerResults.filter((a) => a.isCorrect).length,
+                wrongQuestions: answerResults.filter(
+                    (a) =>
+                        !a.isCorrect &&
+                        !a.needsManualGrading &&
+                        !a.isBeingJudged
+                ).length,
+                needsManualGrading: answerResults.filter(
+                    (a) => a.needsManualGrading
+                ).length,
+                beingJudged: answerResults.filter((a) => a.isBeingJudged).length,
+                totalScore,
+                totalMaxScore,
+                percentage:
+                    totalMaxScore > 0
+                        ? Math.round((totalScore / totalMaxScore) * 100)
+                        : 0,
+                isPassing,
+            },
+            // Chỉ hiển thị đáp án nếu được phép
+            showAnswers: updatedSubmission.assignment.showAnswersAfterSubmit,
+        };
     } catch (error: any) {
         console.error("Error in submitAssignment:", error);
         throw error;

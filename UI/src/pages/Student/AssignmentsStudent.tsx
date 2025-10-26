@@ -283,7 +283,7 @@ export default function AssignmentsStudent() {
               <div
                 key={assignment.id}
                 className="bg-white rounded-lg border hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => navigate("/student/courses/100/assignments/" + assignment.id)}
+                onClick={() => navigate(`/student/courses/${sectionId}/assignments/` + assignment.id)}
 
               >
                 <div className="p-4">
@@ -357,7 +357,7 @@ export default function AssignmentsStudent() {
                         className="w-full mt-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors"
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate(`/student/courses/100/assignments/${assignment.id}`);
+                          navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`);
                         }}
                       >
                         {assignment.submission?.startedAt ? "Tiếp tục làm" : "Bắt đầu"}

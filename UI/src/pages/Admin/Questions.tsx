@@ -18,6 +18,8 @@ import {
 	Select,
 	Row,
 	Col,
+	Radio,
+	message,
 } from "antd";
 import {
 	ReloadOutlined,
@@ -30,6 +32,9 @@ import {
 	CloseCircleOutlined,
 	BookOutlined,
 	FileTextOutlined,
+	CodeOutlined,
+	FormOutlined,
+	UnorderedListOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -46,6 +51,16 @@ type Choice = {
 	content: string;
 	isCorrect: boolean;
 	order?: number;
+};
+
+type TestCase = {
+	id?: number;
+	questionId?: number;
+	input: string;
+	expectedOutput: string;
+	isHidden: boolean;
+	points: number;
+	order: number;
 };
 
 type Subject = {
@@ -92,6 +107,7 @@ export default function Questions() {
 	const [filterSubject, setFilterSubject] = useState<number | null>(null);
 	const [filterChapter, setFilterChapter] = useState<number | null>(null);
 	const [filterDifficulty, setFilterDifficulty] = useState<string | null>(null);
+	const [filterType, setFilterType] = useState<string | null>(null);
 
 	// modal thêm/sửa
 	const [form] = Form.useForm<any>();
@@ -100,6 +116,8 @@ export default function Questions() {
 	const [choices, setChoices] = useState<Choice[]>([
 		{ content: "", isCorrect: false, order: 1 },
 	]);
+	const [testCases, setTestCases] = useState<TestCase[]>([]);
+	const [questionType, setQuestionType] = useState<string>("multiple_choice");
 
 	// Chapters for selected subject in form
 	const [formChapters, setFormChapters] = useState<Chapter[]>([]);
@@ -108,6 +126,7 @@ export default function Questions() {
 	// modal xem chi tiết
 	const [detailModalOpen, setDetailModalOpen] = useState(false);
 	const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null);
+	const [detailTestCases, setDetailTestCases] = useState<TestCase[]>([]);
 
 	useEffect(() => {
 		fetchQuestions();
@@ -117,7 +136,7 @@ export default function Questions() {
 	async function fetchQuestions() {
 		try {
 			setLoading(true);
-			const res = await axios.get<{ success: boolean; data:  Question[]  }>(
+			const res = await axios.get<{ success: boolean; data: Question[] }>(
 				`${API_BASE}/questions`
 			);
 			if (res.data.success) {
@@ -158,7 +177,7 @@ export default function Questions() {
 
 	async function fetchChaptersBySubject(subjectId: number) {
 		try {
-			const res = await axios.get<{ success: boolean; data: Chapter[]  }>(
+			const res = await axios.get<{ success: boolean; data: Chapter[] }>(
 				`${API_BASE}/chapters?subject_id=${subjectId}`
 			);
 			if (res.data.success) {
@@ -167,6 +186,21 @@ export default function Questions() {
 			return [];
 		} catch (err) {
 			console.error("Không tải được danh sách chương");
+			return [];
+		}
+	}
+
+	async function fetchTestCases(questionId: number) {
+		try {
+			const res = await axios.get<{ success: boolean; data: TestCase[] }>(
+				`${API_BASE}/test-cases/question/${questionId}`
+			);
+			if (res.data.success) {
+				return res.data.data || [];
+			}
+			return [];
+		} catch (err) {
+			console.error("Không tải được danh sách test case");
 			return [];
 		}
 	}
@@ -195,6 +229,22 @@ export default function Questions() {
 		}
 	};
 
+	const handleQuestionTypeChange = (type: string) => {
+		setQuestionType(type);
+
+		// Reset choices and test cases based on type
+		if (type === "multiple_choice") {
+			setChoices([{ content: "", isCorrect: false, order: 1 }]);
+			setTestCases([]);
+		} else if (type === "essay") {
+			setChoices([]);
+			setTestCases([]);
+		} else if (type === "coding") {
+			setChoices([]);
+			setTestCases([]);
+		}
+	};
+
 	const handleDelete = async (id: number) => {
 		try {
 			await axios.delete(`${API_BASE}/questions/${id}`);
@@ -209,59 +259,98 @@ export default function Questions() {
 		try {
 			const values = await form.validateFields();
 
-			// Validate choices
-			if (choices.length < 2) {
-				toast.error("Cần ít nhất 2 đáp án");
-				return;
-			}
-
-			const hasCorrectAnswer = choices.some((c) => c.isCorrect);
-			if (!hasCorrectAnswer) {
-				toast.error("Cần ít nhất 1 đáp án đúng");
-				return;
-			}
-
-			const validChoices = choices.filter((c) => c.content.trim());
-			if (validChoices.length < 2) {
-				toast.error("Cần ít nhất 2 đáp án có nội dung");
-				return;
-			}
-
-			const payload = {
+			let payload: any = {
 				type: values.type || "multiple_choice",
 				content: values.content.trim(),
-				points: values.points || 5,
-
-				subjectId: values.subjectId || undefined,
-				chapterId: values.chapterId || undefined,
+				points: values.points ? Number(values.points) : 5,
+				subjectId: values.subjectId ? Number(values.subjectId) : undefined,
+				chapterId: values.chapterId ? Number(values.chapterId) : undefined,
 				tags: values.tags?.trim() || undefined,
 				difficulty: values.difficulty || "medium",
+			};
 
-				choices: validChoices.map((c, idx) => ({
+			// Validate based on question type
+			if (values.type === "multiple_choice") {
+				if (choices.length < 2) {
+					toast.error("Cần ít nhất 2 đáp án");
+					return;
+				}
+
+				const hasCorrectAnswer = choices.some((c) => c.isCorrect);
+				if (!hasCorrectAnswer) {
+					toast.error("Cần ít nhất 1 đáp án đúng");
+					return;
+				}
+
+				const validChoices = choices.filter((c) => c.content.trim());
+				if (validChoices.length < 2) {
+					toast.error("Cần ít nhất 2 đáp án có nội dung");
+					return;
+				}
+
+				payload.choices = validChoices.map((c, idx) => ({
 					content: c.content.trim(),
 					isCorrect: c.isCorrect,
 					order: idx + 1,
-				})),
-			};
+				}));
+			}
+
 			console.log("Request body:", payload);
+
+			let questionId: number;
 
 			if (editing) {
 				await axios.put(`${API_BASE}/questions/${editing.id}`, payload);
+				questionId = editing.id;
 				toast.success("Đã cập nhật câu hỏi");
 			} else {
-				await axios.post(`${API_BASE}/questions`, payload);
+				const res = await axios.post(`${API_BASE}/questions`, payload);
+				questionId = res.data.data.id;
 				toast.success("Đã thêm câu hỏi mới");
 			}
 
+			
+
+			// Handle test cases for code questions
+			if (values.type === "coding" && testCases.length > 0) {
+				try {
+					// Delete existing test cases if editing
+					if (editing) {
+						const existingTestCases = await fetchTestCases(questionId);
+						for (const tc of existingTestCases) {
+							await axios.delete(`${API_BASE}/test-cases/${tc.id}`);
+						}
+					}
+
+					// Create new test cases
+					for (const tc of testCases) {
+						await axios.post(`${API_BASE}/test-cases`, {
+							questionId,
+							input: tc.input,
+							expectedOutput: tc.expectedOutput,
+							isHidden: tc.isHidden,
+							points: tc.points,
+							order: tc.order,
+						});
+					}
+					toast.success("Đã lưu test cases");
+				} catch (err) {
+					console.log("👉 Backend error:", err.response?.data);
+					toast.error("Lỗi khi lưu test cases");
+				}
+			}
 
 			setModalOpen(false);
 			setEditing(null);
 			form.resetFields();
 			setChoices([{ content: "", isCorrect: false, order: 1 }]);
+			setTestCases([]);
+			setQuestionType("multiple_choice");
 			setSelectedSubjectId(null);
 			setFormChapters([]);
 			fetchQuestions();
 		} catch (err: any) {
+			console.log("👉 Backend error:", err.response?.data);
 			if (err?.errorFields) return;
 			const errorMsg = err?.response?.data?.message || "Không thể lưu câu hỏi";
 			toast.error(errorMsg);
@@ -289,9 +378,60 @@ export default function Questions() {
 		setChoices(newChoices);
 	};
 
-	const viewDetails = (record: Question) => {
+	const addTestCase = () => {
+		setTestCases([
+			...testCases,
+			{
+				input: "",
+				expectedOutput: "",
+				isHidden: false,
+				points: 1,
+				order: testCases.length + 1,
+			},
+		]);
+	};
+
+	const removeTestCase = (index: number) => {
+		setTestCases(testCases.filter((_, i) => i !== index));
+	};
+
+	const updateTestCase = (index: number, field: keyof TestCase, value: any) => {
+		const newTestCases = [...testCases];
+		newTestCases[index] = { ...newTestCases[index], [field]: value };
+		setTestCases(newTestCases);
+	};
+
+	const viewDetails = async (record: Question) => {
 		setSelectedQuestion(record);
+
+		// Fetch test cases if it's a code question
+		if (record.type === "coding") {
+			const testCasesData = await fetchTestCases(record.id);
+			setDetailTestCases(testCasesData);
+		} else {
+			setDetailTestCases([]);
+		}
+
 		setDetailModalOpen(true);
+	};
+
+	// Render question type tag
+	const renderTypeTag = (type: string) => {
+		const config = {
+			multiple_choice: { color: "blue", text: "Trắc nghiệm", icon: <UnorderedListOutlined /> },
+			essay: { color: "green", text: "Tự luận", icon: <FormOutlined /> },
+			coding: { color: "purple", text: "Code", icon: <CodeOutlined /> },
+		};
+		const typeConfig = config[type as keyof typeof config] || {
+			color: "default",
+			text: type,
+			icon: null,
+		};
+		return (
+			<Tag color={typeConfig.color} icon={typeConfig.icon}>
+				{typeConfig.text}
+			</Tag>
+		);
 	};
 
 	// Render difficulty tag
@@ -313,7 +453,7 @@ export default function Questions() {
 			title: "Nội dung câu hỏi",
 			dataIndex: "content",
 			key: "content",
-			width: "30%",
+			width: "25%",
 			render: (text: string, record: Question) => (
 				<div>
 					<Text strong style={{ cursor: "pointer" }} onClick={() => viewDetails(record)}>
@@ -323,10 +463,18 @@ export default function Questions() {
 			),
 		},
 		{
+			title: "Loại",
+			dataIndex: "type",
+			key: "type",
+			align: "center" as const,
+			width: "10%",
+			render: renderTypeTag,
+		},
+		{
 			title: "Môn học",
 			key: "subject",
-			width: "15%",
-			render: (_: any, record: Question) => (
+			width: "12%",
+			render: (_: any, record: Question) =>
 				record.subject ? (
 					<div>
 						<Tag color="blue" icon={<BookOutlined />}>
@@ -338,14 +486,13 @@ export default function Questions() {
 					</div>
 				) : (
 					<Text type="secondary">—</Text>
-				)
-			),
+				),
 		},
 		{
 			title: "Chương",
 			key: "chapter",
-			width: "12%",
-			render: (_: any, record: Question) => (
+			width: "10%",
+			render: (_: any, record: Question) =>
 				record.chapter ? (
 					<Tooltip title={record.chapter.chapterName}>
 						<Tag color="purple" icon={<FileTextOutlined />}>
@@ -354,15 +501,14 @@ export default function Questions() {
 					</Tooltip>
 				) : (
 					<Text type="secondary">—</Text>
-				)
-			),
+				),
 		},
 		{
 			title: "Độ khó",
 			dataIndex: "difficulty",
 			key: "difficulty",
 			align: "center" as const,
-			width: "10%",
+			width: "8%",
 			render: renderDifficultyTag,
 		},
 		{
@@ -370,24 +516,15 @@ export default function Questions() {
 			dataIndex: "points",
 			key: "points",
 			align: "center" as const,
-			width: "8%",
+			width: "7%",
 			sorter: (a: Question, b: Question) => a.points - b.points,
 			render: (points: number) => <Tag color="green">{points}</Tag>,
-		},
-		{
-			title: "Số đáp án",
-			key: "choicesCount",
-			align: "center" as const,
-			width: "10%",
-			render: (_: any, record: Question) => (
-				<Tag color="cyan">{record.choices?.length || 0}</Tag>
-			),
 		},
 		{
 			title: "Ngày tạo",
 			dataIndex: "createdAt",
 			key: "createdAt",
-			width: "12%",
+			width: "10%",
 			render: (v: string) => (v ? dayjs(v).format("DD/MM/YYYY") : "—"),
 		},
 		{
@@ -410,6 +547,7 @@ export default function Questions() {
 							size="small"
 							onClick={async () => {
 								setEditing(record);
+								setQuestionType(record.type);
 								form.setFieldsValue({
 									type: record.type,
 									content: record.content,
@@ -427,16 +565,29 @@ export default function Questions() {
 									setSelectedSubjectId(record.subjectId);
 								}
 
-								setChoices(
-									record.choices && record.choices.length > 0
-										? record.choices.map((c) => ({
-											id: c.id,
-											content: c.content,
-											isCorrect: c.isCorrect,
-											order: c.order,
-										}))
-										: [{ content: "", isCorrect: false, order: 1 }]
-								);
+								// Load choices for multiple choice questions
+								if (record.type === "multiple_choice") {
+									setChoices(
+										record.choices && record.choices.length > 0
+											? record.choices.map((c) => ({
+												id: c.id,
+												content: c.content,
+												isCorrect: c.isCorrect,
+												order: c.order,
+											}))
+											: [{ content: "", isCorrect: false, order: 1 }]
+									);
+									setTestCases([]);
+								} else if (record.type === "coding") {
+									// Load test cases for code questions
+									const testCasesData = await fetchTestCases(record.id);
+									setTestCases(testCasesData);
+									setChoices([]);
+								} else {
+									setChoices([]);
+									setTestCases([]);
+								}
+
 								setModalOpen(true);
 							}}
 						/>
@@ -463,9 +614,11 @@ export default function Questions() {
 		if (keyword) {
 			const kw = keyword.toLowerCase();
 			const matchContent = q.content?.toLowerCase().includes(kw);
-			const matchSubject = q.subject?.subjectName?.toLowerCase().includes(kw) ||
+			const matchSubject =
+				q.subject?.subjectName?.toLowerCase().includes(kw) ||
 				q.subject?.subjectCode?.toLowerCase().includes(kw);
-			const matchChapter = q.chapter?.chapterName?.toLowerCase().includes(kw) ||
+			const matchChapter =
+				q.chapter?.chapterName?.toLowerCase().includes(kw) ||
 				q.chapter?.chapterCode?.toLowerCase().includes(kw);
 
 			if (!matchContent && !matchSubject && !matchChapter) return false;
@@ -480,24 +633,45 @@ export default function Questions() {
 		// Filter by difficulty
 		if (filterDifficulty && q.difficulty !== filterDifficulty) return false;
 
+		// Filter by type
+		if (filterType && q.type !== filterType) return false;
+
 		return true;
 	});
 
+	const handleReload = async () => {
+		// reset filters
+		setKeyword("");
+		setFilterSubject(null);
+		setFilterChapter(null);
+		setFilterDifficulty(null);
+		setFilterType(null);
+
+		// reload data
+		await fetchQuestions();
+	};
+
+
 	return (
 		<div className="pl-3 pr-3">
-			<div style={{
-				display: "flex",
-				justifyContent: "space-between",
-				alignItems: "center",
-				marginBottom: 16,
-			}}>
+			<div
+				style={{
+					display: "flex",
+					justifyContent: "space-between",
+					alignItems: "center",
+					marginBottom: 16,
+				}}
+			>
 				<Title level={3} className="mt-2">
 					<div className="flex items-center gap-2">
-						<div className="mt-1"><BookOpen /></div> Quản lý Câu hỏi
+						<div className="mt-1">
+							<BookOpen />
+						</div>{" "}
+						Quản lý Câu hỏi
 					</div>
 				</Title>
 				<div style={{ display: "flex", gap: 8 }}>
-					<Button icon={<ReloadOutlined />} onClick={fetchQuestions}>
+					<Button icon={<ReloadOutlined />} onClick={handleReload}>
 						Làm mới
 					</Button>
 					<Button
@@ -507,6 +681,8 @@ export default function Questions() {
 							setEditing(null);
 							form.resetFields();
 							setChoices([{ content: "", isCorrect: false, order: 1 }]);
+							setTestCases([]);
+							setQuestionType("multiple_choice");
 							setSelectedSubjectId(null);
 							setFormChapters([]);
 							setModalOpen(true);
@@ -520,7 +696,7 @@ export default function Questions() {
 			{/* Filters */}
 			<Card style={{ marginBottom: 16 }}>
 				<Row gutter={16}>
-					<Col span={8}>
+					<Col span={6}>
 						<Input
 							allowClear
 							prefix={<SearchOutlined />}
@@ -529,7 +705,20 @@ export default function Questions() {
 							onChange={(e) => setKeyword(e.target.value)}
 						/>
 					</Col>
-					<Col span={6}>
+					<Col span={4}>
+						<Select
+							allowClear
+							placeholder="Lọc theo loại"
+							style={{ width: "100%" }}
+							value={filterType}
+							onChange={setFilterType}
+						>
+							<Option value="multiple_choice">Trắc nghiệm</Option>
+							<Option value="essay">Tự luận</Option>
+							<Option value="coding">Code</Option>
+						</Select>
+					</Col>
+					<Col span={5}>
 						<Select
 							allowClear
 							placeholder="Lọc theo môn học"
@@ -544,7 +733,7 @@ export default function Questions() {
 							))}
 						</Select>
 					</Col>
-					<Col span={6}>
+					<Col span={5}>
 						<Select
 							allowClear
 							placeholder="Lọc theo chương"
@@ -609,17 +798,46 @@ export default function Questions() {
 					setModalOpen(false);
 					setEditing(null);
 					setChoices([{ content: "", isCorrect: false, order: 1 }]);
+					setTestCases([]);
+					setQuestionType("multiple_choice");
 					setSelectedSubjectId(null);
 					setFormChapters([]);
 				}}
 				onOk={handleSubmit}
 				okText={editing ? "Lưu thay đổi" : "Tạo mới"}
 				cancelText="Hủy"
-				width={800}
+				width={900}
 				centered
-				bodyStyle={{ maxHeight: "70vh", overflowY: "auto", overflowX: "hidden" }}
+				bodyStyle={{
+					maxHeight: "70vh",
+					overflowY: "auto",
+					overflowX: "hidden",
+				}}
 			>
 				<Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+					{/* Question Type Selection */}
+					<Form.Item
+						label="Loại câu hỏi"
+						name="type"
+						rules={[{ required: true, message: "Vui lòng chọn loại câu hỏi" }]}
+						initialValue="multiple_choice"
+					>
+						<Radio.Group
+							onChange={(e) => handleQuestionTypeChange(e.target.value)}
+							value={questionType}
+						>
+							<Radio.Button value="multiple_choice">
+								<UnorderedListOutlined /> Trắc nghiệm
+							</Radio.Button>
+							<Radio.Button value="essay">
+								<FormOutlined /> Tự luận
+							</Radio.Button>
+							<Radio.Button value="coding">
+								<CodeOutlined /> Code
+							</Radio.Button>
+						</Radio.Group>
+					</Form.Item>
+
 					<Row gutter={16}>
 						<Col span={12}>
 							<Form.Item
@@ -633,7 +851,7 @@ export default function Questions() {
 									placeholder="Chọn môn học"
 									onChange={handleSubjectChange}
 									filterOption={(input, option) =>
-										String(option?.children || '')
+										String(option?.children || "")
 											?.toLowerCase()
 											.includes(input.toLowerCase())
 									}
@@ -647,17 +865,14 @@ export default function Questions() {
 							</Form.Item>
 						</Col>
 						<Col span={12}>
-							<Form.Item
-								label="Chương"
-								name="chapterId"
-							>
+							<Form.Item label="Chương" name="chapterId">
 								<Select
 									showSearch
 									allowClear
 									placeholder="Chọn chương (không bắt buộc)"
 									disabled={!selectedSubjectId}
 									filterOption={(input, option) =>
-										String(option?.children || '')
+										String(option?.children || "")
 											?.toLowerCase()
 											.includes(input.toLowerCase())
 									}
@@ -691,7 +906,7 @@ export default function Questions() {
 								label="Điểm"
 								name="points"
 								rules={[{ required: true, message: "Vui lòng nhập điểm" }]}
-								initialValue={5}
+								initialValue={1}
 							>
 								<InputNumber
 									min={1}
@@ -706,7 +921,7 @@ export default function Questions() {
 								label="Độ khó"
 								name="difficulty"
 								rules={[{ required: true, message: "Vui lòng chọn độ khó" }]}
-								initialValue="medium"
+								initialValue="easy"
 							>
 								<Select placeholder="Chọn độ khó">
 									<Option value="easy">
@@ -722,68 +937,185 @@ export default function Questions() {
 							</Form.Item>
 						</Col>
 						<Col span={8}>
-							<Form.Item
-								label="Tags (phân cách bởi dấu phẩy)"
-								name="tags"
-							>
+							<Form.Item label="Tags (phân cách bởi dấu phẩy)" name="tags">
 								<Input placeholder="VD: loop, array, basic" />
 							</Form.Item>
 						</Col>
 					</Row>
 
-					<Divider>Đáp án</Divider>
+					{/* Multiple Choice Answers */}
+					{questionType === "multiple_choice" && (
+						<>
+							<Divider>Đáp án</Divider>
 
-					{choices.map((choice, index) => (
-						<Card
-							key={index}
-							size="small"
-							style={{ marginBottom: 12 }}
-							extra={
-								choices.length > 2 && (
-									<Button
-										type="text"
-										danger
-										size="small"
-										icon={<DeleteOutlined />}
-										onClick={() => removeChoice(index)}
-									>
-										Xóa
-									</Button>
-								)
-							}
-						>
-							<Space direction="vertical" style={{ width: "100%" }}>
-								<Input
-									placeholder={`Nội dung đáp án ${index + 1}`}
-									value={choice.content}
-									onChange={(e) =>
-										updateChoice(index, "content", e.target.value)
-									}
-									maxLength={200}
-								/>
-								<Checkbox
-									checked={choice.isCorrect}
-									onChange={(e) =>
-										updateChoice(index, "isCorrect", e.target.checked)
+							{choices.map((choice, index) => (
+								<Card
+									key={index}
+									size="small"
+									style={{ marginBottom: 12 }}
+									extra={
+										choices.length > 2 && (
+											<Button
+												type="text"
+												danger
+												size="small"
+												icon={<DeleteOutlined />}
+												onClick={() => removeChoice(index)}
+											>
+												Xóa
+											</Button>
+										)
 									}
 								>
-									<Text type={choice.isCorrect ? "success" : "secondary"}>
-										{choice.isCorrect ? "✓ Đáp án đúng" : "Đáp án sai"}
-									</Text>
-								</Checkbox>
-							</Space>
-						</Card>
-					))}
+									<Space direction="vertical" style={{ width: "100%" }}>
+										<Input
+											placeholder={`Nội dung đáp án ${index + 1}`}
+											value={choice.content}
+											onChange={(e) =>
+												updateChoice(index, "content", e.target.value)
+											}
+											maxLength={200}
+										/>
+										<Checkbox
+											checked={choice.isCorrect}
+											onChange={(e) =>
+												updateChoice(index, "isCorrect", e.target.checked)
+											}
+										>
+											<Text type={choice.isCorrect ? "success" : "secondary"}>
+												{choice.isCorrect ? "✓ Đáp án đúng" : "Đáp án sai"}
+											</Text>
+										</Checkbox>
+									</Space>
+								</Card>
+							))}
 
-					<Button
-						type="dashed"
-						icon={<PlusOutlined />}
-						onClick={addChoice}
-						block
-						style={{ marginTop: 8 }}
-					>
-						Thêm đáp án
-					</Button>
+							<Button
+								type="dashed"
+								icon={<PlusOutlined />}
+								onClick={addChoice}
+								block
+								style={{ marginTop: 8 }}
+							>
+								Thêm đáp án
+							</Button>
+						</>
+					)}
+
+					{/* Code Test Cases */}
+					{questionType === "coding" && (
+						<>
+							<Divider>Test Cases</Divider>
+
+							{testCases.map((testCase, index) => (
+								<Card
+									key={index}
+									size="small"
+									style={{ marginBottom: 12 }}
+									title={`Test Case ${index + 1}`}
+									extra={
+										<Button
+											type="text"
+											danger
+											size="small"
+											icon={<DeleteOutlined />}
+											onClick={() => removeTestCase(index)}
+										>
+											Xóa
+										</Button>
+									}
+								>
+									<Row gutter={16}>
+										<Col span={12}>
+											<Text strong>Input:</Text>
+											<TextArea
+												placeholder="Nhập input"
+												value={testCase.input}
+												onChange={(e) =>
+													updateTestCase(index, "input", e.target.value)
+												}
+												rows={3}
+												style={{ marginTop: 4 }}
+											/>
+										</Col>
+										<Col span={12}>
+											<Text strong>Expected Output:</Text>
+											<TextArea
+												placeholder="Nhập expected output"
+												value={testCase.expectedOutput}
+												onChange={(e) =>
+													updateTestCase(
+														index,
+														"expectedOutput",
+														e.target.value
+													)
+												}
+												rows={3}
+												style={{ marginTop: 4 }}
+											/>
+										</Col>
+									</Row>
+									<Row gutter={16} style={{ marginTop: 12 }}>
+										<Col span={8}>
+											<Text strong>Điểm:</Text>
+											<InputNumber
+												min={1}
+												max={100}
+												value={testCase.points}
+												onChange={(value) =>
+													updateTestCase(index, "points", value || 1)
+												}
+												style={{ width: "100%", marginTop: 4 }}
+											/>
+										</Col>
+										<Col span={8}>
+											<Text strong>Thứ tự:</Text>
+											<InputNumber
+												min={1}
+												value={testCase.order}
+												onChange={(value) =>
+													updateTestCase(index, "order", value || index + 1)
+												}
+												style={{ width: "100%", marginTop: 4 }}
+											/>
+										</Col>
+										<Col span={8}>
+											<div style={{ marginTop: 24 }}>
+												<Checkbox
+													checked={testCase.isHidden}
+													onChange={(e) =>
+														updateTestCase(index, "isHidden", e.target.checked)
+													}
+												>
+													Ẩn test case
+												</Checkbox>
+											</div>
+										</Col>
+									</Row>
+								</Card>
+							))}
+
+							<Button
+								type="dashed"
+								icon={<PlusOutlined />}
+								onClick={addTestCase}
+								block
+								style={{ marginTop: 8 }}
+							>
+								Thêm Test Case
+							</Button>
+						</>
+					)}
+
+					{/* Essay - No additional fields needed */}
+					{questionType === "essay" && (
+						<Card size="small" style={{ backgroundColor: "#f0f5ff" }}>
+							<Text type="secondary">
+								Câu hỏi tự luận không cần thêm đáp án hoặc test case. Sinh viên sẽ
+								nhập câu trả lời tự do.
+							</Text>
+						</Card>
+					)}
 				</Form>
 			</Modal>
 
@@ -799,19 +1131,23 @@ export default function Questions() {
 				onCancel={() => {
 					setDetailModalOpen(false);
 					setSelectedQuestion(null);
+					setDetailTestCases([]);
 				}}
 				footer={[
 					<Button key="close" onClick={() => setDetailModalOpen(false)}>
 						Đóng
 					</Button>,
 				]}
-				width={700}
+				width={800}
 			>
 				{selectedQuestion && (
 					<div>
 						{/* Thông tin môn học & chương */}
 						{(selectedQuestion.subject || selectedQuestion.chapter) && (
-							<Card size="small" style={{ marginBottom: 16, backgroundColor: "#f0f5ff" }}>
+							<Card
+								size="small"
+								style={{ marginBottom: 16, backgroundColor: "#f0f5ff" }}
+							>
 								<Row gutter={16}>
 									{selectedQuestion.subject && (
 										<Col span={12}>
@@ -845,23 +1181,29 @@ export default function Questions() {
 
 						<div style={{ marginBottom: 16 }}>
 							<Text strong>Nội dung câu hỏi:</Text>
-							<div style={{ marginTop: 8, padding: 12, backgroundColor: "#fafafa", borderRadius: 4 }}>
+							<div
+								style={{
+									marginTop: 8,
+									padding: 12,
+									backgroundColor: "#fafafa",
+									borderRadius: 4,
+								}}
+							>
 								<Text>{selectedQuestion.content}</Text>
 							</div>
 						</div>
 
 						<Row gutter={16} style={{ marginBottom: 16 }}>
-							<Col span={8}>
+							<Col span={6}>
+								<Text strong>Loại:</Text> {renderTypeTag(selectedQuestion.type)}
+							</Col>
+							<Col span={6}>
 								<Text strong>Độ khó:</Text>{" "}
 								{renderDifficultyTag(selectedQuestion.difficulty)}
 							</Col>
-							<Col span={8}>
+							<Col span={6}>
 								<Text strong>Điểm:</Text>{" "}
 								<Tag color="green">{selectedQuestion.points} điểm</Tag>
-							</Col>
-							<Col span={8}>
-								<Text strong>Loại:</Text>{" "}
-								<Tag color="blue">Trắc nghiệm</Tag>
 							</Col>
 						</Row>
 
@@ -878,44 +1220,117 @@ export default function Questions() {
 							</div>
 						)}
 
-						<Divider>Các đáp án</Divider>
+						{/* Multiple Choice Answers */}
+						{selectedQuestion.type === "multiple_choice" && (
+							<>
+								<Divider>Các đáp án</Divider>
 
-						{selectedQuestion.choices && selectedQuestion.choices.length > 0 ? (
-							<Space direction="vertical" style={{ width: "100%" }}>
-								{selectedQuestion.choices.map((choice, index) => (
-									<Card
-										key={choice.id || index}
-										size="small"
-										style={{
-											backgroundColor: choice.isCorrect
-												? "#f6ffed"
-												: "#fafafa",
-											borderColor: choice.isCorrect ? "#52c41a" : "#d9d9d9",
-										}}
-									>
-										<div
-											style={{
-												display: "flex",
-												justifyContent: "space-between",
-												alignItems: "center",
-											}}
-										>
-											<Text>{choice.content}</Text>
-											{choice.isCorrect ? (
-												<Tag icon={<CheckCircleOutlined />} color="success">
-													Đáp án đúng
-												</Tag>
-											) : (
-												<Tag icon={<CloseCircleOutlined />} color="default">
-													Sai
-												</Tag>
-											)}
-										</div>
-									</Card>
-								))}
-							</Space>
-						) : (
-							<Text type="secondary">Không có đáp án nào</Text>
+								{selectedQuestion.choices && selectedQuestion.choices.length > 0 ? (
+									<Space direction="vertical" style={{ width: "100%" }}>
+										{selectedQuestion.choices.map((choice, index) => (
+											<Card
+												key={choice.id || index}
+												size="small"
+												style={{
+													backgroundColor: choice.isCorrect
+														? "#f6ffed"
+														: "#fafafa",
+													borderColor: choice.isCorrect ? "#52c41a" : "#d9d9d9",
+												}}
+											>
+												<div
+													style={{
+														display: "flex",
+														justifyContent: "space-between",
+														alignItems: "center",
+													}}
+												>
+													<Text>{choice.content}</Text>
+													{choice.isCorrect ? (
+														<Tag icon={<CheckCircleOutlined />} color="success">
+															Đáp án đúng
+														</Tag>
+													) : (
+														<Tag icon={<CloseCircleOutlined />} color="default">
+															Sai
+														</Tag>
+													)}
+												</div>
+											</Card>
+										))}
+									</Space>
+								) : (
+									<Text type="secondary">Không có đáp án nào</Text>
+								)}
+							</>
+						)}
+
+						{/* Code Test Cases */}
+						{selectedQuestion.type === "coding" && (
+							<>
+								<Divider>Test Cases</Divider>
+
+								{detailTestCases && detailTestCases.length > 0 ? (
+									<Space direction="vertical" style={{ width: "100%" }}>
+										{detailTestCases.map((testCase, index) => (
+											<Card
+												key={testCase.id || index}
+												size="small"
+												title={
+													<Space>
+														<CodeOutlined />
+														Test Case {testCase.order}
+														{testCase.isHidden && (
+															<Tag color="orange">Ẩn</Tag>
+														)}
+													</Space>
+												}
+												extra={<Tag color="green">{testCase.points} điểm</Tag>}
+											>
+												<Row gutter={16}>
+													<Col span={12}>
+														<Text strong>Input:</Text>
+														<pre
+															style={{
+																backgroundColor: "#f5f5f5",
+																padding: 8,
+																borderRadius: 4,
+																marginTop: 4,
+															}}
+														>
+															{testCase.input}
+														</pre>
+													</Col>
+													<Col span={12}>
+														<Text strong>Expected Output:</Text>
+														<pre
+															style={{
+																backgroundColor: "#f5f5f5",
+																padding: 8,
+																borderRadius: 4,
+																marginTop: 4,
+															}}
+														>
+															{testCase.expectedOutput}
+														</pre>
+													</Col>
+												</Row>
+											</Card>
+										))}
+									</Space>
+								) : (
+									<Text type="secondary">Không có test case nào</Text>
+								)}
+							</>
+						)}
+
+						{/* Essay */}
+						{selectedQuestion.type === "essay" && (
+							<Card size="small" style={{ backgroundColor: "#f0f5ff" }}>
+								<Text type="secondary">
+									Đây là câu hỏi tự luận. Sinh viên sẽ nhập câu trả lời tự do.
+								</Text>
+							</Card>
 						)}
 
 						<Divider />

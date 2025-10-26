@@ -2,6 +2,133 @@ import { Request, Response } from "express";
 import * as service from "./assignment.service";
 import { prisma } from "@/prisma/client";
 import { jsonSafe } from "@/utils/bigint";
+import axios from "axios";
+import FormData from "form-data";
+import fs from "fs";
+import { fi } from "zod/v4/locales";
+
+export async function submit(req: Request, res: Response) {
+    try {
+        // Lấy studentId từ body hoặc user đã đăng nhập
+        let studentId = req.body?.studentId;
+
+        if (!studentId && (req as any).user?.student?.id) {
+            studentId = (req as any).user.student.id;
+        }
+
+        const { answers } = req.body || {};
+
+        if (!studentId) {
+            return res.status(400).json({
+                success: false,
+                message: "studentId required",
+            });
+        }
+
+        if (!answers || !Array.isArray(answers)) {
+            return res.status(400).json({
+                success: false,
+                message: "answers array required",
+            });
+        }
+
+        const assignmentId = req.params.id;
+
+        console.log("=== SUBMIT ASSIGNMENT ===");
+        console.log("Student ID:", studentId);
+        console.log("Assignment ID:", assignmentId);
+        console.log("Answers count:", answers.length);
+
+        const result = await service.submitAssignment(
+            Number(studentId),
+            Number(assignmentId),
+            answers
+        );
+
+        // Trả về kết quả chi tiết bao gồm điểm số
+        res.json({
+            success: true,
+            message: result.submission.autoGraded
+                ? "Nộp bài và chấm điểm thành công!"
+                : "Nộp bài thành công! Một số câu cần chấm thủ công.",
+            data: result,
+        });
+    } catch (error: any) {
+        console.error("Error submitting assignment:", error);
+        res.status(500).json({
+            success: false,
+            message: error.message || "Lỗi khi nộp bài",
+        });
+    }
+}
+
+export async function submitCode(req: Request, res: Response) {
+    try {
+        const assignmentId = Number(req.params.id);
+        const { studentId, questionId, codeAnswer, language } = req.body;
+
+        if (!studentId || !questionId || !codeAnswer || !language) {
+            return res
+                .status(400)
+                .json({ success: false, message: "Missing required fields" });
+        }
+
+        const answer = await service.submitCodeAnswer({
+            studentId,
+            assignmentId,
+            questionId,
+            codeAnswer,
+            language,
+        });
+
+        res.json({ success: true, data: answer });
+    } catch (err: any) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+}
+
+export async function submitProject(req: Request, res: Response) {
+    try {
+        const assignmentId = Number(req.params.id);
+        const { studentId, questionId } = req.body;
+
+        if (!studentId || !questionId) {
+            return res
+                .status(400)
+                .json({ success: false, message: "Missing required fields" });
+        }
+
+        if (!req.file) {
+            return res
+                .status(400)
+                .json({ success: false, message: "No file uploaded" });
+        }
+
+        const answer = await service.submitProjectAnswer({
+            studentId,
+            assignmentId,
+            questionId,
+            filePath: req.file.path,
+        });
+
+        res.json({ success: true, data: answer });
+    } catch (err: any) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+}
+
+export async function getAnswerStatus(req: Request, res: Response) {
+    try {
+        const answerId = Number(req.params.answerId);
+        const answer = await service.getAnswerStatus(answerId);
+        res.json({ success: true, data: answer });
+    } catch (err: any) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+}
+
+
+
 export async function getAssignmentsByTeacher(req: Request, res: Response) {
     try {
         const teacherId = parseInt(req.params.teacherId);
@@ -146,45 +273,72 @@ export async function start(req: Request, res: Response) {
     }
 }
 
-export async function submit(req: Request, res: Response) {
+export async function recommendPath(req: Request, res: Response) {
     try {
-        // Lấy studentId từ body hoặc user đã đăng nhập
-        let studentId = req.body?.studentId;
+        const { id } = req.params;
+        const {
+            studentId,
+            score,
+            completionTime,
+            attemptCount,
+            avgScore,
+            attendanceRate,
+            activityCount,
+        } = req.body;
 
-        if (!studentId && (req as any).user?.student?.id) {
-            studentId = (req as any).user.student.id;
-        }
+        // Gọi AI microservice (FastAPI) với đủ các field
+        const aiRes = await axios.post("http://localhost:8000/predict", {
+            score,
+            completionTime,
+            attemptCount,
+            avgScore,
+            attendanceRate,
+            activityCount,
+        });
 
-        const { answers } = req.body || {};
+        return res.json({
+            success: true,
+            assignmentId: id,
+            studentId,
+            ...aiRes.data, // label + suggestions
+        });
+    } catch (error: any) {
+        console.error("Error calling AI service:", error.message);
+        return res.status(500).json({
+            success: false,
+            message: "Không thể gợi ý lộ trình học tập",
+        });
+    }
+}
 
-        if (!studentId) {
-            return res.status(400).json({
-                success: false,
-                message: "studentId required",
-            });
-        }
+export async function clusterStudents(req: Request, res: Response) {
+    try {
+        // Ở đây mình giả định bạn đã có file CSV chứa dữ liệu sinh viên
+        // Ví dụ: ./uploads/student_features.csv
+        const filePath = "./src/uploads/student_features.csv";
+        
+        const formData = new FormData();
+        formData.append("file", fs.createReadStream(filePath));
 
-        if (!answers || !Array.isArray(answers)) {
-            return res.status(400).json({
-                success: false,
-                message: "answers array required",
-            });
-        }
-
-        const assignmentId = req.params.id;
-
-        const submission = await service.submitAssignment(
-            Number(studentId),
-            Number(assignmentId),
-            answers
+        const aiRes = await axios.post(
+            "http://localhost:8000/cluster",
+            formData,
+            {
+                headers: formData.getHeaders(),
+            }
         );
 
-        res.json({ success: true, data: submission });
+        console.log(filePath);
+
+        return res.json({
+            success: true,
+            data: aiRes.data, // [{studentId: 101, avgScore:..., label:"Top"}, ...]
+        });
     } catch (error: any) {
-        console.error("Error submitting assignment:", error);
-        res.status(500).json({
+        console.error("Error calling AI clustering service:", error.message);
+        return res.status(500).json({
             success: false,
-            message: error.message || "Lỗi khi nộp bài",
+            message: "Không thể phân nhóm sinh viên",
         });
     }
 }

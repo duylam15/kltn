@@ -27,6 +27,7 @@ import assignmentGeneratorRouter from "../modules/AssignmentAssessment/assignmen
 import subjectInstructorRoute from "@/modules/CourseSectionManagement/subjectInstructor/subjectInstructor.route";
 import statsRoute from "../modules/stats/stats.admin.routes";
 import catalogRoute from "../modules/catalog/catalog.routes";
+import testCaseRoute from "@/modules/AssignmentAssessment/testCase/testCase.route";
 
 
 const router = Router();
@@ -60,4 +61,5 @@ router.use("/assignment-generator", assignmentGeneratorRouter);
 router.use("/subject-instructors", subjectInstructorRoute);
 router.use("/stats", statsRoute);
 router.use("/catalog", catalogRoute);
+router.use("/test-cases", testCaseRoute);
 export default router;

@@ -373,7 +373,11 @@ enum ProgrammingLanguage {
   java
   cpp
   csharp
+  php
+  html
+  css
 }
+
 
 model Assignment {
   id          Int            @id @default(autoincrement())
@@ -535,37 +539,42 @@ model Submission {
   @@index([assignmentId])
 }
 
+
+enum JudgeStatus {
+  queued
+  running
+  passed
+  failed
+  compile_error
+  runtime_error
+  timeout
+}
+
 model SubmissionAnswer {
   id           Int @id @default(autoincrement())
   submissionId Int
   questionId   Int
 
-  selectedChoices Json?
-
-  essayAnswer String? @db.Text
-
-  codeAnswer    String?              @db.Text
+  codeAnswer    String? @db.Text
   language      ProgrammingLanguage?
-  executionTime Int?
-  memoryUsed    Int?
+  filePath      String? @db.VarChar(500) // nếu nộp folder zip
+  isFolder      Boolean @default(false)
+  selectedChoices Int[]
 
   score      Float?
   maxScore   Float?
-  isCorrect  Boolean?
-  autoGraded Boolean  @default(false)
-  feedback   String?  @db.Text
-
-  testResults Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  judgeStatus JudgeStatus @default(queued)
+  compileLog  String? @db.Text
+  stdoutLog   String? @db.Text
+  stderrLog   String? @db.Text
+  testResults Json?    // lưu chi tiết testcase
 
   submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@unique([submissionId, questionId])
-  @@index([questionId])
 }
+
 
 // ============================================================
 // NHÓM 6: HỆ THỐNG ĐIỂM DANH (Attendance System)

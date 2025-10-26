@@ -49,4 +49,31 @@ router.post(
     controller.submit
 );
 
+// Student submit code (single file)
+router.post(
+  "/:id/submit-code",
+  controller.submitCode
+);
+
+// Student submit folder (zip)
+router.post(
+  "/:id/submit-project",
+  controller.submitProject
+);
+
+// Get answer status
+router.get(
+  "/answer/:answerId/status",
+  controller.getAnswerStatus
+);
+
+// Gợi ý lộ trình học tập sau khi làm xong assignment
+router.post(
+  "/:id/recommend-path",
+  controller.recommendPath
+);
+
+router.get("/suggest/cluster", controller.clusterStudents);
+
 export default router;
+
