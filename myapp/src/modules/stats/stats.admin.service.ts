@@ -204,99 +204,6 @@ export async function computeBucketSeries(sectionIds: number[], bucketDefs: Buck
  * NOTE:
  *  rate% = (present+late)/total * 100
  */
-export async function getAttendanceAgg(
-  sectionIds: number[],
-  from?: Date,
-  to?: Date,
-) {
-  // 1) Lấy danh sách session thuộc các section đó
-  const sessions = await prisma.attendanceSession.findMany({
-    where: {
-      sectionId: { in: sectionIds },
-      ...(from ? { createdAt: { gte: from } } : {}),
-      ...(to ? { createdAt: { lte: to } } : {}),
-    },
-    select: {
-      id: true,
-      sectionId: true,
-    },
-  });
-
-  const sessIds = sessions.map(s => s.id);
-  if (!sessIds.length) return [];
-
-  // 2) Lấy attendance từng session
-  const recs = await prisma.attendance.findMany({
-    where: { sessionId: { in: sessIds } },
-    select: {
-      sessionId: true,
-      status: true, // "present", "late", "excused", "absent"
-    },
-  });
-
-  // sessionId -> {present,late,excused,absent,total}
-  const bySession = new Map<number, { present: number; late: number; excused: number; absent: number; total: number }>();
-  sessions.forEach(s => {
-    bySession.set(s.id, {
-      present: 0,
-      late: 0,
-      excused: 0,
-      absent: 0,
-      total: 0,
-    });
-  });
-
-  const norm = (x: string) =>
-    x.toLowerCase() as "present" | "late" | "excused" | "absent";
-
-  for (const rec of recs) {
-    const bucket = bySession.get(rec.sessionId);
-    if (!bucket) continue;
-    const st = norm(rec.status as any);
-    (bucket as any)[st] = ((bucket as any)[st] ?? 0) + 1;
-    bucket.total += 1;
-  }
-
-  // gộp từ session -> section
-  const bySection: Record<
-    number,
-    { present: number; late: number; excused: number; absent: number; total: number }
-  > = {};
-
-  sessions.forEach(s => {
-    const sAgg = bySession.get(s.id)!;
-    const secAgg =
-      bySection[s.sectionId] ??
-      (bySection[s.sectionId] = {
-        present: 0,
-        late: 0,
-        excused: 0,
-        absent: 0,
-        total: 0,
-      });
-
-    secAgg.present += sAgg.present;
-    secAgg.late += sAgg.late;
-    secAgg.excused += sAgg.excused;
-    secAgg.absent += sAgg.absent;
-    secAgg.total += sAgg.total;
-  });
-
-  // tính tỉ lệ
-  return Object.entries(bySection).map(([sectionId, v]) => {
-    const denom = v.total || 1;
-    const rate = ((v.present + v.late) / denom) * 100;
-    return {
-      sectionId: Number(sectionId),
-      present: v.present,
-      late: v.late,
-      excused: v.excused,
-      absent: v.absent,
-      total: v.total,
-      rate: +rate.toFixed(2),
-    };
-  });
-}
 
 /**
  * mode='section'  -> ids[] là các sectionId
@@ -321,4 +228,130 @@ export async function resolveSectionIds(mode: string, ids: number[]): Promise<nu
 
   // mode lạ -> trả rỗng
   return [];
+}
+
+
+// Chuẩn hoá status về 4 nhóm
+function normalizeStatus(s: string | null): "present" | "late" | "excused" | "absent" {
+  const x = String(s || "").toLowerCase();
+  if (x === "present") return "present";
+  if (x === "late") return "late";
+  if (x === "excused") return "excused";
+  if (x === "absent") return "absent";
+  if (x === "warning") return "late"; // quy ước: warning tính là "trễ"
+  return "absent";
+}
+
+/**
+ * Lấy chuyên cần theo nhiều section.
+ * - from/to: lọc theo thời gian của phiên (AttendanceSession.createdAt)
+ * - denom: "sessions" | "records"
+ *   + sessions: total = số buổi (sessionsCount),
+ *               rate = (present+late) / (rosterSize * sessionsCount) * 100
+ *   + records : total = present+late+excused+absent,
+ *               rate = (present+late) / total * 100   (cách cũ)
+ */
+export async function getAttendanceAgg(
+  sectionIds: number[],
+  from?: Date,
+  to?: Date,
+  denom: "sessions" | "records" = "sessions"
+): Promise<Array<{ sectionId:number; present:number; late:number; excused:number; absent:number; total:number; rate:number; sessions:number; roster:number }>> {
+
+  // 1) Lấy các session thuộc các section (lọc theo from/to)
+  const sessionWhere: any = { sectionId: { in: sectionIds } };
+  if (from || to) {
+    sessionWhere.createdAt = {};
+    if (from) sessionWhere.createdAt.gte = from;
+    if (to)   sessionWhere.createdAt.lte = to;
+  }
+  const sessions = await prisma.attendanceSession.findMany({
+    where: sessionWhere,
+    select: { id: true, sectionId: true },
+  });
+
+  const sessionIdsAll = sessions.map(s => s.id);
+  const sessionsBySec = new Map<number, number[]>();
+  for (const s of sessions) {
+    const arr = sessionsBySec.get(s.sectionId) || [];
+    arr.push(s.id);
+    sessionsBySec.set(s.sectionId, arr);
+  }
+
+  // 2) Sĩ số mỗi section
+  const rosterRows = await prisma.sectionEnrollment.groupBy({
+    by: ["sectionId"],
+    where: { sectionId: { in: sectionIds } },
+    _count: { _all: true },
+  });
+  const rosterBySec = new Map<number, number>();
+  for (const r of rosterRows) rosterBySec.set(r.sectionId, r._count._all);
+
+  // 3) Lấy attendance của các session ở (1)
+  //    (groupBy không join được, nên lấy list rồi tự gộp theo session.sectionId)
+  let presentBySec = new Map<number, number>();
+  let lateBySec    = new Map<number, number>();
+  let excBySec     = new Map<number, number>();
+  let absBySec     = new Map<number, number>();
+
+  if (sessionIdsAll.length) {
+    const atts = await prisma.attendance.findMany({
+      where: { sessionId: { in: sessionIdsAll } },
+      select: { sessionId: true, status: true },
+    });
+
+    // map sessionId -> sectionId
+    const secBySession = new Map<number, number>();
+    for (const s of sessions) secBySession.set(s.id, s.sectionId);
+
+    const plus = (m: Map<number, number>, k: number, inc: number) => m.set(k, (m.get(k) || 0) + inc);
+
+    for (const a of atts) {
+      const secId = secBySession.get(a.sessionId);
+      if (!secId) continue;
+      const norm = normalizeStatus(a.status as any);
+      if (norm === "present") plus(presentBySec, secId, 1);
+      else if (norm === "late") plus(lateBySec, secId, 1);
+      else if (norm === "excused") plus(excBySec, secId, 1);
+      else plus(absBySec, secId, 1);
+    }
+  }
+
+  // 4) Kết quả cho từng section
+  const result = sectionIds.map(secId => {
+    const sessionsCount = (sessionsBySec.get(secId) || []).length;
+    const rosterSize    = rosterBySec.get(secId) || 0;
+
+    const present = presentBySec.get(secId) || 0;
+    const late    = lateBySec.get(secId)    || 0;
+    const excused = excBySec.get(secId)     || 0;
+    const absent  = absBySec.get(secId)     || 0;
+
+    let totalRecords = present + late + excused + absent;
+
+    let total: number;
+    let rate: number;
+
+    if (denom === "sessions") {
+      // total = số buổi; rate dựa trên (sĩ số * số buổi)
+      total = sessionsCount;
+      const denomValue = rosterSize * Math.max(1, sessionsCount); // tránh chia 0
+      rate = denomValue ? +(((present + late) / denomValue) * 100).toFixed(1) : 0;
+    } else {
+      // kiểu cũ
+      total = totalRecords;
+      rate = total ? +(((present + late) / total) * 100).toFixed(1) : 0;
+    }
+
+    return {
+      sectionId: secId,
+      present, late, excused, absent,
+      total,          // ⇦ theo yêu cầu: số buổi nếu denom="sessions"
+      rate,
+      sessions: sessionsCount,
+      roster: rosterSize,
+    };
+  });
+
+  return result;
 }

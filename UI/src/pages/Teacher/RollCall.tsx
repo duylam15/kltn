@@ -4,18 +4,13 @@ import {
   Button,
   Spin,
   Typography,
-  message,
   Tag,
   Modal,
   Input,
   Tooltip,
   Form,
   DatePicker,
-  Switch,
-  Popconfirm,
-  Image,
   Space,
-  Card,
 } from "antd";
 import {
   ReloadOutlined,
@@ -53,7 +48,6 @@ type Session = {
   updatedAt?: string;
   attendances?: Attendance[];
   expiresAt?: string | Dayjs | null;
-
 };
 
 type Attendance = {
@@ -63,7 +57,6 @@ type Attendance = {
   status: "present" | "warning" | "late";
   checkedInAt: string;
   distance?: number;
-  // 🔥 THÊM CÁC FIELD MỚI
   ipAddress?: string;
   deviceInfo?: string;
   userAgent?: string;
@@ -89,13 +82,13 @@ type Enrollment = {
 export default function RollCall() {
   const path = window.location.pathname;
   const sectionId = Number(path.split("/")[3]);
-const { user } = useAuth(); // ✅ thêm dòng này
-  const teacherId = user?.id; // ID của giáo viên hiện tại
+  const { user } = useAuth();
+  const teacherId = user?.id;
+
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [keyword, setKeyword] = useState("");
 
-  // modal states
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [listModalOpen, setListModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -109,8 +102,15 @@ const { user } = useAuth(); // ✅ thêm dòng này
   const [createForm] = Form.useForm<Session>();
 
   useEffect(() => {
+  if (!listModalOpen || !selectedSession?.id) return;
+  const t = setInterval(() => fetchStudents(selectedSession.id!), 5000);
+  return () => clearInterval(t);
+}, [listModalOpen, selectedSession?.id]);
+
+  useEffect(() => {
     fetchSessions();
   }, [sectionId]);
+  
 
   const fetchSessions = async () => {
     try {
@@ -131,25 +131,36 @@ const { user } = useAuth(); // ✅ thêm dòng này
     }
   };
 
-  const fetchStudents = async (session: Session) => {
-    try {
-      const res = await axios.get(
-        `${API_BASE}/sections-enrollments/section/${sectionId}/students`
+  // THAY HẾT HÀM fetchStudents CŨ:
+const fetchStudents = async (sessionId: number) => {
+  try {
+    // lấy enrollments và session (attendances) MỚI NHẤT song song
+    const [enrollRes, sessionRes] = await Promise.all([
+      axios.get(`${API_BASE}/sections-enrollments/section/${sectionId}/students`),
+      axios.get(`${API_BASE}/attendance/sessions/${sessionId}`),
+    ]);
+
+    if (!enrollRes.data?.success) throw new Error("Enrollments failed");
+    if (!sessionRes.data?.success) throw new Error("Session failed");
+
+    const freshSession: Session = sessionRes.data.data; // có attendances mới
+    setSelectedSession(freshSession);
+
+    const attendances: Attendance[] = freshSession.attendances ?? [];
+    const merged = enrollRes.data.data.map((enrollment: any) => {
+      const attendance = attendances.find(
+        (a: Attendance) => a.studentId === enrollment.studentId
       );
-      if (res.data.success) {
-        const merged = res.data.data.map((enrollment: any) => {
-          const attendance = session.attendances?.find(
-            (a: Attendance) => a.studentId === enrollment.studentId
-          );
-          return { ...enrollment, attendance };
-        });
-        setStudentList(merged);
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error("Không tải được danh sách sinh viên");
-    }
-  };
+      return { ...enrollment, attendance };
+    });
+
+    setStudentList(merged);
+  } catch (err) {
+    console.error(err);
+    toast.error("Không tải được danh sách sinh viên/điểm danh mới");
+  }
+};
+
 
   const createSession = async () => {
     try {
@@ -183,7 +194,7 @@ const { user } = useAuth(); // ✅ thêm dòng này
         fetchSessions();
       }
     } catch (err: any) {
-      if (err?.errorFields) return; // lỗi validate form
+      if (err?.errorFields) return;
       console.error(err);
       toast.error("Tạo phiên điểm danh thất bại hoặc không lấy được vị trí");
     }
@@ -197,7 +208,6 @@ const { user } = useAuth(); // ✅ thêm dòng này
       const payload = {
         ...values,
         expiresAt: values.expiresAt ? dayjs(values.expiresAt).toISOString() : null,
-
       };
 
       await axios.put(`${API_BASE}/attendance/sessions/${editing.id}`, payload);
@@ -206,7 +216,7 @@ const { user } = useAuth(); // ✅ thêm dòng này
       setEditing(null);
       fetchSessions();
     } catch (err: any) {
-      if (err?.errorFields) return; // lỗi validate form
+      if (err?.errorFields) return;
       console.error(err);
       toast.error("Cập nhật thất bại");
     }
@@ -225,57 +235,109 @@ const { user } = useAuth(); // ✅ thêm dòng này
 
   const handleManualCheckIn = async (studentCode: string) => {
     if (!selectedSession) return;
+    
+
+    // Đã có bản ghi thì không gọi nữa
+    const has = studentList.find(
+      (x) => x.student.studentCode === studentCode
+    )?.attendance;
+    if (has) {
+      toast.error("Sinh viên đã điểm danh.");
+      return;
+    }
 
     try {
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          const res = await axios.post(`${API_BASE}/attendance/check-in`, {
-            sessionId: selectedSession.id,
-            studentCode,
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-          });
-          console.log(res.data);
-          if (res.data.success) {
-            toast.success(res.data.message || "Điểm danh thành công");
+      const res = await axios.post(`${API_BASE}/attendance/manual-check-in`, {
+        sessionId: selectedSession.id,
+        studentCode,
+        teacherId,
+        status: "present",
+        note: "GV xác nhận thủ công",
+      });
 
-            const newAttendance = res.data.data;
+      if (res.data.success) {
+        toast.success(res.data.message || "Điểm danh thủ công thành công");
+        const newAttendance = res.data.data;
 
-            setStudentList((prev) =>
-              prev.map((enrollment) =>
-                enrollment.student.studentCode === studentCode
-                  ? { ...enrollment, attendance: newAttendance }
-                  : enrollment
-              )
-            );
+        // 1) Cập nhật bảng modal
+        setStudentList((prev) =>
+          prev.map((enr) =>
+            enr.student.studentCode === studentCode
+              ? { ...enr, attendance: newAttendance }
+              : enr
+          )
+        );
 
-            setSelectedSession((prev: Session | null) => {
-              if (!prev) return prev;
-              const updated = { ...prev };
-              const idx = updated.attendances?.findIndex(
-                (a: Attendance) => a.studentId === newAttendance.studentId
-              ) ?? -1;
-              if (idx !== -1 && updated.attendances) {
-                updated.attendances[idx] = newAttendance;
-              } else if (updated.attendances) {
-                updated.attendances.push(newAttendance);
-              }
-              return updated;
-            });
-          } else {
-            toast.error(res.data.message || "Không thể điểm danh");
-          }
-        },
-        (err) => {
-          console.error("Không lấy được vị trí:", err);
-        }
-      );
-
-
-      
+        // 2) Đồng bộ session.attendances để đếm đúng
+        setSelectedSession((prev) => {
+          if (!prev) return prev;
+          const updated = { ...prev };
+          if (!updated.attendances) updated.attendances = [];
+          const idx = updated.attendances.findIndex(
+            (a) => a.studentId === newAttendance.studentId
+          );
+          if (idx >= 0) updated.attendances[idx] = newAttendance;
+          else updated.attendances.push(newAttendance);
+          return updated;
+        });
+      } else {
+        toast.error(res.data.message || "Không thể điểm danh thủ công");
+      }
     } catch (err: any) {
       console.error(err);
-      toast.error(err.response?.data?.message || "Điểm danh thất bại");
+      toast.error(err.response?.data?.message || "Điểm danh thủ công thất bại");
+    }
+  };
+
+  const handleCancelAttendance = async (studentCode: string) => {
+    if (!selectedSession) return;
+    if (!teacherId) {
+      toast.error("Thiếu teacherId. Vui lòng đăng nhập lại.");
+      return;
+    }
+
+    try {
+      const res = await axios.post(`${API_BASE}/attendance/cancel`, {
+        sessionId: selectedSession.id,
+        studentCode,
+        teacherId,
+        reason: "GV hủy điểm danh",
+      });
+
+      if (res.data.success) {
+        toast.success("Đã hủy điểm danh");
+
+        // 1) Xóa attendance ở bảng modal
+        setStudentList((prev) =>
+          prev.map((enr) =>
+            enr.student.studentCode === studentCode
+              ? { ...enr, attendance: undefined }
+              : enr
+          )
+        );
+
+        // 2) Đồng bộ session.attendances để đếm đúng
+        const removedStudentId: number | undefined =
+          res.data.studentId ??
+          studentList.find((s) => s.student.studentCode === studentCode)?.student
+            .id;
+
+        setSelectedSession((prev) => {
+          if (!prev) return prev;
+          const updated = { ...prev };
+          if (updated.attendances && removedStudentId) {
+            updated.attendances = updated.attendances.filter(
+              (a) => a.studentId !== removedStudentId
+            );
+          }
+          return updated;
+        });
+      } else {
+        toast.error(res.data.message || "Không thể hủy điểm danh");
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.message || "Hủy điểm danh thất bại");
     }
   };
 
@@ -297,14 +359,16 @@ const { user } = useAuth(); // ✅ thêm dòng này
       title: "Tên phiên",
       dataIndex: "name",
       key: "name",
-      sorter: (a: Session, b: Session) => (a.name || "").localeCompare(b.name || ""),
+      sorter: (a: Session, b: Session) =>
+        (a.name || "").localeCompare(b.name || ""),
       render: (text: string, record: Session) => text || `Phiên #${record.id}`,
     },
     {
       title: "Mã phiên",
       dataIndex: "sessionCode",
       key: "sessionCode",
-      sorter: (a: Session, b: Session) => (a.sessionCode || "").localeCompare(b.sessionCode || ""),
+      sorter: (a: Session, b: Session) =>
+        (a.sessionCode || "").localeCompare(b.sessionCode || ""),
       render: (text: string) => text || <Tag color="default">N/A</Tag>,
     },
     {
@@ -337,7 +401,8 @@ const { user } = useAuth(); // ✅ thêm dòng này
       dataIndex: "createdAt",
       key: "createdAt",
       sorter: (a: Session, b: Session) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        new Date(a.createdAt).getTime() -
+        new Date(b.createdAt).getTime(),
       render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm"),
     },
     {
@@ -345,8 +410,16 @@ const { user } = useAuth(); // ✅ thêm dòng này
       dataIndex: "expiresAt",
       key: "expiresAt",
       sorter: (a: Session, b: Session) => {
-        const aTime = a.expiresAt ? (typeof a.expiresAt === 'string' ? a.expiresAt : a.expiresAt.toISOString()) : '0';
-        const bTime = b.expiresAt ? (typeof b.expiresAt === 'string' ? b.expiresAt : b.expiresAt.toISOString()) : '0';
+        const aTime = a.expiresAt
+          ? typeof a.expiresAt === "string"
+            ? a.expiresAt
+            : a.expiresAt.toISOString()
+          : "0";
+        const bTime = b.expiresAt
+          ? typeof b.expiresAt === "string"
+            ? b.expiresAt
+            : b.expiresAt.toISOString()
+          : "0";
         return new Date(aTime).getTime() - new Date(bTime).getTime();
       },
       render: (v: string) => (v ? dayjs(v).format("DD/MM/YYYY HH:mm") : "—"),
@@ -372,7 +445,7 @@ const { user } = useAuth(); // ✅ thêm dòng này
               size="small"
               onClick={() => {
                 setSelectedSession(record);
-                fetchStudents(record);
+                fetchStudents(record.id);
                 setListModalOpen(true);
               }}
             />
@@ -385,23 +458,19 @@ const { user } = useAuth(); // ✅ thêm dòng này
                 setEditing(record);
                 form.setFieldsValue({
                   ...record,
-                  expiresAt: record.expiresAt ? dayjs(record.expiresAt) : null
+                  expiresAt: record.expiresAt ? dayjs(record.expiresAt) : null,
                 });
                 setEditModalOpen(true);
               }}
             />
           </Tooltip>
           <Tooltip title="Xóa">
-            <Popconfirm
-              title="Xóa phiên điểm danh"
-              description="Bạn có chắc muốn xóa phiên điểm danh này?"
-              okText="Xóa"
-              cancelText="Hủy"
-              okButtonProps={{ danger: true }}
-              onConfirm={() => deleteSession(record.id)}
-            >
-              <Button danger size="small" icon={<DeleteOutlined />} />
-            </Popconfirm>
+            <Button
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              onClick={() => deleteSession(record.id)}
+            />
           </Tooltip>
         </div>
       ),
@@ -466,12 +535,13 @@ const { user } = useAuth(); // ✅ thêm dòng này
           present: { color: "green", text: "Có mặt", icon: <CheckCircleOutlined /> },
           warning: { color: "orange", text: "Cảnh báo", icon: <WarningOutlined /> },
           late: { color: "red", text: "Trễ", icon: <ClockCircleOutlined /> },
-        };
+        } as const;
 
-        const config = statusConfig[status] || { color: "default", text: "N/A", icon: null };
+        const config =
+          statusConfig[status] || { color: "default", text: "N/A", icon: null };
 
         return (
-          <Tag color={config.color} icon={config.icon}>
+          <Tag color={config.color} icon={config.icon as any}>
             {config.text}
             {!isValid && <span style={{ marginLeft: 4 }}>⚠️</span>}
           </Tag>
@@ -483,14 +553,20 @@ const { user } = useAuth(); // ✅ thêm dòng này
       key: "checkedInAt",
       width: 160,
       sorter: (a: Enrollment, b: Enrollment) => {
-        const aTime = a.attendance?.checkedInAt ? new Date(a.attendance.checkedInAt).getTime() : 0;
-        const bTime = b.attendance?.checkedInAt ? new Date(b.attendance.checkedInAt).getTime() : 0;
+        const aTime = a.attendance?.checkedInAt
+          ? new Date(a.attendance.checkedInAt).getTime()
+          : 0;
+        const bTime = b.attendance?.checkedInAt
+          ? new Date(b.attendance.checkedInAt).getTime()
+          : 0;
         return aTime - bTime;
       },
       render: (_: any, record: Enrollment) =>
-        record.attendance?.checkedInAt
-          ? dayjs(record.attendance.checkedInAt).format("HH:mm:ss DD/MM/YYYY")
-          : <span style={{ color: "#999" }}>—</span>,
+        record.attendance?.checkedInAt ? (
+          dayjs(record.attendance.checkedInAt).format("HH:mm:ss DD/MM/YYYY")
+        ) : (
+          <span style={{ color: "#999" }}>—</span>
+        ),
     },
     {
       title: "Khoảng cách",
@@ -504,7 +580,8 @@ const { user } = useAuth(); // ✅ thêm dòng này
       },
       render: (_: any, record: Enrollment) => {
         const distance = record.attendance?.distance;
-        if (!distance && distance !== 0) return <span style={{ color: "#999" }}>—</span>;
+        if (!distance && distance !== 0)
+          return <span style={{ color: "#999" }}>—</span>;
 
         const isWarning = distance > (selectedSession?.radius || 50);
         return (
@@ -515,7 +592,6 @@ const { user } = useAuth(); // ✅ thêm dòng này
         );
       },
     },
-    // 🔥 THÊM CỘT IP ADDRESS
     {
       title: "Địa chỉ IP",
       key: "ipAddress",
@@ -533,7 +609,6 @@ const { user } = useAuth(); // ✅ thêm dòng này
         );
       },
     },
-    // 🔥 THÊM CỘT ĐIỂM SỐ
     {
       title: "Điểm",
       key: "score",
@@ -551,8 +626,7 @@ const { user } = useAuth(); // ✅ thêm dòng này
           return <span style={{ color: "#999" }}>—</span>;
         }
 
-        // Màu sắc theo điểm
-        let color = "default";
+        let color: any = "default";
         if (score >= 9) color = "green";
         else if (score >= 7) color = "blue";
         else if (score >= 5) color = "orange";
@@ -568,60 +642,101 @@ const { user } = useAuth(); // ✅ thêm dòng này
     {
       title: "Hành động",
       key: "action",
-      width: 150,
+      width: 170,
       fixed: "right" as const,
-      render: (_: any, record: Enrollment) => (
-        <Space size="small">
-          <Button
-            type="primary"
-            size="small"
-            disabled={!!record.attendance}
-            onClick={() => handleManualCheckIn(record.student.studentCode)}
-            icon={<CheckCircleOutlined />}
-          >
-            {record.attendance ? "Đã điểm danh" : "Điểm danh"}
-          </Button>
-          {record.attendance && (
-            <Tooltip title="Xem chi tiết">
+      render: (_: any, record: Enrollment) => {
+        const hasAtt = !!record.attendance;
+        return (
+          <Space size="small">
+            {hasAtt ? (
               <Button
+                type="default"
                 size="small"
-                icon={<EyeOutlined />}
-                onClick={() => {
-                  Modal.info({
-                    title: "Chi tiết điểm danh",
-                    width: 600,
-                    content: (
-                      <div style={{ marginTop: 16 }}>
-                        <p><strong>Sinh viên:</strong> {record.student.user.fullName}</p>
-                        <p><strong>MSSV:</strong> {record.student.studentCode}</p>
-                        <p><strong>Trạng thái:</strong> {getStatusTag(record.attendance?.status || "")}</p>
-                        <p><strong>Thời gian:</strong> {dayjs(record.attendance?.checkedInAt).format("HH:mm:ss DD/MM/YYYY")}</p>
-                        {record.attendance?.distance && (
-                          <p><strong>Khoảng cách:</strong> {record.attendance?.distance.toFixed(2)}m</p>
-                        )}
-                        {record.attendance?.ipAddress && (
-                          <p><strong>IP:</strong> {record.attendance?.ipAddress}</p>
-                        )}
-                        {record.attendance?.deviceInfo && (
-                          <p><strong>Thiết bị:</strong> {record.attendance?.deviceInfo}</p>
-                        )}
-                        {record.attendance?.score !== null && record.attendance?.score !== undefined && (
-                          <p><strong>Điểm:</strong> {record.attendance?.score}</p>
-                        )}
-                        {!record.attendance?.isValid && (
-                          <p style={{ color: "red" }}>
-                            <WarningOutlined /> <strong>Cảnh báo:</strong> Điểm danh có vấn đề
+                icon={<CheckCircleOutlined />}
+                onClick={() => handleCancelAttendance(record.student.studentCode)}
+              >
+                Đã điểm danh
+              </Button>
+            ) : (
+              <Button
+                type="primary"
+                size="small"
+                onClick={() => handleManualCheckIn(record.student.studentCode)}
+                icon={<CheckCircleOutlined />}
+              >
+                Điểm danh
+              </Button>
+            )}
+
+            {record.attendance && (
+              <Tooltip title="Xem chi tiết">
+                <Button
+                  size="small"
+                  icon={<EyeOutlined />}
+                  onClick={() => {
+                    Modal.info({
+                      title: "Chi tiết điểm danh",
+                      width: 600,
+                      content: (
+                        <div style={{ marginTop: 16 }}>
+                          <p>
+                            <strong>Sinh viên:</strong>{" "}
+                            {record.student.user.fullName}
                           </p>
-                        )}
-                      </div>
-                    ),
-                  });
-                }}
-              />
-            </Tooltip>
-          )}
-        </Space>
-      ),
+                          <p>
+                            <strong>MSSV:</strong> {record.student.studentCode}
+                          </p>
+                          <p>
+                            <strong>Trạng thái:</strong>{" "}
+                            {getStatusTag(record.attendance?.status || "")}
+                          </p>
+                          <p>
+                            <strong>Thời gian:</strong>{" "}
+                            {dayjs(record.attendance?.checkedInAt).format(
+                              "HH:mm:ss DD/MM/YYYY"
+                            )}
+                          </p>
+                          {record.attendance?.distance !== undefined && (
+                            <p>
+                              <strong>Khoảng cách:</strong>{" "}
+                              {record.attendance?.distance?.toFixed(2)}m
+                            </p>
+                          )}
+                          {record.attendance?.ipAddress && (
+                            <p>
+                              <strong>IP:</strong>{" "}
+                              {record.attendance?.ipAddress}
+                            </p>
+                          )}
+                          {record.attendance?.deviceInfo && (
+                            <p>
+                              <strong>Thiết bị:</strong>{" "}
+                              {record.attendance?.deviceInfo}
+                            </p>
+                          )}
+                          {record.attendance?.score !== null &&
+                            record.attendance?.score !== undefined && (
+                              <p>
+                                <strong>Điểm:</strong>{" "}
+                                {record.attendance?.score}
+                              </p>
+                            )}
+                          {!record.attendance?.isValid && (
+                            <p style={{ color: "red" }}>
+                              <WarningOutlined /> <strong>Cảnh báo:</strong>{" "}
+                              Điểm danh có vấn đề
+                            </p>
+                          )}
+                        </div>
+                      ),
+                    });
+                  }}
+                />
+              </Tooltip>
+            )}
+          </Space>
+        );
+      },
     },
   ];
 
@@ -636,7 +751,10 @@ const { user } = useAuth(); // ✅ thêm dòng này
     const totalSessions = sessions.length;
     const activeSessions = sessions.filter((s) => {
       if (!s.expiresAt) return true;
-      const expireTime = typeof s.expiresAt === 'string' ? s.expiresAt : s.expiresAt.toISOString();
+      const expireTime =
+        typeof s.expiresAt === "string"
+          ? s.expiresAt
+          : s.expiresAt.toISOString();
       return dayjs(expireTime).isAfter(dayjs());
     }).length;
     const expiredSessions = totalSessions - activeSessions;
@@ -644,7 +762,8 @@ const { user } = useAuth(); // ✅ thêm dòng này
       (sum, s) => sum + (s.attendances?.length || 0),
       0
     );
-    const avgAttendancePerSession = totalSessions > 0 ? totalAttendances / totalSessions : 0;
+    const avgAttendancePerSession =
+      totalSessions > 0 ? totalAttendances / totalSessions : 0;
 
     return {
       totalSessions,
@@ -723,7 +842,9 @@ const { user } = useAuth(); // ✅ thêm dòng này
             >
               <ClockCircleOutlined style={{ fontSize: 14, color: "#ff4d4f" }} />
               <span>Đã hết hạn:</span>
-              <strong style={{ color: "#ff4d4f" }}>{stats.expiredSessions}</strong>
+              <strong style={{ color: "#ff4d4f" }}>
+                {stats.expiredSessions}
+              </strong>
             </div>
           )}
         </div>
@@ -771,8 +892,10 @@ const { user } = useAuth(); // ✅ thêm dòng này
         centered
       >
         {selectedSession && (
-          
-          <div style={{ textAlign: "center" }} className="flex justify-center items-center flex-col">
+          <div
+            style={{ textAlign: "center" }}
+            className="flex justify-center items-center flex-col"
+          >
             <img
               src={`http://localhost:4000${selectedSession.qrCodeUrl}`}
               alt="QR Code"
@@ -786,7 +909,9 @@ const { user } = useAuth(); // ✅ thêm dòng này
 
       {/* Modal danh sách sinh viên */}
       <Modal
-        title={`Danh sách điểm danh - ${selectedSession?.name || `Phiên #${selectedSession?.id}`}`}
+        title={`Danh sách điểm danh - ${
+          selectedSession?.name || `Phiên #${selectedSession?.id}`
+        }`}
         open={listModalOpen}
         onCancel={() => setListModalOpen(false)}
         footer={null}
@@ -799,7 +924,7 @@ const { user } = useAuth(); // ✅ thêm dòng này
           rowKey={(record) => record.student.id}
           pagination={{ pageSize: 20, showSizeChanger: true }}
           bordered
-          scroll={{ x: 1600, y: 500 }} // 👈 Cố định chiều rộng để fixed column hoạt động
+          scroll={{ x: 1600, y: 500 }}
           size="small"
         />
       </Modal>
@@ -821,7 +946,6 @@ const { user } = useAuth(); // ✅ thêm dòng này
           </Form.Item>
           <Form.Item label="Ngày hết hạn" name="expiresAt">
             <DatePicker showTime style={{ width: "100%" }} />
-            
           </Form.Item>
         </Form>
       </Modal>
@@ -834,10 +958,7 @@ const { user } = useAuth(); // ✅ thêm dòng này
         onOk={createSession}
         okText="Tạo mới"
       >
-        <Form
-          form={createForm}
-          layout="vertical"
-        >
+        <Form form={createForm} layout="vertical">
           <Form.Item
             label="Tên phiên điểm danh"
             name="name"

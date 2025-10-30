@@ -170,149 +170,68 @@ export async function checkIn(req: Request, res: Response) {
       latitude,
       longitude,
       accuracy,
-      deviceId,
+      deviceId,   // 👈 quan trọng
       nonce,
       payloadSig,
     } = req.body;
 
-    /* ---------------------------
-     * 0) Validate input cơ bản
-     * --------------------------- */
+    // 0) Validate cơ bản
     if (!sessionId || !studentCode) {
-      return res.status(400).json({
-        success: false,
-        message: "sessionId và studentCode là bắt buộc",
-      });
+      return res.status(400).json({ success: false, message: "sessionId và studentCode là bắt buộc" });
     }
-    if (
-      latitude === null ||
-      latitude === undefined ||
-      longitude === null ||
-      longitude === undefined
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Vị trí GPS là bắt buộc để điểm danh",
-      });
+    if (latitude == null || longitude == null) {
+      return res.status(400).json({ success: false, message: "Vị trí GPS là bắt buộc để điểm danh" });
     }
     if (!nonce || !payloadSig) {
-      return res.status(400).json({
-        success: false,
-        message: "Thiếu nonce hoặc payloadSig",
-      });
+      return res.status(400).json({ success: false, message: "Thiếu nonce hoặc payloadSig" });
     }
 
-    /* ---------------------------
-     * 1) Lấy IP & User-Agent
-     * --------------------------- */
+    // 1) IP & UA
     const ipAddress = getClientIp(req);
     const userAgent = req.headers["user-agent"] || "";
     const ua = new UAParser(userAgent).getResult();
-    const deviceInfo = `${ua.os.name ?? ""} ${ua.os.version ?? ""} | ${
-      ua.browser.name ?? ""
-    } ${ua.browser.version ?? ""}`;
+    const deviceInfo = `${ua.os.name ?? ""} ${ua.os.version ?? ""} | ${ua.browser.name ?? ""} ${ua.browser.version ?? ""}`;
 
-    /* ---------------------------
-     * 2) Kiểm tra nonce
-     *    - còn hạn?
-     *    - chưa dùng?
-     * --------------------------- */
-    const found = await prisma.attendanceNonce.findUnique({
-      where: { value: nonce },
-    });
+    // 2) Nonce
+    const found = await prisma.attendanceNonce.findUnique({ where: { value: nonce } });
     if (!found || found.used || found.expiresAt < new Date()) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Nonce invalid or expired." });
+      return res.status(400).json({ success: false, message: "Nonce invalid or expired." });
     }
 
-    /* ---------------------------
-     * 3) Verify chữ ký HMAC payloadSig
-     *    FE ký base = `${sessionId}|${latitude}|${longitude}|${accuracy}|${nonce}`
-     * --------------------------- */
+    // 3) Verify HMAC
     const base = [sessionId, latitude, longitude, accuracy, nonce].join("|");
     if (!verify(base, payloadSig)) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Signature mismatch." });
+      return res.status(400).json({ success: false, message: "Signature mismatch." });
     }
 
-    /* ---------------------------
-     * 4) Lấy session và check thời hạn expiresAt
-     * --------------------------- */
-    const session = await prisma.attendanceSession.findUnique({
-      where: { id: Number(sessionId) },
-    });
-    if (!session) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Session not found" });
-    }
-
-    // Nếu session có expiresAt thì không cho điểm danh sau thời điểm đó
+    // 4) Session
+    const session = await prisma.attendanceSession.findUnique({ where: { id: Number(sessionId) } });
+    if (!session) return res.status(404).json({ success: false, message: "Session not found" });
     if (session.expiresAt && new Date() > new Date(session.expiresAt)) {
-      return res.status(410).json({
-        success: false,
-        message: "Buổi điểm danh đã hết hạn (đã quá thời gian expiresAt).",
-      });
+      return res.status(410).json({ success: false, message: "Buổi điểm danh đã hết hạn (đã quá thời gian expiresAt)." });
     }
 
-    /* ---------------------------
-     * 5) Tìm sinh viên theo studentCode
-     * --------------------------- */
-    const student = await prisma.student.findUnique({
-      where: { studentCode },
-      include: { user: true },
-    });
-    if (!student) {
-      return res.status(404).json({
-        success: false,
-        message: "Sinh viên không tồn tại",
-      });
-    }
+    // 5) Student
+    const student = await prisma.student.findUnique({ where: { studentCode }, include: { user: true } });
+    if (!student) return res.status(404).json({ success: false, message: "Sinh viên không tồn tại" });
 
-    /* ---------------------------
-     * 6) Kiểm tra sinh viên có thuộc section không
-     * --------------------------- */
+    // 6) Enrollment
     const enrolled = await prisma.sectionEnrollment.findFirst({
-      where: {
-        sectionId: session.sectionId,
-        studentId: student.id,
-      },
+      where: { sectionId: session.sectionId, studentId: student.id },
     });
-    if (!enrolled) {
-      return res.status(400).json({
-        success: false,
-        message: "Sinh viên không thuộc học phần này",
-      });
-    }
+    if (!enrolled) return res.status(400).json({ success: false, message: "Sinh viên không thuộc học phần này" });
 
-    /* ---------------------------
-     * 7) Kiểm tra đã điểm danh chưa
-     * --------------------------- */
+    // 7) Đã điểm danh?
     const existing = await prisma.attendance.findFirst({
-      where: {
-        sessionId: session.id,
-        studentId: student.id,
-      },
+      where: { sessionId: session.id, studentId: student.id },
     });
     if (existing) {
-      return res.status(400).json({
-        success: false,
-        message: "Bạn đã điểm danh rồi",
-        data: existing,
-      });
+      return res.status(400).json({ success: false, message: "Bạn đã điểm danh rồi", data: existing });
     }
 
-    /* ---------------------------
-     * 8) Chống gian lận theo IP
-     *    - cùng 1 IP không được spam quá nhiều
-     * --------------------------- */
+    // 8) Chống spam theo IP
     const ipCheckCount = await prisma.attendance.count({
-      where: {
-        sessionId: session.id,
-        ipAddress,
-      },
+      where: { sessionId: session.id, ipAddress },
     });
     if (ipCheckCount >= (session.maxCheckInsPerIP || 3)) {
       return res.status(400).json({
@@ -322,127 +241,90 @@ export async function checkIn(req: Request, res: Response) {
       });
     }
 
-    /* ---------------------------
-     * 9) Kiểm tra GPS trong bán kính lớp
-     * --------------------------- */
+    // 9) GPS trong bán kính
     let distance: number | null = null;
     let isValid = true;
     let status: "present" | "late" | "absent" = "present";
 
     if (session.latitude && session.longitude && session.radius) {
-      distance = haversineMeters(
-        session.latitude,
-        session.longitude,
-        Number(latitude),
-        Number(longitude)
-      );
+      distance = haversineMeters(session.latitude, session.longitude, Number(latitude), Number(longitude));
       const inRadius = distance <= (session.radius ?? 50);
-      if (!inRadius) {
-        isValid = false;
-      }
+      if (!inRadius) isValid = false;
     }
 
-    /* ---------------------------
-     * 10) So sánh vị trí IP vs GPS
-     *      - nếu lệch quá xa => nghi ngờ share toạ độ giả
-     * --------------------------- */
-    const ipGeo = getIpGeo(ipAddress); // { lat, lon, country, city } | null
+    // 10) So sánh IP vs GPS
+    const ipGeo = getIpGeo(ipAddress);
     let ipVsGpsKm: number | null = null;
-    if (ipGeo) {
-      ipVsGpsKm =
-        haversineMeters(
-          Number(latitude),
-          Number(longitude),
-          ipGeo.lat,
-          ipGeo.lon
-        ) / 1000;
-    }
-    const suspiciousByIpGeo = ipVsGpsKm !== null && ipVsGpsKm > 50; // > 50km khác nhau
-    if (suspiciousByIpGeo) {
-      isValid = false;
-    }
+    if (ipGeo) ipVsGpsKm = haversineMeters(Number(latitude), Number(longitude), ipGeo.lat, ipGeo.lon) / 1000;
+    const suspiciousByIpGeo = ipVsGpsKm !== null && ipVsGpsKm > 50;
+    if (suspiciousByIpGeo) isValid = false;
 
     /* ---------------------------
-     * 11) Ràng buộc deviceId (thiết bị)
-     *      - nếu thiết bị mới, ta lưu fingerprint
-     *      - nếu không gửi deviceId => nghi vấn
-     * --------------------------- */
-    let deviceTrusted = true;
-    if (deviceId) {
-      const existed = await prisma.deviceFingerprint.findUnique({
-        where: {
-          studentId_deviceId: {
-            studentId: student.id,
-            deviceId: deviceId,
-          },
-        },
-      });
+ * 11) RÀNG BUỘC DEVICE ID (THEO YÊU CẦU)
+ * --------------------------- */
+// 11) KIỂM TRA DEVICE ID TRONG SESSION
+if (!deviceId) {
+  return res.status(400).json({
+    success: false,
+    message: "Thiếu deviceId. Không thể điểm danh.",
+  });
+}
 
-      if (!existed) {
-        // Thiết bị lần đầu xuất hiện => lưu lại
-        await prisma.deviceFingerprint.create({
-          data: {
-            studentId: student.id,
-            deviceId: deviceId,
-            userAgent,
-          },
-        });
+// Kiểm tra: deviceId này đã được dùng bởi sinh viên khác trong session chưa?
+const existingDeviceInSession = await prisma.deviceFingerprint.findFirst({
+  where: { sessionId: session.id, deviceId },
+});
 
-        // Nếu bạn muốn "thiết bị lạ lần đầu = cảnh báo", bật dòng dưới:
-        // deviceTrusted = false;
-      }
-    } else {
-      deviceTrusted = false; // không gửi deviceId
-    }
+if (existingDeviceInSession && existingDeviceInSession.studentId !== student.id) {
+  const owner = await prisma.student.findUnique({
+    where: { id: existingDeviceInSession.studentId },
+    select: { studentCode: true },
+  });
 
-    if (!deviceTrusted) {
-      isValid = false;
-    }
+  return res.status(403).json({
+    success: false,
+    message: "Thiết bị này đã được dùng để điểm danh bởi sinh viên khác trong buổi này!",
+    warning: owner ? `Thiết bị đã dùng bởi MSSV: ${owner.studentCode}` : undefined,
+  });
+}
 
-    /* ---------------------------
-     * 12) TÍNH ĐIỂM CHUYÊN CẦN
-     * --------------------------- */
-    let score = 10; // mặc định
-    // 12.1. Lấy rule chấm điểm của lớp
-    const scoreRules = await prisma.attendanceScoreRule.findMany({
-      where: { sectionId: session.sectionId },
-    });
-    const matchedRule = scoreRules.find((r) => r.status === status);
-    if (matchedRule) {
-      score = matchedRule.score;
-    } else {
-      // fallback
-      if (status === "present") score = 10;
-    }
 
-    // 12.2. Giảm điểm nếu bị coi là nghi vấn / đứng quá xa
+// Nếu chưa có → lưu mới
+await prisma.deviceFingerprint.upsert({
+  where: {
+    uniq_session_device: { sessionId: session.id, deviceId },
+  },
+  update: {
+    studentId: student.id,
+    userAgent,
+  },
+  create: {
+    studentId: student.id,
+    sessionId: session.id,
+    deviceId,
+    userAgent,
+  },
+});
+    // 12) Tính điểm
+    let score = 10;
+    const scoreRules = await prisma.attendanceScoreRule.findMany({ where: { sectionId: session.sectionId } });
+    const matchedRule = scoreRules.find(r => r.status === status);
+    if (matchedRule) score = matchedRule.score;
+
     if (!isValid && distance !== null) {
       const extraDistance = distance - (session.radius || 50);
-      const penalty = Math.min(extraDistance / 100, 3); // mỗi 100m trừ 1đ, tối đa trừ 3
+      const penalty = Math.min(extraDistance / 100, 3);
       score = Math.max(score - penalty, 0);
     }
 
-    // 12.3. Điểm danh trễ (tính từ lúc session tạo ra)
     const now = new Date();
     const sessionStart = new Date(session.createdAt);
-    const minutesLate = Math.floor(
-      (now.getTime() - sessionStart.getTime()) / (1000 * 60)
-    );
-
-    if (minutesLate > 15 && minutesLate <= 30) {
-      status = "late";
-      score = Math.max(score - 2, 0);
-    } else if (minutesLate > 30) {
-      status = "late";
-      score = Math.max(score - 4, 0);
-    }
-
-    // Làm tròn 1 chữ số thập phân
+    const minutesLate = Math.floor((now.getTime() - sessionStart.getTime()) / (1000 * 60));
+    if (minutesLate > 15 && minutesLate <= 30) { status = "late"; score = Math.max(score - 2, 0); }
+    else if (minutesLate > 30) { status = "late"; score = Math.max(score - 4, 0); }
     score = Math.round(score * 10) / 10;
 
-    /* ---------------------------
-     * 13) TẠO BẢN GHI attendance
-     * --------------------------- */
+    // 13) Tạo attendance
     const attendance = await prisma.attendance.create({
       data: {
         sessionId: session.id,
@@ -457,19 +339,11 @@ export async function checkIn(req: Request, res: Response) {
         isValid,
         score,
       },
-      include: {
-        student: { include: { user: true } },
-      },
+      include: { student: { include: { user: true } } },
     });
 
-    /* ---------------------------
-     * 14) Đánh dấu nonce đã dùng + ghi log forensic
-     * --------------------------- */
-    await prisma.attendanceNonce.update({
-      where: { value: nonce },
-      data: { used: true },
-    });
-
+    // 14) Đánh dấu nonce đã dùng + log forensic
+    await prisma.attendanceNonce.update({ where: { value: nonce }, data: { used: true } });
     await prisma.attendanceLog.create({
       data: {
         studentId: student.id,
@@ -478,45 +352,161 @@ export async function checkIn(req: Request, res: Response) {
         userAgent,
         ipCountry: ipGeo?.country,
         ipCity: ipGeo?.city,
-        flags: JSON.stringify({
-          ipVsGpsKm,
-          suspiciousByIpGeo,
-          deviceTrusted,
-        }),
+        flags: JSON.stringify({ ipVsGpsKm, suspiciousByIpGeo }),
         note: isValid ? null : "Suspicious attendance (geo/device).",
       },
     });
 
-    /* ---------------------------
-     * 15) Response trả về FE
-     * --------------------------- */
+    // 15) Trả về
     return res.json({
       success: true,
-      message: isValid
-        ? "Điểm danh thành công"
-        : "Điểm danh thành công nhưng có cảnh báo",
+      message: isValid ? "Điểm danh thành công" : "Điểm danh thành công nhưng có cảnh báo",
       data: attendance,
-      warning: !isValid
-        ? `Lệch vị trí / thiết bị không khớp. Khoảng cách: ${
-            distance?.toFixed?.(0) ?? "?"
-          }m.`
-        : null,
-      scoreInfo: {
-        score,
-        status,
-        minutesLate,
-        appliedRule: matchedRule
-          ? `Quy tắc: ${matchedRule.score}`
-          : "Mặc định",
-      },
+      warning: !isValid ? `Lệch vị trí/thiết bị. Khoảng cách: ${distance?.toFixed?.(0) ?? "?"}m.` : null,
+      scoreInfo: { score, status, minutesLate, appliedRule: matchedRule ? `Quy tắc: ${matchedRule.score}` : "Mặc định" },
     });
   } catch (err: any) {
     console.error("❌ Error in checkIn:", err);
-    return res
-      .status(500)
-      .json({ success: false, message: err.message || "Server error" });
+    return res.status(500).json({ success: false, message: err.message || "Server error" });
   }
 }
+
+
+// 4b. SINH VIÊN CHECK-IN THỦ CÔNG (GIÁO VIÊN)
+export async function manualCheckIn(req: Request, res: Response) {
+  try {
+    const { sessionId, studentCode, teacherId, note, status } = req.body;
+    if (!sessionId || !studentCode || !teacherId) {
+      return res.status(400).json({
+        success: false,
+        message: "sessionId, studentCode, teacherId là bắt buộc",
+      });
+    }
+
+    const session = await prisma.attendanceSession.findUnique({
+      where: { id: Number(sessionId) },
+    });
+    if (!session) return res.status(404).json({ success: false, message: "Session not found" });
+
+    const student = await prisma.student.findUnique({
+      where: { studentCode },
+      include: { user: true },
+    });
+    if (!student) return res.status(404).json({ success: false, message: "Sinh viên không tồn tại" });
+
+    const enrolled = await prisma.sectionEnrollment.findFirst({
+      where: { sectionId: session.sectionId, studentId: student.id },
+    });
+    if (!enrolled) return res.status(400).json({ success: false, message: "Sinh viên không thuộc học phần này" });
+
+    // Nếu đã có attendance thì trả về luôn
+    const existed = await prisma.attendance.findFirst({
+      where: { sessionId: session.id, studentId: student.id },
+      include: { student: { include: { user: true } } },
+    });
+    if (existed) {
+      return res.status(200).json({
+        success: true,
+        message: "Sinh viên đã điểm danh trước đó",
+        data: existed,
+      });
+    }
+
+    // Tính điểm theo rule (nếu có)
+    let finalStatus: "present" | "late" | "absent" = (status as any) || "present";
+    let score = 10;
+    const scoreRules = await prisma.attendanceScoreRule.findMany({
+      where: { sectionId: session.sectionId },
+    });
+    const matchedRule = scoreRules.find((r) => r.status === finalStatus);
+    if (matchedRule) score = matchedRule.score;
+
+    const attendance = await prisma.attendance.create({
+      data: {
+        sessionId: session.id,
+        studentId: student.id,
+        status: finalStatus,
+        
+        latitude: null,
+        longitude: null,
+        distance: null,
+        ipAddress: "manual",
+        deviceInfo: "Manual by teacher",
+        userAgent: req.headers["user-agent"] || null,
+        isValid: true,
+        score,
+        adjustedBy: Number(teacherId),
+        adjustedAt: new Date(),
+        
+      },
+      include: { student: { include: { user: true } } },
+    });
+
+    // lưu log
+    await prisma.attendanceLog.create({
+      data: {
+        studentId: student.id,
+        sessionId: session.id,
+        ipAddress: "manual",
+        userAgent: req.headers["user-agent"] || "",
+        ipCountry: null,
+        ipCity: null,
+        flags: JSON.stringify({ source: "manual", teacherId }),
+        note: note || "Manual check-in by teacher",
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: "Điểm danh thủ công thành công",
+      data: attendance,
+    });
+  } catch (err: any) {
+    console.error("❌ manualCheckIn error:", err);
+    return res.status(500).json({ success: false, message: err.message || "Server error" });
+  }
+}
+
+// controller.ts
+export async function cancelAttendance(req: Request, res: Response) {
+  try {
+    const { sessionId, studentCode, teacherId, reason } = req.body;
+    if (!sessionId || !studentCode || !teacherId) {
+      return res.status(400).json({ success: false, message: "sessionId, studentCode, teacherId là bắt buộc" });
+    }
+
+    const session = await prisma.attendanceSession.findUnique({ where: { id: Number(sessionId) } });
+    if (!session) return res.status(404).json({ success: false, message: "Session not found" });
+
+    const student = await prisma.student.findUnique({ where: { studentCode } });
+    if (!student) return res.status(404).json({ success: false, message: "Sinh viên không tồn tại" });
+
+    const attendance = await prisma.attendance.findFirst({
+      where: { sessionId: session.id, studentId: student.id },
+    });
+    if (!attendance) return res.status(404).json({ success: false, message: "Chưa có bản ghi để hủy" });
+
+    await prisma.attendance.delete({ where: { id: attendance.id } });
+
+    await prisma.attendanceLog.create({
+      data: {
+        studentId: student.id,
+        sessionId: session.id,
+        ipAddress: "manual",
+        userAgent: req.headers["user-agent"] || "",
+        flags: JSON.stringify({ action: "cancel", teacherId }),
+        note: reason || "Teacher cancelled attendance",
+      },
+    });
+
+    return res.json({ success: true, message: "Đã hủy điểm danh", id: attendance.id, studentId: student.id, });
+  } catch (err: any) {
+    console.error("❌ cancelAttendance error:", err);
+    return res.status(500).json({ success: false, message: err.message || "Server error" });
+  }
+}
+
+
 
 /* =========================================================
  * 5. GV CHỈNH ĐIỂM DANH THỦ CÔNG (ví dụ xác nhận ngoại lệ)
@@ -752,13 +742,13 @@ export async function updateSession(req: Request, res: Response) {
  * ========================================================= */
 export async function deleteSession(req: Request, res: Response) {
   try {
-    const id = parseInt(req.params.id);
+    const id = Number(req.params.id);
     await attendanceService.deleteAttendanceSession(id);
     return res.json({ success: true, message: "Deleted successfully" });
   } catch (err: any) {
     console.error("❌ deleteSession error:", err);
-    return res
-      .status(400)
-      .json({ success: false, message: err.message || "Bad request" });
+    const code = err.statusCode === 404 ? 404 : 400;
+    return res.status(code).json({ success: false, message: err.message || "Bad request" });
   }
 }
+

@@ -114,6 +114,37 @@ export async function getAttendanceSessionById(id: number) {
     });
 }
 
+
+
 export async function deleteAttendanceSession(id: number) {
-    return prisma.attendanceSession.delete({ where: { id } });
+  // kiểm tra tồn tại trước
+  const exists = await prisma.attendanceSession.findUnique({ where: { id } });
+  if (!exists) {
+    const err: any = new Error("Session not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // 1) Xoá các bản ghi phụ thuộc
+    await tx.attendanceLog.deleteMany({ where: { sessionId: id } });
+    await tx.attendanceNonce.deleteMany({ where: { sessionId: id } });
+    await tx.attendance.deleteMany({ where: { sessionId: id } });
+
+    // 2) Xoá session
+    await tx.attendanceSession.delete({ where: { id } });
+  });
+
+  // 3) (không bắt buộc) dọn file QR nếu có
+  try {
+    if (exists.qrCodeUrl) {
+      const uploadsDir = path.join(__dirname, "../../../uploads");
+      const filename = path.basename(exists.qrCodeUrl);
+      const filePath = path.join(uploadsDir, filename);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+  } catch { /* ignore file errors */ }
+
+  return true;
 }
+

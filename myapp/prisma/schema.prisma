@@ -603,6 +603,8 @@ model AttendanceSession {
   maxCheckInsPerIP   Int     @default(3)
   allowedDevices     Json?
 
+  fingerprints DeviceFingerprint[]
+
   section      CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   attendances  Attendance[]
   gradeColumns GradeColumnAttendanceSession[]
@@ -659,13 +661,18 @@ model AttendanceNonce {
 model DeviceFingerprint {
   id         Int      @id @default(autoincrement())
   studentId  Int
+  sessionId  Int      // ← THÊM TRƯỜNG NÀY
   deviceId   String
   userAgent  String
   createdAt  DateTime @default(now())
 
   student    Student  @relation(fields: [studentId], references: [id])
+  session    AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  @@unique([studentId, deviceId], name: "studentId_deviceId")
+  // ← CHỈ 1 deviceId DÙNG CHO 1 session
+  @@unique([sessionId, deviceId], name: "uniq_session_device")
+  @@index([studentId])
+  @@index([sessionId])
 }
 
 model AttendanceLog {

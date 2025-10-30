@@ -1,4 +1,3 @@
-// src/modules/stats/stats.controller.ts
 import { Request, Response, NextFunction } from "express";
 import {
   computeTotalsBySections,
@@ -142,30 +141,37 @@ export async function getAttendance(req: Request, res: Response, next: NextFunct
       return res.status(400).json({ message: "ids required" });
     }
 
-    // optional thời gian
     const from = req.query.from ? new Date(String(req.query.from)) : undefined;
     const to   = req.query.to   ? new Date(String(req.query.to))   : undefined;
 
-    // resolve sectionIds theo mode
     const sectionIds = await resolveSectionIds(mode, ids);
     if (!sectionIds.length) {
       return res.json({ items: [] });
     }
 
     const items = await getAttendanceAgg(sectionIds, from, to);
-    res.json({ items });
+
+    // 🔢 Chuẩn hóa theo yêu cầu: total & rate
+    const normalized = items.map(row => {
+      const present = row.present ?? 0;
+      const late    = row.late ?? 0;
+      const excused = row.excused ?? 0;
+      const absent  = row.absent ?? 0;
+
+      const total = present + late + excused + absent;
+      const attended = present + late + excused;
+
+      // rate tính theo %, làm tròn 2 chữ số thập phân
+      const rate = total > 0 ? Number(((attended / total) * 100).toFixed(2)) : 0;
+
+      return { ...row, total, rate };
+    });
+
+    return res.json({ items: normalized });
   } catch (err) {
     next(err);
   }
 }
 
-/**
- * (Không bắt FE dùng endpoint riêng cho DepartmentTab)
- *
- * DepartmentTab FE đã tự lọc:
- *  - Chọn termId / subjectIds
- *  - Lọc section ở FE (từ catalog.sections)
- *  - Gọi /stats/grades và /stats/attendance với sectionIds đó
- *
- * => Các API trên đã đủ cho DepartmentTab.
- */
+
+

@@ -37,4 +37,12 @@ router.post("/sign", attendanceController.signPayload);
 // Cấp nonce cho client để ký payload
 router.get("/session/:sessionId/nonce", attendanceController.issueNonce);
 
+
+// 🔥 GV điểm danh thủ công
+router.post("/manual-check-in", attendanceController.manualCheckIn);
+
+// 🔥 Hủy điểm danh
+router.post("/cancel", attendanceController.cancelAttendance);
+
+
 export default router;

@@ -119,7 +119,7 @@ export default function AdminStats() {
   const [activeKey, setActiveKey] = useState("grades");
 
   return (
-    <div className="min-h-screen p-4 md:p-6" style={{ background: "linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%)" }}>
+    <div className="min-h-screen p-4 md:p-6" style={{ background: "#ffffff" }}>
       <Space direction="vertical" size={24} style={{ width: "100%" }}>
         {/* Header */}
         <Card style={glassStyle} bodyStyle={{ padding: "20px 24px" }}>
