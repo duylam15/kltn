@@ -16,47 +16,50 @@ import {
 } from "recharts";
 import { PrettyTooltip } from "../../components/PrettyTooltip";
 
-/* --------------------------------------
- *  Types from backend
- * -------------------------------------- */
+/* === Types & API === */
 type CatalogTerm = { id:number; code:string; name:string; startDate:string; endDate:string };
 type CatalogSubject = { id:number; subjectCode:string; subjectName:string };
 type CatalogTeacher = { id:number; code:string; fullName:string };
 type CatalogSection = { id:number; sectionCode:string; sectionName:string; subjectId:number; termId:number; teacherIds:number[] };
 
-type TotalRow = {
-  sectionId:number;
-  studentId:number;
-  studentCode:string;
-  studentName:string;
-  total10:number;
-};
+type TotalRow = { sectionId:number; studentId:number; studentCode:string; studentName:string; total10:number; };
+type BucketSeriesRes = { scheme:string; buckets: { label:string; from:number; to:number }[]; total: number; series: { label:string; count:number }[]; };
+type AttendanceItem = { sectionId:number; present:number; late:number; excused:number; absent:number; total:number; rate:number; };
 
-type BucketSeriesRes = {
-  scheme:string;
-  buckets: { label:string; from:number; to:number }[];
-  total: number;
-  series: { label:string; count:number }[];
-};
-
-type AttendanceItem = {
-  sectionId:number;
-  present:number;
-  late:number;
-  excused:number;
-  absent:number;
-  total:number;
-  rate:number;
-};
-
-/* --------------------------------------
- *  API base
- * -------------------------------------- */
 const API_BASE = "http://localhost:4000/api/v1";
 
-/* --------------------------------------
- *  Catalog hook
- * -------------------------------------- */
+/* === CSS Glassmorphism & Neumorphism === */
+const glassStyle = {
+  background: "rgba(255, 255, 255, 0.75)",
+  backdropFilter: "blur(12px)",
+  WebkitBackdropFilter: "blur(12px)",
+  border: "1px solid rgba(255, 255, 255, 0.3)",
+  boxShadow: "0 8px 32px rgba(0, 0, 0, 0.07), inset 0 0 0 0.5px rgba(255, 255, 255, 0.2)",
+  borderRadius: "16px",
+};
+
+const darkGlassStyle = {
+  background: "rgba(15, 15, 30, 0.7)",
+  backdropFilter: "blur(12px)",
+  WebkitBackdropFilter: "blur(12px)",
+  border: "1px solid rgba(255, 255, 255, 0.1)",
+  boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
+  borderRadius: "16px",
+};
+
+const kpiIconStyle = (color1: string, color2: string) => ({
+  width: 48,
+  height: 48,
+  borderRadius: 16,
+  background: `linear-gradient(135deg, ${color1}, ${color2})`,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "white",
+  fontSize: 20,
+});
+
+/* === useCatalog === */
 function useCatalog() {
   const [loading, setLoading] = useState(false);
   const [terms, setTerms] = useState<CatalogTerm[]>([]);
@@ -83,220 +86,80 @@ function useCatalog() {
 
   useEffect(() => { reload(); }, []);
 
-  const teacherById = useMemo(
-    () => new Map(teachers.map(t => [t.id, t])),
-    [teachers]
-  );
-  const subjectById = useMemo(
-    () => new Map(subjects.map(s => [s.id, s])),
-    [subjects]
-  );
-  const termById = useMemo(
-    () => new Map(terms.map(t => [t.id, t])),
-    [terms]
-  );
+  const teacherById = useMemo(() => new Map(teachers.map(t => [t.id, t])), [teachers]);
+  const subjectById = useMemo(() => new Map(subjects.map(s => [s.id, s])), [subjects]);
+  const termById = useMemo(() => new Map(terms.map(t => [t.id, t])), [terms]);
 
-  return {
-    loading,
-    terms,
-    subjects,
-    teachers,
-    sections,
-    teacherById,
-    subjectById,
-    termById,
-    reload,
-  };
+  return { loading, terms, subjects, teachers, sections, teacherById, subjectById, termById, reload };
 }
 
-function SectionOption({
-  s, subjectById, termById, teacherById
-}:{
-  s:CatalogSection;
-  subjectById:Map<number,CatalogSubject>;
-  termById:Map<number,CatalogTerm>;
-  teacherById:Map<number,CatalogTeacher>;
+function SectionOption({ s, subjectById, termById, teacherById }: {
+  s: CatalogSection;
+  subjectById: Map<number, CatalogSubject>;
+  termById: Map<number, CatalogTerm>;
+  teacherById: Map<number, CatalogTeacher>;
 }) {
   const subject = subjectById.get(s.subjectId);
   const term = termById.get(s.termId);
-  const tNames = s.teacherIds
-    .map(id => teacherById.get(id)?.fullName)
-    .filter(Boolean)
-    .join(", ");
+  const tNames = s.teacherIds.map(id => teacherById.get(id)?.fullName).filter(Boolean).join(", ");
 
   return (
     <div className="flex flex-col">
-      <div>
-        <b>{s.sectionName}</b>{" "}
-        <Tag color="blue" style={{ marginLeft: 6 }}>
-          {s.sectionCode}
-        </Tag>
-      </div>
-      <div style={{ fontSize:12, opacity:.85 }}>
-        {subject
-          ? `${subject.subjectCode} – ${subject.subjectName}`
-          : "(No subject)"}
-        {" · "}
-        {term ? term.code : ""}
-        {tNames ? ` · GV: ${tNames}` : ""}
+      <div><b>{s.sectionName}</b> <Tag color="blue" style={{ marginLeft: 6, borderRadius: 8 }}>{s.sectionCode}</Tag></div>
+      <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>
+        {subject ? `${subject.subjectCode} – ${subject.subjectName}` : "(No subject)"} · {term?.code || ""}{tNames ? ` · GV: ${tNames}` : ""}
       </div>
     </div>
   );
 }
 
-/* --------------------------------------
- *  Page
- * -------------------------------------- */
+/* === MAIN PAGE === */
 export default function AdminStats() {
-  const {
-    loading: catLoading,
-    sections,
-    subjects,
-    teacherById,
-    subjectById,
-    termById,
-    reload
-  } = useCatalog();
-
+  const { loading: catLoading, sections, subjects, teacherById, subjectById, termById, reload } = useCatalog();
   const [activeKey, setActiveKey] = useState("grades");
 
   return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      {/* Header */}
-      <Row gutter={[16,16]} className="card-glass">
-        <Col xs={24}>
-          <Card
-            bordered
-            title={
-              <Space align="center">
-                <span
-                  style={{
-                    display:"inline-flex",
-                    width:36,
-                    height:36,
-                    alignItems:"center",
-                    justifyContent:"center",
-                    borderRadius:12,
-                    background:"linear-gradient(135deg,#6c5ce7,#8e79ff)",
-                    color:"#fff",
-                  }}
-                >
-                  📊
-                </span>
-                <span>Thống kê học tập &amp; chuyên cần</span>
-              </Space>
-            }
-            extra={
-              <Button
-                type="primary"
-                icon={<ReloadOutlined />}
-                onClick={reload}
-              >
-                Làm mới danh mục
-              </Button>
-            }
-          >
-          </Card>
-        </Col>
-      </Row>
+    <div className="min-h-screen p-4 md:p-6" style={{ background: "linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%)" }}>
+      <Space direction="vertical" size={24} style={{ width: "100%" }}>
+        {/* Header */}
+        <Card style={glassStyle} bodyStyle={{ padding: "20px 24px" }}>
+          <div className="flex items-center gap-3">
+            <div style={kpiIconStyle("#6c5ce7", "#8e79ff")}>📊</div>
+            <div>
+              <h2 className="m-0 text-xl font-bold text-gray-800">Thống kê học tập &amp; chuyên cần</h2>
+              <p className="m-0 text-sm text-gray-600">Tổng hợp dữ liệu theo lớp, môn, học kỳ</p>
+            </div>
+          </div>
+        </Card>
 
-      <Tabs
-        activeKey={activeKey}
-        onChange={setActiveKey}
-        items={[
-          {
-            key: "grades",
-            label: (
-              <Space>
-                <LineChartOutlined />
-                Điểm trung bình
-              </Space>
-            ),
-            children: (
-              <GradesTab
-                sections={sections}
-                subjectById={subjectById}
-                termById={termById}
-                teacherById={teacherById}
-                catalogLoading={catLoading}
-              />
-            ),
-          },
-          {
-            key: "buckets",
-            label: (
-              <Space>
-                <PieChartOutlined />
-                Phân bố điểm
-              </Space>
-            ),
-            children: (
-              <BucketsTab
-                sections={sections}
-                subjects={subjects}
-                catalogLoading={catLoading}
-              />
-            ),
-          },
-          {
-            key: "attendance",
-            label: (
-              <Space>
-                <ClockCircleOutlined />
-                Chuyên cần
-              </Space>
-            ),
-            children: (
-              <AttendanceTab
-                sections={sections}
-                subjects={subjects}
-                catalogLoading={catLoading}
-              />
-            ),
-          },
-          {
-            key: "dept",
-            label: (
-              <Space>
-                <BarChartOutlined />
-                Tổng quan Khoa
-              </Space>
-            ),
-            children: (
-              <DepartmentTab
-                sections={sections}
-                subjects={subjects}
-                subjectById={subjectById}
-                termById={termById}
-                catalogLoading={catLoading}
-              />
-            ),
-          },
-        ]}
-      />
-    </Space>
+        <Tabs
+          activeKey={activeKey}
+          onChange={setActiveKey}
+          tabBarStyle={{ marginBottom: 0 }}
+          items={[
+            { key: "grades", label: <Space><LineChartOutlined />Điểm trung bình</Space>, children: <GradesTab {...{ sections, subjects, subjectById, termById, teacherById, catalogLoading: catLoading }} /> },
+            { key: "buckets", label: <Space><PieChartOutlined />Phân bố điểm</Space>, children: <BucketsTab {...{ sections, subjects, catalogLoading: catLoading }} /> },
+            { key: "attendance", label: <Space><ClockCircleOutlined />Chuyên cần</Space>, children: <AttendanceTab {...{ sections, subjects, catalogLoading: catLoading }} /> },
+            { key: "dept", label: <Space><BarChartOutlined />Tổng quan Khoa</Space>, children: <DepartmentTab {...{ sections, subjects, subjectById, termById, catalogLoading: catLoading }} /> },
+          ]}
+        />
+      </Space>
+    </div>
   );
 }
 
-/* --------------------------------------
- *  Tab: Grades
- * -------------------------------------- */
-function GradesTab({
-  sections,
-  subjectById,
-  termById,
-  teacherById,
-  catalogLoading,
-}:{
-  sections: CatalogSection[];
-  subjectById: Map<number,CatalogSubject>;
-  termById: Map<number,CatalogTerm>;
-  teacherById: Map<number,CatalogTeacher>;
-  catalogLoading:boolean;
-}) {
+/* === GradesTab === */
+function GradesTab({ sections, subjects, subjectById, termById, teacherById, catalogLoading }: any) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<TotalRow[]>([]);
+  const [mode, setMode] = useState<"section" | "subject">("section");
+  const [sectionIds, setSectionIds] = useState<number[]>([]);
+  const [subjectIds, setSubjectIds] = useState<number[]>([]);
+
+  useEffect(() => {
+    form.setFieldsValue({ ids: mode === "section" ? sectionIds : subjectIds });
+  }, [mode, sectionIds, subjectIds, form]);
 
   const groupedBySection = useMemo(() => {
     const map = new Map<number, TotalRow[]>();
@@ -309,10 +172,7 @@ function GradesTab({
   }, [items]);
 
   const statsBySection = useMemo(() => {
-    const ret: Record<
-      number,
-      { n:number; avg:number; min:number; max:number }
-    > = {};
+    const ret: Record<number, { n:number; avg:number; min:number; max:number }> = {};
     groupedBySection.forEach((rows, secId) => {
       const vals = rows.map(r => r.total10);
       const n = vals.length || 1;
@@ -325,353 +185,129 @@ function GradesTab({
   }, [groupedBySection]);
 
   const onFetch = async () => {
-    const sectionIds:number[] = form.getFieldValue("sectionIds") || [];
-    if (!sectionIds.length) {
-      message.warning("Chọn ít nhất 1 lớp (section)");
-      return;
-    }
+    const ids: number[] = form.getFieldValue("ids") || [];
+    if (!ids.length) return message.warning("Chọn ít nhất 1 mục");
+
     try {
       setLoading(true);
-      const { data } = await axios.get(`${API_BASE}/stats/grades`, {
-        params: { sectionIds: sectionIds.join(",") },
-      });
+      const params: any = {};
+      if (mode === "section") params.sectionIds = ids.join(",");
+      else params.subjectIds = ids.join(",");
+
+      const { data } = await axios.get(`${API_BASE}/stats/grades`, { params });
       setItems(data.items || []);
     } catch (e:any) {
-      message.error(
-        e?.response?.data?.message || "Không tải được điểm"
-      );
+      message.error(e?.response?.data?.message || "Không tải được điểm");
     } finally {
       setLoading(false);
     }
   };
 
-  const columns: ColumnsType<TotalRow & { sectionLabel:string }> = [
-    { title: "Mã SV", dataIndex: "studentCode", width: 120 },
-    { title: "Họ tên", dataIndex: "studentName" },
-    { title: "Lớp", dataIndex: "sectionLabel", width: 240 },
-    {
-      title: "Điểm TB (10)",
-      dataIndex: "total10",
-      width: 140,
-      align:"right",
-      render: (v:number)=> (
-        <Tag
-          color={
-            v>=8
-              ? "green"
-              : v>=6.5
-              ? "geekblue"
-              : v>=5
-              ? "gold"
-              : "red"
-          }
-          style={{
-            borderRadius:8,
-            padding:"2px 8px",
-            minWidth:64,
-            textAlign:"center",
-          }}
-        >
-          {v.toFixed(2)}
-        </Tag>
-      ),
-    },
-  ];
-
   const dataSource = useMemo(() => {
-    const secLabel = (id:number) => {
-      const s = sections.find(x=>x.id===id);
+    const secLabel = (id: number) => {
+      const s = sections.find((x: any) => x.id === id);
       if (!s) return String(id);
       const subj = subjectById.get(s.subjectId);
       const term = termById.get(s.termId);
-      const tNames = s.teacherIds
-        .map(tid => teacherById.get(tid)?.fullName)
-        .filter(Boolean)
-        .join(", ");
-      return `${s.sectionName} · ${subj?.subjectCode ?? ""} · ${
-        term?.code ?? ""
-      }${tNames ? " · " + tNames : ""}`;
+      const tNames = s.teacherIds.map((tid: number) => teacherById.get(tid)?.fullName).filter(Boolean).join(", ");
+      return `${s.sectionName} · ${subj?.subjectCode ?? ""} · ${term?.code ?? ""}${tNames ? " · " + tNames : ""}`;
     };
+
     return items.map(r => ({
       ...r,
       key: `${r.sectionId}-${r.studentId}`,
-      sectionLabel: secLabel(r.sectionId),
+      sectionLabel: mode === "section" ? secLabel(r.sectionId) : `${subjectById.get(sections.find((x: any) => x.id === r.sectionId)?.subjectId || 0)?.subjectCode} – ${subjectById.get(sections.find((x: any) => x.id === r.sectionId)?.subjectId || 0)?.subjectName}`,
     }));
-  }, [items, sections, subjectById, termById, teacherById]);
+  }, [items, sections, subjectById, termById, teacherById, mode]);
 
   const chartData = useMemo(() => {
-    const rows: { section:string; avg:number }[] = [];
-    groupedBySection.forEach((list, secId) => {
+    return Array.from(groupedBySection.entries()).map(([secId, list]) => {
       const st = statsBySection[secId];
-      const s = sections.find(x=>x.id===secId);
-      rows.push({
-        section: s?.sectionName || String(secId),
-        avg: st?.avg || 0,
-      });
-    });
-    return rows.sort((a,b)=>a.section.localeCompare(b.section));
-  }, [groupedBySection, statsBySection, sections]);
+      const s = sections.find((x: any) => x.id === secId);
+      const label = mode === "section" ? (s?.sectionName || String(secId)) : (subjectById.get(s?.subjectId || 0)?.subjectCode || "Unknown");
+      return { name: label, avg: st?.avg || 0 };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [groupedBySection, statsBySection, sections, subjectById, mode]);
 
-  // KPIs
   const values = items.map(i => i.total10 ?? 0);
-  const avg = values.length
-    ? +(values.reduce((a,b)=>a+b,0)/values.length).toFixed(2)
-    : 0;
+  const avg = values.length ? +(values.reduce((a,b)=>a+b,0)/values.length).toFixed(2) : 0;
   const pass = values.filter(v=>v>=5).length;
   const excellent = values.filter(v=>v>=8).length;
 
   return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      {/* Filters */}
-      <Card className="card-glass sticky-filters">
-        <Form form={form} layout="vertical" onFinish={onFetch}>
-          <Form.Item
-            name="sectionIds"
-            label="Chọn lớp (Section)"
-            tooltip="Có thể chọn nhiều lớp để so sánh"
-          >
-            <Select
-              mode="multiple"
-              maxTagCount="responsive"
-              loading={catalogLoading}
-              allowClear
-              placeholder="Tìm theo tên lớp, mã lớp, môn học..."
-              optionFilterProp="label"
-              options={sections.map(s => ({
-                value: s.id,
-                label: `${s.sectionName} (${s.sectionCode})`,
-                section: s,
-              }))}
-              optionRender={(opt) => {
-                // @ts-ignore
-                const sec:CatalogSection = opt.data.section;
-                return (
-                  <SectionOption
-                    s={sec}
-                    subjectById={subjectById}
-                    termById={termById}
-                    teacherById={teacherById}
-                  />
-                );
-              }}
-            />
-          </Form.Item>
-
-          <Form.Item>
-            <Space>
-              <Button
-                type="primary"
-                htmlType="submit"
-                icon={<LineChartOutlined />}
-                loading={loading}
-              >
-                Xem thống kê
-              </Button>
-            </Space>
-          </Form.Item>
+    <Space direction="vertical" size={20} style={{ width: "100%" }}>
+      {/* Filter */}
+      <Card style={glassStyle} className="sticky top-0 z-10" bodyStyle={{ padding: "16px" }}>
+        <Form form={form} layout="inline" onFinish={onFetch}>
+          <Space wrap>
+            <Form.Item label="Chế độ">
+              <Segmented value={mode} onChange={v => setMode(v as any)} options={[{ label: "Theo lớp", value: "section" }, { label: "Theo môn", value: "subject" }]} />
+            </Form.Item>
+            <Form.Item name="ids" style={{ minWidth: 300 }}>
+              <Select
+                mode="multiple"
+                placeholder={mode === "section" ? "Chọn lớp..." : "Chọn môn..."}
+                loading={catalogLoading}
+                options={(mode === "section" ? sections : subjects).map((s: any) => ({
+                  value: s.id,
+                  label: mode === "section" ? `${s.sectionName} (${s.sectionCode})` : `${s.subjectCode} – ${s.subjectName}`,
+                }))}
+                onChange={(vals: number[]) => mode === "section" ? setSectionIds(vals) : setSubjectIds(vals)}
+              />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" icon={<LineChartOutlined />} loading={loading}>Xem</Button>
+          </Space>
         </Form>
       </Card>
 
-      {/* KPI Tiles */}
-      <Row gutter={[16,16]}>
-        <Col xs={24} md={6}>
-          <Card className="card-glass">
-            <div className="kpi-tile">
-              <div>
-                <div style={{opacity:.7,fontSize:12}}>Số bản ghi</div>
-                <div style={{fontWeight:700,fontSize:24}}>
-                  {items.length}
+      {/* KPI */}
+      <Row gutter={[16, 16]}>
+        {[
+          { label: "Số bản ghi", value: items.length, icon: "📄", color: ["#10b981", "#34d399"] },
+          { label: "Điểm TB", value: avg, icon: <AreaChart data={values.map((v,i)=>({i,v}))} style={{ height: 36 }} />, color: ["#6c5ce7", "#8e79ff"] },
+          { label: "≥ 5 điểm", value: pass, icon: "✅", color: ["#f59e0b", "#fbbf24"] },
+          { label: "≥ 8 điểm", value: excellent, icon: "Trophy", color: ["#ec4899", "#f43f5e"] },
+        ].map((kpi, i) => (
+          <Col xs={12} md={6} key={i}>
+            <Card style={glassStyle} className="hover:scale-105 transition-transform">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm opacity-70">{kpi.label}</div>
+                  <div className="text-2xl font-bold">{typeof kpi.value === "number" ? kpi.value : kpi.value}</div>
                 </div>
+                <div style={kpiIconStyle(kpi.color[0], kpi.color[1])}>{kpi.icon}</div>
               </div>
-              <div className="kpi-icon">📄</div>
-            </div>
-          </Card>
-        </Col>
-
-        <Col xs={24} md={6}>
-          <Card className="card-glass">
-            <div className="kpi-tile">
-              <div>
-                <div style={{opacity:.7,fontSize:12}}>Điểm TB</div>
-                <div style={{fontWeight:700,fontSize:24}}>{avg}</div>
-              </div>
-              <div style={{height:38}}>
-                <ResponsiveContainer width={80} height={38}>
-                  <AreaChart data={values.map((v,i)=>({i,v}))}>
-                    <defs>
-                      <linearGradient
-                        id="gAvg"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor="#6c5ce7"
-                          stopOpacity={0.7}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor="#6c5ce7"
-                          stopOpacity={0.1}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <Area
-                      dataKey="v"
-                      stroke="#6c5ce7"
-                      fill="url(#gAvg)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </Card>
-        </Col>
-
-        <Col xs={24} md={6}>
-          <Card className="card-glass">
-            <div className="kpi-tile">
-              <div>
-                <div style={{opacity:.7,fontSize:12}}>≥ 5 điểm</div>
-                <div style={{fontWeight:700,fontSize:24}}>
-                  {pass}
-                </div>
-              </div>
-              <div className="kpi-icon">✅</div>
-            </div>
-          </Card>
-        </Col>
-
-        <Col xs={24} md={6}>
-          <Card className="card-glass">
-            <div className="kpi-tile">
-              <div>
-                <div style={{opacity:.7,fontSize:12}}>≥ 8 điểm</div>
-                <div style={{fontWeight:700,fontSize:24}}>
-                  {excellent}
-                </div>
-              </div>
-              <div className="kpi-icon">🏆</div>
-            </div>
-          </Card>
-        </Col>
+            </Card>
+          </Col>
+        ))}
       </Row>
 
       {/* Chart + Table */}
-      <Row gutter={[16,16]}>
+      <Row gutter={[16, 16]}>
         <Col xs={24} lg={10}>
-          <Card
-            className="card-glass"
-            title="Điểm trung bình theo lớp"
-            bodyStyle={{ height: 360 }}
-          >
-            {loading ? (
-              <Spin />
-            ) : chartData.length ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={chartData}
-                  margin={{
-                    top: 10,
-                    right: 20,
-                    left: 0,
-                    bottom: 10,
-                  }}
-                >
-                  <defs>
-                    <linearGradient
-                      id="barGrad"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop
-                        offset="0%"
-                        stopColor="#6c5ce7"
-                        stopOpacity={0.9}
-                      />
-                      <stop
-                        offset="100%"
-                        stopColor="#6c5ce7"
-                        stopOpacity={0.3}
-                      />
-                    </linearGradient>
-                  </defs>
-
+          <Card style={glassStyle} title="Điểm TB theo lớp/môn" bodyStyle={{ height: 380, padding: 0 }}>
+            {loading ? <Spin /> : chartData.length ? (
+              <ResponsiveContainer>
+                <BarChart data={chartData}>
+                  <defs><linearGradient id="barG1"><stop offset="0%" stopColor="#6c5ce7" stopOpacity={0.9}/><stop offset="100%" stopColor="#6c5ce7" stopOpacity={0.3}/></linearGradient></defs>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="section"
-                    angle={-15}
-                    textAnchor="end"
-                    height={60}
-                  />
+                  <XAxis dataKey="name" angle={-15} textAnchor="end" height={70} />
                   <YAxis domain={[0, 10]} />
                   <RTooltip content={<PrettyTooltip />} />
-                  <Legend />
-                  <Bar
-                    dataKey="avg"
-                    name="Điểm TB (10)"
-                    fill="url(#barGrad)"
-                    radius={[8,8,0,0]}
-                  />
+                  <Bar dataKey="avg" fill="url(#barG1)" radius={[8,8,0,0]} />
                 </BarChart>
               </ResponsiveContainer>
-            ) : (
-              <Empty description="Chưa có dữ liệu" />
-            )}
+            ) : <Empty />}
           </Card>
-
-          <div
-            style={{
-              marginTop: 12,
-              display:"grid",
-              gridTemplateColumns:"1fr 1fr",
-              gap:12,
-            }}
-          >
-            <Card size="small" className="card-glass">
-              <Statistic
-                title="Điểm thấp nhất"
-                value={(
-                  values.length ? Math.min(...values) : 0
-                ).toFixed(2)}
-              />
-            </Card>
-            <Card size="small" className="card-glass">
-              <Statistic
-                title="Điểm cao nhất"
-                value={(
-                  values.length ? Math.max(...values) : 0
-                ).toFixed(2)}
-              />
-            </Card>
-          </div>
         </Col>
-
         <Col xs={24} lg={14}>
-          <Card
-            className="card-glass"
-            title={
-              <Space>
-                <BarChartOutlined />
-                Danh sách điểm theo sinh viên
-              </Space>
-            }
-          >
-            <Table
-              size="middle"
-              rowKey={(r)=>`${r.sectionId}-${r.studentId}`}
-              loading={loading}
-              dataSource={dataSource}
-              columns={columns}
-              pagination={{
-                pageSize: 10,
-                showSizeChanger: true,
-              }}
-            />
+          <Card style={glassStyle} title="Danh sách sinh viên">
+            <Table size="small" dataSource={dataSource} columns={[
+              { title: "Mã SV", dataIndex: "studentCode", width: 100 },
+              { title: "Họ tên", dataIndex: "studentName" },
+              { title: mode === "section" ? "Lớp" : "Môn", dataIndex: "sectionLabel" },
+              { title: "Điểm", dataIndex: "total10", align: "right", render: v => <Tag color={v>=8?"green":v>=6.5?"geekblue":v>=5?"gold":"red"} style={{ borderRadius: 8 }}>{v.toFixed(2)}</Tag> },
+            ]} pagination={{ pageSize: 8 }} />
           </Card>
         </Col>
       </Row>
@@ -679,230 +315,124 @@ function GradesTab({
   );
 }
 
-/* --------------------------------------
- *  Tab: Buckets
- *  (Phân bố điểm, có 2 chế độ: theo lớp / theo môn)
- * -------------------------------------- */
+
+/* ========================================
+   BUCKETS TAB – PHÂN BỐ ĐIỂM
+======================================== */
 function BucketsTab({
   sections,
   subjects,
   catalogLoading
-}:{
-  sections:CatalogSection[];
-  subjects:CatalogSubject[];
-  catalogLoading:boolean;
+}: {
+  sections: CatalogSection[];
+  subjects: CatalogSubject[];
+  catalogLoading: boolean;
 }) {
   const [form] = Form.useForm();
-
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<BucketSeriesRes | null>(null);
-
-  // Bộ nhớ riêng cho mỗi chế độ
   const [sectionIds, setSectionIds] = useState<number[]>([]);
   const [subjectIds, setSubjectIds] = useState<number[]>([]);
-
-  // mode hiện tại ("section" | "subject")
   const mode = Form.useWatch("mode", form) || "section";
 
-  // Khi user thay đổi Select (ids)
-  const handleIdsChange = (vals:number[]) => {
-    if (mode === "section") {
-      setSectionIds(vals);
-    } else {
-      setSubjectIds(vals);
-    }
+  const handleIdsChange = (vals: number[]) => {
+    if (mode === "section") setSectionIds(vals);
+    else setSubjectIds(vals);
     form.setFieldsValue({ ids: vals });
   };
 
-  // Khi đổi mode -> đồng bộ giá trị ids trong form
   useEffect(() => {
-    if (mode === "section") {
-      form.setFieldsValue({ ids: sectionIds });
-    } else {
-      form.setFieldsValue({ ids: subjectIds });
-    }
+    form.setFieldsValue({ ids: mode === "section" ? sectionIds : subjectIds });
   }, [mode, form, sectionIds, subjectIds]);
 
   const onFetch = async () => {
-    const currentMode = form.getFieldValue("mode") || "section";
-    const ids:number[] = form.getFieldValue("ids") || [];
-    const scheme = "vn10"; // thang nhóm điểm server hiểu (ví dụ <5,5-6.5,...)
-
-    if (!ids.length) {
-      message.warning("Chọn ít nhất 1 mục");
-      return;
-    }
+    const ids: number[] = form.getFieldValue("ids") || [];
+    if (!ids.length) return message.warning("Chọn ít nhất 1 mục");
 
     try {
       setLoading(true);
       const res = await axios.get(`${API_BASE}/stats/grade-buckets`, {
-        params: {
-          mode: currentMode,        // "section" | "subject"
-          ids: ids.join(","),       // ví dụ "12,13,15"
-          scheme,                   // kiểu bucket
-        },
+        params: { mode, ids: ids.join(","), scheme: "vn10" },
       });
       setData(res.data);
-    } catch (e:any) {
-      message.error(
-        e?.response?.data?.message || "Không tải được phân bố điểm"
-      );
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || "Không tải được phân bố điểm");
     } finally {
       setLoading(false);
     }
   };
 
-  const chartData = useMemo(
-    () =>
-      data?.series?.map((s, i) => ({
-        idx: i+1,
-        label: s.label,
-        count: s.count,
-      })) || [],
-    [data]
-  );
+  const chartData = useMemo(() => data?.series?.map((s, i) => ({ idx: i + 1, label: s.label, count: s.count })) || [], [data]);
 
   return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      {/* Filters */}
-      <Card className="card-glass sticky-filters">
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={onFetch}
-          initialValues={{
-            mode: "section",
-          }}
-        >
-          <Row gutter={12}>
-            <Col xs={24} md={6}>
-              <Form.Item name="mode" label="Chế độ">
-                <Segmented
-                  options={[
-                    { label: "Theo lớp (Section)", value: "section" },
-                    { label: "Theo môn (Subject)", value: "subject" },
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-
-            <Col xs={24} md={12}>
-              <Form.Item
-                name="ids"
-                label={mode === "section" ? "Chọn lớp" : "Chọn môn"}
-              >
-                <Select
-                  mode="multiple"
-                  maxTagCount="responsive"
-                  loading={catalogLoading}
-                  // danh sách hiển thị phụ thuộc mode
-                  options={(mode === "section" ? sections : subjects).map(
-                    (x:any) => ({
-                      value: x.id,
-                      label:
-                        mode === "section"
-                          ? `${x.sectionName} (${x.sectionCode})`
-                          : `${x.subjectCode} – ${x.subjectName}`,
-                    })
-                  )}
-                  showSearch
-                  optionFilterProp="label"
-                  placeholder={
-                    mode === "section"
-                      ? "Chọn một hoặc nhiều lớp"
-                      : "Chọn một hoặc nhiều môn"
-                  }
-                  onChange={handleIdsChange}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Form.Item>
-            <Button
-              type="primary"
-              htmlType="submit"
-              icon={<PieChartOutlined />}
-              loading={loading}
-            >
-              Xem phân bố
-            </Button>
-          </Form.Item>
+    <Space direction="vertical" size={20} style={{ width: "100%" }}>
+      {/* Filter */}
+      <Card style={glassStyle} className="sticky top-0 z-10" bodyStyle={{ padding: "16px" }}>
+        <Form form={form} layout="inline" onFinish={onFetch} initialValues={{ mode: "section" }}>
+          <Space wrap>
+            <Form.Item name="mode" label="Chế độ">
+              <Segmented options={[{ label: "Theo lớp", value: "section" }, { label: "Theo môn", value: "subject" }]} />
+            </Form.Item>
+            <Form.Item name="ids" style={{ minWidth: 300 }}>
+              <Select
+                mode="multiple"
+                placeholder={mode === "section" ? "Chọn lớp..." : "Chọn môn..."}
+                loading={catalogLoading}
+                options={(mode === "section" ? sections : subjects).map((x: any) => ({
+                  value: x.id,
+                  label: mode === "section" ? `${x.sectionName} (${x.sectionCode})` : `${x.subjectCode} – ${x.subjectName}`,
+                }))}
+                onChange={handleIdsChange}
+              />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" icon={<PieChartOutlined />} loading={loading}>Xem phân bố</Button>
+          </Space>
         </Form>
       </Card>
 
-      {/* Results */}
-      <Row gutter={[16,16]}>
-        <Col xs={24} lg={10}>
-          <Card className="card-glass" title="Tổng quan">
-            <Row gutter={16}>
-              <Col span={12}>
-                <Statistic
-                  title="Tổng bài ghi nhận"
-                  value={data?.total || 0}
-                />
-              </Col>
-              <Col span={12}>
-                <Statistic
-                  title="Số nhóm"
-                  value={data?.series?.length || 0}
-                />
-              </Col>
-            </Row>
+      {/* KPI + Chart */}
+      <Row gutter={[16, 16]}>
+        <Col xs={24} md={8}>
+          <Card style={glassStyle} className="hover:scale-105 transition-transform">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm opacity-70">Tổng bài ghi nhận</div>
+                <div className="text-2xl font-bold">{data?.total || 0}</div>
+              </div>
+              <div style={kpiIconStyle("#8b5cf6", "#a78bfa")}>📊</div>
+            </div>
           </Card>
         </Col>
+        <Col xs={24} md={8}>
+          <Card style={glassStyle} className="hover:scale-105 transition-transform">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm opacity-70">Số nhóm điểm</div>
+                <div className="text-2xl font-bold">{data?.series?.length || 0}</div>
+              </div>
+              <div style={kpiIconStyle("#ec4899", "#f43f5e")}>🎯</div>
+            </div>
+          </Card>
+        </Col>
+      </Row>
 
-        <Col xs={24} lg={14}>
-          <Card
-            className="card-glass"
-            title="Phân bố theo nhóm điểm"
-            bodyStyle={{ height: 360 }}
-          >
-            {loading ? (
-              <Spin />
-            ) : chartData.length ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={chartData}
-                  margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
-                >
+      <Row gutter={[16, 16]}>
+        <Col xs={24}>
+          <Card style={glassStyle} title="Phân bố điểm theo nhóm" bodyStyle={{ height: 380, padding: 0 }}>
+            {loading ? <Spin /> : chartData.length ? (
+              <ResponsiveContainer>
+                <BarChart data={chartData}>
                   <defs>
-                    <linearGradient
-                      id="barGrad2"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop
-                        offset="0%"
-                        stopColor="#8e79ff"
-                        stopOpacity={0.9}
-                      />
-                      <stop
-                        offset="100%"
-                        stopColor="#8e79ff"
-                        stopOpacity={0.3}
-                      />
-                    </linearGradient>
+                    <linearGradient id="barG2"><stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.9}/><stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.3}/></linearGradient>
                   </defs>
-
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="label" />
                   <YAxis allowDecimals={false} />
                   <RTooltip content={<PrettyTooltip />} />
-                  <Legend />
-                  <Bar
-                    dataKey="count"
-                    name="Số SV"
-                    fill="url(#barGrad2)"
-                    radius={[8,8,0,0]}
-                  />
+                  <Bar dataKey="count" name="Số SV" fill="url(#barG2)" radius={[8,8,0,0]} />
                 </BarChart>
               </ResponsiveContainer>
-            ) : (
-              <Empty description="Chưa có dữ liệu" />
-            )}
+            ) : <Empty description="Chưa có dữ liệu" />}
           </Card>
         </Col>
       </Row>
@@ -910,288 +440,130 @@ function BucketsTab({
   );
 }
 
-/* --------------------------------------
- *  Tab: Attendance
- *  (Chuyên cần, cũng 2 chế độ giống BucketsTab)
- * -------------------------------------- */
+/* ========================================
+   ATTENDANCE TAB – CHUYÊN CẦN
+======================================== */
 function AttendanceTab({
   sections,
   subjects,
   catalogLoading
-}:{
-  sections:CatalogSection[];
-  subjects:CatalogSubject[];
-  catalogLoading:boolean;
+}: {
+  sections: CatalogSection[];
+  subjects: CatalogSubject[];
+  catalogLoading: boolean;
 }) {
   const [form] = Form.useForm();
-
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<AttendanceItem[]>([]);
-
-  // Bộ nhớ riêng cho mỗi chế độ
   const [sectionIds, setSectionIds] = useState<number[]>([]);
   const [subjectIds, setSubjectIds] = useState<number[]>([]);
-
-  // theo dõi chế độ hiện tại
   const mode = Form.useWatch("mode", form) || "section";
 
-  // đồng bộ ids khi chọn trong Select
-  const handleIdsChange = (vals:number[]) => {
-    if (mode === "section") {
-      setSectionIds(vals);
-    } else {
-      setSubjectIds(vals);
-    }
+  const handleIdsChange = (vals: number[]) => {
+    if (mode === "section") setSectionIds(vals);
+    else setSubjectIds(vals);
     form.setFieldsValue({ ids: vals });
   };
 
-  // khi đổi mode thì set lại ids tương ứng
   useEffect(() => {
-    if (mode === "section") {
-      form.setFieldsValue({ ids: sectionIds });
-    } else {
-      form.setFieldsValue({ ids: subjectIds });
-    }
+    form.setFieldsValue({ ids: mode === "section" ? sectionIds : subjectIds });
   }, [mode, form, sectionIds, subjectIds]);
 
   const onFetch = async () => {
-    const currentMode = form.getFieldValue("mode") || "section";
-    const ids:number[] = form.getFieldValue("ids") || [];
+    const ids: number[] = form.getFieldValue("ids") || [];
     const range: [Dayjs, Dayjs] | undefined = form.getFieldValue("range");
-
-    if (!ids.length) {
-      message.warning("Chọn ít nhất 1 mục");
-      return;
-    }
+    if (!ids.length) return message.warning("Chọn ít nhất 1 mục");
 
     try {
       setLoading(true);
-      const params:any = {
-        mode: currentMode,
-        ids: ids.join(","),
-      };
+      const params: any = { mode, ids: ids.join(",") };
       if (range) {
         params.from = range[0].startOf("day").toISOString();
         params.to = range[1].endOf("day").toISOString();
       }
-      const { data } = await axios.get(`${API_BASE}/stats/attendance`, {
-        params,
-      });
+      const { data } = await axios.get(`${API_BASE}/stats/attendance`, { params });
       setItems(data.items || []);
-    } catch (e:any) {
-      message.error(
-        e?.response?.data?.message || "Không tải được chuyên cần"
-      );
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || "Không tải được chuyên cần");
     } finally {
       setLoading(false);
     }
   };
 
-  const columns: ColumnsType<AttendanceItem & { sectionLabel:string }> = [
-    {
-      title: mode === "section" ? "Lớp" : "Môn",
-      dataIndex: "sectionLabel",
-    },
-    { title: "Có mặt", dataIndex: "present", align: "right", width: 100 },
-    { title: "Trễ", dataIndex: "late", align: "right", width: 80 },
-    { title: "Có phép", dataIndex: "excused", align: "right", width: 100 },
-    { title: "Vắng", dataIndex: "absent", align: "right", width: 80 },
-    { title: "Tổng", dataIndex: "total", align: "right", width: 90 },
-    {
-      title: "Tỷ lệ (%)",
-      dataIndex: "rate",
-      align: "right",
-      width: 110,
-      render: (v:number)=>(
-        <Tag
-          color={
-            v>=90
-              ? "green"
-              : v>=80
-              ? "geekblue"
-              : v>=65
-              ? "gold"
-              : "red"
-          }
-          style={{
-            borderRadius:8,
-            padding:"2px 8px",
-          }}
-        >
-          {v.toFixed(2)}
-        </Tag>
-      ),
-    },
-  ];
-
   const dataSource = useMemo(() => {
-    // hiển thị tên lớp nếu mode=section
-    const secName = (id:number) =>
-      sections.find(s=>s.id===id)?.sectionName || String(id);
-
     return items.map(it => ({
       ...it,
       key: it.sectionId,
-      sectionLabel: secName(it.sectionId),
+      sectionLabel: sections.find(s => s.id === it.sectionId)?.sectionName || String(it.sectionId),
     }));
   }, [items, sections]);
 
-  const chartData = useMemo(
-    () =>
-      dataSource.map(it => ({
-        section: it.sectionLabel,
-        rate: it.rate,
-      })),
-    [dataSource]
-  );
+  const chartData = useMemo(() => dataSource.map(it => ({ section: it.sectionLabel, rate: it.rate })), [dataSource]);
 
   return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      {/* Filters */}
-      <Card className="card-glass sticky-filters">
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={onFetch}
-          initialValues={{ mode: "section" }}
-        >
-          <Row gutter={12}>
-            <Col xs={24} md={6}>
-              <Form.Item name="mode" label="Chế độ">
-                <Segmented
-                  options={[
-                    { label: "Theo lớp", value: "section" },
-                    { label: "Theo môn", value: "subject" },
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-
-            <Col xs={24} md={10}>
-              <Form.Item
-                name="ids"
-                label={mode === "section" ? "Chọn lớp" : "Chọn môn"}
-              >
-                <Select
-                  mode="multiple"
-                  maxTagCount="responsive"
-                  loading={catalogLoading}
-                  options={(mode === "section" ? sections : subjects).map(
-                    (x:any) => ({
-                      value: x.id,
-                      label:
-                        mode === "section"
-                          ? `${x.sectionName} (${x.sectionCode})`
-                          : `${x.subjectCode} – ${x.subjectName}`,
-                    })
-                  )}
-                  showSearch
-                  optionFilterProp="label"
-                  placeholder="Chọn mục để tổng hợp"
-                  onChange={handleIdsChange}
-                />
-              </Form.Item>
-            </Col>
-
-            <Col xs={24} md={8}>
-              <Form.Item name="range" label="Khoảng thời gian">
-                <DatePicker.RangePicker
-                  allowEmpty={[true,true]}
-                  style={{ width: "100%" }}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Form.Item>
-            <Button
-              type="primary"
-              htmlType="submit"
-              icon={<ClockCircleOutlined />}
-              loading={loading}
-            >
-              Xem chuyên cần
-            </Button>
-          </Form.Item>
+    <Space direction="vertical" size={20} style={{ width: "100%" }}>
+      {/* Filter */}
+      <Card style={glassStyle} className="sticky top-0 z-10" bodyStyle={{ padding: "16px" }}>
+        <Form form={form} layout="inline" onFinish={onFetch} initialValues={{ mode: "section" }}>
+          <Space wrap>
+            <Form.Item name="mode" label="Chế độ">
+              <Segmented options={[{ label: "Theo lớp", value: "section" }, { label: "Theo môn", value: "subject" }]} />
+            </Form.Item>
+            <Form.Item name="ids" style={{ minWidth: 280 }}>
+              <Select
+                mode="multiple"
+                placeholder={mode === "section" ? "Chọn lớp..." : "Chọn môn..."}
+                loading={catalogLoading}
+                options={(mode === "section" ? sections : subjects).map((x: any) => ({
+                  value: x.id,
+                  label: mode === "section" ? `${x.sectionName} (${x.sectionCode})` : `${x.subjectCode} – ${x.subjectName}`,
+                }))}
+                onChange={handleIdsChange}
+              />
+            </Form.Item>
+            <Form.Item name="range">
+              <DatePicker.RangePicker allowEmpty={[true, true]} />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" icon={<ClockCircleOutlined />} loading={loading}>Xem</Button>
+          </Space>
         </Form>
       </Card>
 
-      {/* Result */}
-      <Row gutter={[16,16]}>
+      {/* Chart + Table */}
+      <Row gutter={[16, 16]}>
         <Col xs={24} lg={10}>
-          <Card
-            className="card-glass"
-            title="Tỷ lệ chuyên cần theo lớp"
-            bodyStyle={{ height: 360 }}
-          >
-            {loading ? (
-              <Spin />
-            ) : chartData.length ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                  data={chartData}
-                  margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
-                >
+          <Card style={glassStyle} title="Tỷ lệ chuyên cần" bodyStyle={{ height: 380, padding: 0 }}>
+            {loading ? <Spin /> : chartData.length ? (
+              <ResponsiveContainer>
+                <LineChart data={chartData}>
                   <defs>
-                    <linearGradient
-                      id="lineGrad"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop
-                        offset="0%"
-                        stopColor="#8e79ff"
-                        stopOpacity={0.9}
-                      />
-                      <stop
-                        offset="100%"
-                        stopColor="#8e79ff"
-                        stopOpacity={0.25}
-                      />
-                    </linearGradient>
+                    <linearGradient id="lineG"><stop offset="0%" stopColor="#10b981" stopOpacity={0.9}/><stop offset="100%" stopColor="#10b981" stopOpacity={0.3}/></linearGradient>
                   </defs>
-
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="section"
-                    angle={-15}
-                    textAnchor="end"
-                    height={60}
-                  />
-                  <YAxis domain={[0,100]} />
+                  <XAxis dataKey="section" angle={-15} textAnchor="end" height={70} />
+                  <YAxis domain={[0, 100]} />
                   <RTooltip content={<PrettyTooltip />} />
-                  <Legend />
-
-                  <Line
-                    type="monotone"
-                    dataKey="rate"
-                    name="Tỷ lệ (%)"
-                    stroke="#8e79ff"
-                    strokeWidth={2}
-                    dot={false}
-                  />
+                  <Line type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={3} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
-            ) : (
-              <Empty description="Chưa có dữ liệu" />
-            )}
+            ) : <Empty />}
           </Card>
         </Col>
-
         <Col xs={24} lg={14}>
-          <Card className="card-glass" title="Bảng chi tiết">
+          <Card style={glassStyle} title="Chi tiết chuyên cần">
             <Table
-              size="middle"
-              rowKey={(r)=>String(r.sectionId)}
-              loading={loading}
+              size="small"
               dataSource={dataSource}
-              columns={columns}
-              pagination={{
-                pageSize: 10,
-                showSizeChanger: true,
-              }}
+              columns={[
+                { title: mode === "section" ? "Lớp" : "Môn", dataIndex: "sectionLabel" },
+                { title: "Có mặt", dataIndex: "present", align: "right", width: 90 },
+                { title: "Trễ", dataIndex: "late", align: "right", width: 70 },
+                { title: "Có phép", dataIndex: "excused", align: "right", width: 90 },
+                { title: "Vắng", dataIndex: "absent", align: "right", width: 70 },
+                { title: "Tổng", dataIndex: "total", align: "right", width: 80 },
+                { title: "Tỷ lệ", dataIndex: "rate", align: "right", render: v => <Tag color={v>=90?"green":v>=80?"geekblue":v>=65?"gold":"red"} style={{ borderRadius: 8 }}>{v.toFixed(1)}%</Tag> },
+              ]}
+              pagination={{ pageSize: 8 }}
             />
           </Card>
         </Col>
@@ -1200,529 +572,187 @@ function AttendanceTab({
   );
 }
 
-/* --------------------------------------
- *  Tab: Department Overview
- * -------------------------------------- */
+/* ========================================
+   DEPARTMENT TAB – TỔNG QUAN KHOA
+======================================== */
 function DepartmentTab({
   sections,
   subjects,
   subjectById,
   termById,
   catalogLoading,
-}:{
-  sections:CatalogSection[];
-  subjects:CatalogSubject[];
-  subjectById: Map<number,CatalogSubject>;
-  termById: Map<number,CatalogTerm>;
-  catalogLoading:boolean;
+}: {
+  sections: CatalogSection[];
+  subjects: CatalogSubject[];
+  subjectById: Map<number, CatalogSubject>;
+  termById: Map<number, CatalogTerm>;
+  catalogLoading: boolean;
 }) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [grades, setGrades] = useState<TotalRow[]>([]);
   const [attendance, setAttendance] = useState<AttendanceItem[]>([]);
 
-  // lọc các section theo bộ lọc trên form
   const filteredSections = useMemo(() => {
-    const termId:number|undefined = form.getFieldValue("termId");
-    const subjectIds:number[] = form.getFieldValue("subjectIds") || [];
-
+    const termId: number | undefined = form.getFieldValue("termId");
+    const subjectIds: number[] = form.getFieldValue("subjectIds") || [];
     let list = sections;
-    if (termId) {
-      list = list.filter(s => s.termId === termId);
-    }
-    if (subjectIds?.length) {
-      list = list.filter(s => subjectIds.includes(s.subjectId));
-    }
+    if (termId) list = list.filter(s => s.termId === termId);
+    if (subjectIds.length) list = list.filter(s => subjectIds.includes(s.subjectId));
     return list;
   }, [sections, form]);
 
   const onFetch = async () => {
-    const chosenSections = filteredSections;
-    if (!chosenSections.length) {
-      message.warning("Không có lớp nào khớp bộ lọc");
-      return;
-    }
-    const sectionIds = chosenSections.map(s => s.id);
+    const sectionIds = filteredSections.map(s => s.id);
+    if (!sectionIds.length) return message.warning("Không có lớp nào khớp");
 
     try {
       setLoading(true);
       const [gRes, aRes] = await Promise.all([
-        axios.get(`${API_BASE}/stats/grades`, {
-          params: { sectionIds: sectionIds.join(",") },
-        }),
-        axios.get(`${API_BASE}/stats/attendance`, {
-          params: {
-            mode: "section",
-            ids: sectionIds.join(","),
-          },
-        }),
+        axios.get(`${API_BASE}/stats/grades`, { params: { sectionIds: sectionIds.join(",") } }),
+        axios.get(`${API_BASE}/stats/attendance`, { params: { mode: "section", ids: sectionIds.join(",") } }),
       ]);
       setGrades(gRes.data.items || []);
       setAttendance(aRes.data.items || []);
-    } catch (e:any) {
-      message.error(
-        e?.response?.data?.message || "Không tải được dữ liệu khoa"
-      );
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || "Không tải được dữ liệu khoa");
     } finally {
       setLoading(false);
     }
   };
 
-  // Gom điểm theo môn (subject)
-  const bySubject = useMemo(() => {
-    const secById = new Map(filteredSections.map(s => [s.id, s]));
-    const map = new Map<number, TotalRow[]>();
-
-    for (const r of grades) {
-      const sec = secById.get(r.sectionId);
-      if (!sec) continue;
-      const arr = map.get(sec.subjectId) ?? [];
-      arr.push(r);
-      map.set(sec.subjectId, arr);
-    }
-    return map; // subjectId -> list TotalRow
-  }, [grades, filteredSections]);
-
   const subjectSummary = useMemo(() => {
-    const rows: {
-      key:string;
-      subjectId:number;
-      subject:string;
-      n:number;
-      avg:number;
-      pass:number;
-      excellent:number;
-    }[] = [];
+    const map = new Map<number, TotalRow[]>();
+    filteredSections.forEach(s => {
+      const arr = map.get(s.subjectId) ?? [];
+      grades.filter(g => g.sectionId === s.id).forEach(g => arr.push(g));
+      map.set(s.subjectId, arr);
+    });
 
-    bySubject.forEach((list, subId) => {
+    return Array.from(map.entries()).map(([subId, list]) => {
       const subj = subjectById.get(subId);
-      const vals = list.map(x=>x.total10);
+      const vals = list.map(x => x.total10);
       const n = vals.length || 1;
-      const avg = +(
-        vals.reduce((a,b)=>a+b,0) / n
-      ).toFixed(2);
+      const avg = +(vals.reduce((a,b)=>a+b,0)/n).toFixed(2);
       const pass = list.filter(x=>x.total10 >= 5).length;
       const excellent = list.filter(x=>x.total10 >= 8).length;
+      return { key: subId, subjectId: subId, subject: `${subj?.subjectCode} – ${subj?.subjectName}`, n: vals.length, avg, pass, excellent };
+    }).sort((a,b) => String(a.subject).localeCompare(String(b.subject)));
+  }, [grades, filteredSections, subjectById]);
 
-      rows.push({
-        key: String(subId),
-        subjectId: subId,
-        subject: `${subj?.subjectCode ?? subId} – ${
-          subj?.subjectName ?? ""
-        }`,
-        n: vals.length,
-        avg,
-        pass,
-        excellent,
-      });
-    });
-
-    return rows.sort((a,b)=>a.subject.localeCompare(b.subject));
-  }, [bySubject, subjectById]);
-
-  const top5 = useMemo(
-    () => [...subjectSummary]
-      .sort((a,b)=>b.avg - a.avg)
-      .slice(0,5),
-    [subjectSummary]
-  );
-
-  const bottom5 = useMemo(
-    () => [...subjectSummary]
-      .sort((a,b)=>a.avg - b.avg)
-      .slice(0,5),
-    [subjectSummary]
-  );
-
-  // Ghép chuyên cần theo subject
-  const attendanceBySubject = useMemo(() => {
-    const secById = new Map(filteredSections.map(s => [s.id, s]));
-    const agg = new Map<
-      number,
-      { present:number; late:number; excused:number; absent:number; total:number }
-    >();
-
-    for (const it of attendance) {
-      const sec = secById.get(it.sectionId);
-      if (!sec) continue;
-
-      const cur =
-        agg.get(sec.subjectId) || {
-          present:0,
-          late:0,
-          excused:0,
-          absent:0,
-          total:0,
-        };
-
-      cur.present += it.present;
-      cur.late += it.late;
-      cur.excused += it.excused;
-      cur.absent += it.absent;
-      cur.total += it.total;
-
-      agg.set(sec.subjectId, cur);
-    }
-    return agg; // subjectId -> tổng hợp attendance
-  }, [attendance, filteredSections]);
+  const top5 = [...subjectSummary].sort((a,b)=>b.avg-a.avg).slice(0,5);
+  const bottom5 = [...subjectSummary].sort((a,b)=>a.avg-b.avg).slice(0,5);
 
   const attendanceChart = useMemo(() => {
-    const rows: { subject:string; rate:number }[] = [];
-    attendanceBySubject.forEach((v, subId) => {
-      const subj = subjectById.get(subId);
-      const denom = v.total || 1;
-      const rate = +(((v.present + v.late) / denom) * 100).toFixed(2);
-
-      rows.push({
-        subject: `${subj?.subjectCode ?? subId}`,
-        rate,
-      });
+    const agg = new Map<number, { present:number; late:number; total:number }>();
+    attendance.forEach(it => {
+      const sec = filteredSections.find(s => s.id === it.sectionId);
+      if (!sec) return;
+      const cur = agg.get(sec.subjectId) || { present:0, late:0, total:0 };
+      cur.present += it.present; cur.late += it.late; cur.total += it.total;
+      agg.set(sec.subjectId, cur);
     });
-    return rows.sort((a,b)=>a.subject.localeCompare(b.subject));
-  }, [attendanceBySubject, subjectById]);
+    return Array.from(agg.entries()).map(([subId, v]) => {
+      const subj = subjectById.get(subId);
+      const rate = v.total ? +(((v.present + v.late) / v.total) * 100).toFixed(1) : 0;
+      return { subject: subj?.subjectCode || subId, rate };
+    }).sort((a,b) => a.subject.localeCompare(b.subject));
+  }, [attendance, filteredSections, subjectById]);
 
-  // Xuất CSV
   const exportCSV = () => {
-    const header = [
-      "SubjectCode-Name",
-      "N",
-      "Avg10",
-      "Pass(>=5)",
-      "Excellent(>=8)",
-    ];
     const lines = [
-      header.join(","),
-      ...subjectSummary.map(r => [
-        r.subject.replaceAll(",", " "),
-        r.n,
-        r.avg,
-        r.pass,
-        r.excellent,
-      ].join(",")),
+      "Môn học,Số SV,Điểm TB,>=5,>=8",
+      ...subjectSummary.map(r => `${r.subject.replace(/,/g," ")},${r.n},${r.avg},${r.pass},${r.excellent}`)
     ];
-
-    const blob = new Blob(
-      ["\uFEFF" + lines.join("\n")],
-      { type: "text/csv;charset=utf-8;" }
-    );
+    const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `department-summary.csv`;
-    a.click();
+    const a = document.createElement("a"); a.href = url; a.download = "khoa-summary.csv"; a.click();
     URL.revokeObjectURL(url);
   };
 
-  const columns: ColumnsType<any> = [
-    { title: "Môn học", dataIndex: "subject", ellipsis: true },
-    {
-      title: "Số SV",
-      dataIndex: "n",
-      align:"right",
-      width: 100,
-    },
-    {
-      title: "Điểm TB (10)",
-      dataIndex: "avg",
-      align:"right",
-      width: 140,
-      render:(v:number)=>(
-        <Tag
-          color={
-            v>=8
-              ? "green"
-              : v>=6.5
-              ? "geekblue"
-              : v>=5
-              ? "gold"
-              : "red"
-          }
-          style={{
-            borderRadius:8,
-            padding:"2px 8px",
-          }}
-        >
-          {v.toFixed(2)}
-        </Tag>
-      ),
-    },
-    {
-      title: ">=5",
-      dataIndex: "pass",
-      align:"right",
-      width: 100,
-    },
-    {
-      title: ">=8",
-      dataIndex: "excellent",
-      align:"right",
-      width: 100,
-    },
-  ];
-
   return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      {/* Filters */}
-      <Card className="card-glass sticky-filters">
-        <Form form={form} layout="vertical" onFinish={onFetch}>
-          <Row gutter={12}>
-            <Col xs={24} md={6}>
-              <Form.Item name="termId" label="Học kỳ">
-                <Select
-                  allowClear
-                  loading={catalogLoading}
-                  options={[...termById.values()].map((t:any)=>({
-                    value: t.id,
-                    label: `${t.code} – ${t.name}`,
-                  }))}
-                  showSearch
-                  optionFilterProp="label"
-                  placeholder="Chọn học kỳ"
-                />
-              </Form.Item>
-            </Col>
-
-            <Col xs={24} md={12}>
-              <Form.Item name="subjectIds" label="Môn học (tùy chọn)">
-                <Select
-                  mode="multiple"
-                  maxTagCount="responsive"
-                  loading={catalogLoading}
-                  options={subjects.map(s=>({
-                    value: s.id,
-                    label: `${s.subjectCode} – ${s.subjectName}`,
-                  }))}
-                  showSearch
-                  optionFilterProp="label"
-                  placeholder="Không chọn = tất cả môn trong học kỳ"
-                />
-              </Form.Item>
-            </Col>
-
-            <Col xs={24} md={6}>
-              <Form.Item label=" ">
-                <Space>
-                  <Button
-                    type="primary"
-                    htmlType="submit"
-                    icon={<BarChartOutlined />}
-                    loading={loading}
-                  >
-                    Tổng hợp
-                  </Button>
-                  <Button onClick={exportCSV}>
-                    Xuất CSV
-                  </Button>
-                </Space>
-              </Form.Item>
-            </Col>
-          </Row>
+    <Space direction="vertical" size={20} style={{ width: "100%" }}>
+      {/* Filter */}
+      <Card style={glassStyle} className="sticky top-0 z-10" bodyStyle={{ padding: "16px" }}>
+        <Form form={form} layout="inline" onFinish={onFetch}>
+          <Space wrap>
+            <Form.Item name="termId" label="Học kỳ">
+              <Select allowClear loading={catalogLoading} options={[...termById.values()].map(t => ({ value: t.id, label: `${t.code} – ${t.name}` }))} style={{ width: 200 }} />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" icon={<BarChartOutlined />} loading={loading}>Tổng hợp</Button>
+            <Button onClick={exportCSV} icon={<ReloadOutlined />}>Xuất CSV</Button>
+          </Space>
         </Form>
       </Card>
 
       {/* KPIs */}
       <Row gutter={[16,16]}>
-        <Col xs={24} lg={8}>
-          <Card className="card-glass" title="Chỉ số chính">
-            <Row gutter={16}>
-              <Col span={12}>
-                <Statistic
-                  title="Số môn"
-                  value={subjectSummary.length}
-                />
-              </Col>
-              <Col span={12}>
-                <Statistic
-                  title="Số lớp (section)"
-                  value={filteredSections.length}
-                />
-              </Col>
-            </Row>
-
-            <Divider />
-
-            <Row gutter={16}>
-              <Col span={12}>
-                <Statistic
-                  title="Điểm TB toàn khoa"
-                  value={(
-                    subjectSummary.reduce(
-                      (a,b)=>a + b.avg*(b.n||0),
-                      0
-                    ) /
-                    (subjectSummary.reduce(
-                      (a,b)=>a+(b.n||0),
-                      0
-                    ) || 1)
-                  ).toFixed(2)}
-                />
-              </Col>
-
-              <Col span={12}>
-                <Statistic
-                  title="Tỷ lệ >=5 (ước tính)"
-                  value={(
-                    (
-                      subjectSummary.reduce(
-                        (a,b)=>a+b.pass,
-                        0
-                      ) /
-                      (
-                        subjectSummary.reduce(
-                          (a,b)=>a+b.n,
-                          0
-                        ) || 1
-                      )
-                    ) * 100
-                  ).toFixed(1) + "%"}
-                />
-              </Col>
-            </Row>
+        <Col xs={24} md={8}>
+          <Card style={glassStyle} className="hover:scale-105 transition-transform">
+            <Statistic title="Số môn" value={subjectSummary.length} prefix={<div style={kpiIconStyle("#6366f1", "#4f46e5")}>📚</div>} />
           </Card>
         </Col>
-
-        <Col xs={24} lg={16}>
-          <Card
-            className="card-glass"
-            title="Điểm trung bình theo môn"
-            bodyStyle={{ height: 360 }}
-          >
-            {loading ? (
-              <Spin />
-            ) : subjectSummary.length ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={subjectSummary}
-                  margin={{
-                    top: 10,
-                    right: 20,
-                    left: 0,
-                    bottom: 10,
-                  }}
-                >
-                  <defs>
-                    <linearGradient
-                      id="barGrad3"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop
-                        offset="0%"
-                        stopColor="#6c5ce7"
-                        stopOpacity={0.9}
-                      />
-                      <stop
-                        offset="100%"
-                        stopColor="#6c5ce7"
-                        stopOpacity={0.3}
-                      />
-                    </linearGradient>
-                  </defs>
-
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="subject"
-                    tick={{ fontSize:12 }}
-                    interval={0}
-                    angle={-15}
-                    textAnchor="end"
-                    height={80}
-                  />
-                  <YAxis domain={[0,10]} />
-                  <RTooltip content={<PrettyTooltip />} />
-                  <Legend />
-
-                  <Bar
-                    dataKey="avg"
-                    name="Điểm TB (10)"
-                    fill="url(#barGrad3)"
-                    radius={[8,8,0,0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <Empty description="Chưa có dữ liệu" />
-            )}
+        <Col xs={24} md={8}>
+          <Card style={glassStyle} className="hover:scale-105 transition-transform">
+            <Statistic title="Số lớp" value={filteredSections.length} prefix={<div style={kpiIconStyle("#ec4899", "#f43f5e")}>🏫</div>} />
           </Card>
         </Col>
       </Row>
 
-      {/* Top/Bottom môn */}
-      <Row gutter={[16,16]}>
-        <Col xs={24} lg={12}>
-          <Card
-            className="card-glass"
-            title="Top 5 môn theo điểm TB"
-          >
-            <Table
-              size="small"
-              dataSource={top5}
-              columns={columns}
-              pagination={false}
-            />
-          </Card>
-        </Col>
-
-        <Col xs={24} lg={12}>
-          <Card
-            className="card-glass"
-            title="Bottom 5 môn theo điểm TB"
-          >
-            <Table
-              size="small"
-              dataSource={bottom5}
-              columns={columns}
-              pagination={false}
-            />
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Tỷ lệ chuyên cần theo môn */}
+      {/* Chart */}
       <Row gutter={[16,16]}>
         <Col xs={24}>
-          <Card
-            className="card-glass"
-            title="Chuyên cần theo môn"
-            bodyStyle={{ height: 360 }}
-          >
-            {loading ? (
-              <Spin />
-            ) : (
-              attendanceChart.length ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart
-                    data={attendanceChart}
-                    margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="subject"
-                      interval={0}
-                      angle={-15}
-                      textAnchor="end"
-                      height={80}
-                    />
-                    <YAxis domain={[0,100]} />
-                    <RTooltip content={<PrettyTooltip />} />
-                    <Legend />
+          <Card style={glassStyle} title="Điểm trung bình theo môn" bodyStyle={{ height: 380, padding: 0 }}>
+            {loading ? <Spin /> : subjectSummary.length ? (
+              <ResponsiveContainer>
+                <BarChart data={subjectSummary}>
+                  <defs><linearGradient id="barG3"><stop offset="0%" stopColor="#6366f1" stopOpacity={0.9}/><stop offset="100%" stopColor="#6366f1" stopOpacity={0.3}/></linearGradient></defs>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="subject" angle={-15} textAnchor="end" height={80} />
+                  <YAxis domain={[0,10]} />
+                  <RTooltip content={<PrettyTooltip />} />
+                  <Bar dataKey="avg" fill="url(#barG3)" radius={[8,8,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <Empty />}
+          </Card>
+        </Col>
+      </Row>
 
-                    <Line
-                      type="monotone"
-                      dataKey="rate"
-                      name="Tỷ lệ (%)"
-                      stroke="#8e79ff"
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <Empty description="Chưa có dữ liệu" />
-              )
-            )}
+      {/* Top/Bottom + Attendance */}
+      <Row gutter={[16,16]}>
+        <Col xs={24} lg={12}>
+          <Card style={glassStyle} title="Top 5 môn điểm cao">
+            <Table size="small" dataSource={top5} columns={[
+              { title: "Môn", dataIndex: "subject" },
+              { title: "Điểm TB", dataIndex: "avg", render: v => <Tag color="green" style={{ borderRadius: 8 }}>{v}</Tag> },
+            ]} pagination={false} />
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card style={glassStyle} title="Bottom 5 môn điểm thấp">
+            <Table size="small" dataSource={bottom5} columns={[
+              { title: "Môn", dataIndex: "subject" },
+              { title: "Điểm TB", dataIndex: "avg", render: v => <Tag color="red" style={{ borderRadius: 8 }}>{v}</Tag> },
+            ]} pagination={false} />
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={[16,16]}>
+        <Col xs={24}>
+          <Card style={glassStyle} title="Chuyên cần theo môn" bodyStyle={{ height: 380, padding: 0 }}>
+            {loading ? <Spin /> : attendanceChart.length ? (
+              <ResponsiveContainer>
+                <LineChart data={attendanceChart}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="subject" angle={-15} textAnchor="end" height={80} />
+                  <YAxis domain={[0,100]} />
+                  <RTooltip content={<PrettyTooltip />} />
+                  <Line type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={3} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : <Empty />}
           </Card>
         </Col>
       </Row>

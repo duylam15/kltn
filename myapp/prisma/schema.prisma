@@ -567,7 +567,7 @@ model SubmissionAnswer {
   testResults Json?
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
@@ -603,19 +603,10 @@ model AttendanceSession {
   maxCheckInsPerIP   Int     @default(3)
   allowedDevices     Json?
 
-  // QUAN HỆ
-  section      CourseSection                @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-
-  // 1-n: một buổi điểm danh có nhiều Attendance
+  section      CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   attendances  Attendance[]
-
-  // 1-n: buổi điểm danh có thể liên kết với GradeColumnAttendanceSession (giữ nguyên của bạn)
   gradeColumns GradeColumnAttendanceSession[]
-
-  // 1-n: thêm để đối xứng với AttendanceNonce.session
   nonces       AttendanceNonce[]
-
-  // 1-n: thêm để đối xứng với AttendanceLog.session
   logs         AttendanceLog[]
 }
 
@@ -663,8 +654,6 @@ model AttendanceNonce {
   expiresAt  DateTime
   used       Boolean  @default(false)
   createdAt  DateTime @default(now())
-
-  // không cần back field ở đây vì đã có `AttendanceSession.nonces`
 }
 
 model DeviceFingerprint {
@@ -687,14 +676,13 @@ model AttendanceLog {
   userAgent  String
   ipCountry  String?
   ipCity     String?
-  flags      String?   // JSON string (as text); bạn có thể đổi sang Json nếu muốn
+  flags      String?
   note       String?
   createdAt  DateTime @default(now())
 
   student    Student           @relation(fields: [studentId], references: [id])
   session    AttendanceSession @relation(fields: [sessionId], references: [id])
 }
-
 
 
 

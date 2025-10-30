@@ -19,15 +19,38 @@ import { prisma } from "../../prisma/client";
  * Response:
  *    { count, items: TotalRow[] }
  */
+// src/modules/stats/stats.admin.controller.ts
 export async function getSectionGrades(req: Request, res: Response, next: NextFunction) {
   try {
-    const sectionIds = String(req.query.sectionIds || "")
-      .split(",")
-      .map(s => Number(s.trim()))
-      .filter(Boolean);
+    let sectionIds: number[] = [];
+
+    // Ưu tiên sectionIds
+    if (req.query.sectionIds) {
+      sectionIds = String(req.query.sectionIds || "")
+        .split(",")
+        .map(s => Number(s.trim()))
+        .filter(Boolean);
+    }
+    // Nếu không có → dùng subjectIds
+    else if (req.query.subjectIds) {
+      const subjectIds = String(req.query.subjectIds || "")
+        .split(",")
+        .map(s => Number(s.trim()))
+        .filter(Boolean);
+
+      if (!subjectIds.length) {
+        return res.status(400).json({ message: "subjectIds required" });
+      }
+
+      const sections = await prisma.courseSection.findMany({
+        where: { subjectId: { in: subjectIds } },
+        select: { id: true },
+      });
+      sectionIds = sections.map(s => s.id);
+    }
 
     if (!sectionIds.length) {
-      return res.status(400).json({ message: "sectionIds required" });
+      return res.status(400).json({ message: "sectionIds or subjectIds required" });
     }
 
     const rows = await computeTotalsBySections(sectionIds);
