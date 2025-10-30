@@ -44,7 +44,7 @@ export const createQuestionSchema = z.object({
 
         // Coding question fields
         language: z
-            .enum(["javascript", "python", "java", "cpp", "csharp"])
+            .enum(["javascript", "python", "java", "cpp", "csharp", "php", "html", "css"])
             .optional(),
         starterCode: z.string().optional(),
         timeLimit: z.number().int().positive().optional(),

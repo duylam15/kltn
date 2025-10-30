@@ -1,0 +1,7 @@
+FROM node:18-alpine
+
+# Cài ESLint, HTMLHint, Stylelint, Playwright
+RUN npm install -g eslint htmlhint stylelint playwright
+
+# Playwright cần cài thêm browser
+RUN npx playwright install --with-deps

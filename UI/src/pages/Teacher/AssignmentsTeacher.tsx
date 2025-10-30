@@ -22,21 +22,15 @@ import {
   ReloadOutlined,
   SearchOutlined,
   EyeOutlined,
-  CloudUploadOutlined,
   FileTextOutlined,
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  EyeInvisibleOutlined,
-  QuestionCircleOutlined,
-  CheckCircleOutlined,
-  CalendarOutlined,
-  CopyOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
-import { FileQuestion } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 
 import { useAuth } from "../../context/authContext";
@@ -56,12 +50,55 @@ type Assignment = {
   timeLimit?: number;
   maxAttempts?: number;
   shuffleQuestions?: boolean;
-  createdBy?: number;              // ← THÊM
-  originalAssignmentId?: number;   // ← THÊM
+  createdBy?: number;
+  originalAssignmentId?: string;
   showAnswersAfterSubmit?: boolean;
   allowLateSubmission?: boolean;
   createdAt?: string;
   updatedAt?: string;
+  submissions?: Submission[];
+  sectionLinks?: Array<{
+    id: number;
+    sectionId: number;
+    assignmentId: number;
+    assignedAt: string;
+    isOpen: boolean;
+  }>;
+};
+
+type Submission = {
+  id: number;
+  assignmentId: number;
+  studentId: number;
+  filePath?: string;
+  answerText?: string;
+  score?: number;
+  maxScore?: number;
+  autoGraded: boolean;
+  feedback?: string;
+  submittedAt: string;
+  gradedAt?: string;
+  startedAt: string;
+  completedAt: string;
+};
+
+type Student = {
+  id: number;
+  userId: number;
+  studentCode: string;
+  className: string;
+  major: string;
+  academicYear?: string;
+  enrollmentYear?: number;
+  gpa: string;
+  status: string;
+  user: {
+    id: number;
+    fullName: string;
+    email: string;
+    phone?: string;
+    avatarUrl?: string;
+  };
 };
 
 type Question = {
@@ -73,15 +110,15 @@ type Question = {
 };
 
 export default function AssignmentTeacher() {
-  const { user } = useAuth(); // ✅ thêm dòng này
-  const teacherId = user?.id; // ID của giáo viên hiện tại
+  const { user } = useAuth();
+  const teacherId = user?.id;
   const path = window.location.pathname;
   const sectionId = Number(path.split("/")[3]);
 
   const [loading, setLoading] = useState(true);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [assignedIds, setAssignedIds] = useState<Record<number, boolean>>({});
   const [visibility, setVisibility] = useState<Record<number, boolean>>({});
   const [keyword, setKeyword] = useState("");
 
@@ -96,39 +133,33 @@ export default function AssignmentTeacher() {
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [questionKeyword, setQuestionKeyword] = useState("");
 
-  const [libraryModalOpen, setLibraryModalOpen] = useState(false);
-  const [allAssignments, setAllAssignments] = useState<Assignment[]>([]);
-  const [loadingLibrary, setLoadingLibrary] = useState(false);
-  const [selectedAssignmentIds, setSelectedAssignmentIds] = useState<number[]>([]);
-  const [libraryKeyword, setLibraryKeyword] = useState("");
+  // Modal xem điểm
+  const [scoreModalOpen, setScoreModalOpen] = useState(false);
+  const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
 
   useEffect(() => {
     fetchData();
     fetchQuestions();
+    fetchStudents();
   }, [sectionId]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [res1, res2] = await Promise.all([
-        axios.get(`${API_BASE}/assignments/teacher/${teacherId}`),
-        axios.get(`${API_BASE}/sections-assignments/sections/${sectionId}/assignments`),
-      ]);
+      // Chỉ lấy các bài tập đã được gán vào lớp
+      const res = await axios.get(`${API_BASE}/assignments/sections/${sectionId}/assignments`);
 
-      if (res1.data.success) {
-        setAssignments(res1.data.data || []);
-      }
+      if (res.data.success) {
+        const assignmentsData = res.data.data || [];
+        setAssignments(assignmentsData);
 
-      console.log(assignments);
-
-      if (res2.data.success) {
-        const assignedMap: Record<number, boolean> = {};
+        // Set visibility từ sectionLinks
         const visibilityMap: Record<number, boolean> = {};
-        res2.data.data.forEach((item: any) => {
-          assignedMap[item.assignmentId] = true;
-          visibilityMap[item.assignmentId] = item.isOpen;
+        assignmentsData.forEach((assignment: Assignment) => {
+          if (assignment.sectionLinks && assignment.sectionLinks.length > 0) {
+            visibilityMap[assignment.id] = assignment.sectionLinks[0].isOpen;
+          }
         });
-        setAssignedIds(assignedMap);
         setVisibility(visibilityMap);
       }
     } catch (err) {
@@ -136,6 +167,20 @@ export default function AssignmentTeacher() {
       toast.error("Không tải được dữ liệu bài tập");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchStudents = async () => {
+    try {
+      const res = await axios.get<{ success: boolean; data: any[] }>(
+        `${API_BASE}/sections-enrollments/section/${sectionId}/students`
+      );
+      if (res.data.success) {
+        setStudents(res.data.data.map((item: any) => item.student) || []);
+      }
+    } catch (err) {
+      console.error("Lỗi khi tải danh sách học sinh:", err);
+      toast.error("Không tải được danh sách học sinh");
     }
   };
 
@@ -152,35 +197,21 @@ export default function AssignmentTeacher() {
     }
   };
 
-  const handleAssign = async (assignmentId: number) => {
+  const fetchAssignmentWithSubmissions = async (assignmentId: number) => {
     try {
-      const res = await axios.post(
-        `${API_BASE}/sections-assignments/sections/${sectionId}/assignments`,
-        { assignmentId }
+      const res = await axios.get<{ success: boolean; data: Assignment[] }>(
+        `${API_BASE}/assignments/sections/${sectionId}/assignments`
       );
       if (res.data.success) {
-        toast.success("Đã gán bài tập vào lớp");
-        setAssignedIds((prev) => ({ ...prev, [assignmentId]: true }));
-        setVisibility((prev) => ({ ...prev, [assignmentId]: true }));
-      } else {
-        if (res.data.message === "Bài tập này đã được gán vào lớp rồi") {
-          toast.success("Bài tập đã được gán vào lớp");
-          fetchData();
-        } else {
-          toast.error(res.data.message || "Không thể gán bài tập");
+        const assignment = res.data.data.find((a) => a.id === assignmentId);
+        if (assignment) {
+          setSelectedAssignment(assignment);
+          setScoreModalOpen(true);
         }
       }
-    } catch (err: any) {
-      console.error("Lỗi assign:", err);
-      if (
-        err.response?.status === 400 &&
-        err.response?.data?.message === "Bài tập này đã được gán vào lớp rồi"
-      ) {
-        toast.success("Bài tập đã được gán vào lớp");
-        fetchData();
-      } else {
-        toast.error("Lỗi server khi gán bài tập");
-      }
+    } catch (err) {
+      console.error("Lỗi khi tải chi tiết bài tập:", err);
+      toast.error("Không tải được thông tin bài tập");
     }
   };
 
@@ -207,11 +238,6 @@ export default function AssignmentTeacher() {
       await axios.delete(`${API_BASE}/assignments/${id}`);
       toast.success("Đã xóa bài tập");
       setAssignments((prev) => prev.filter((a) => a.id !== id));
-      // Remove from assigned if exists
-      if (assignedIds[id]) {
-        const { [id]: removed, ...rest } = assignedIds;
-        setAssignedIds(rest);
-      }
       if (visibility[id] !== undefined) {
         const { [id]: removed, ...rest } = visibility;
         setVisibility(rest);
@@ -221,7 +247,6 @@ export default function AssignmentTeacher() {
     }
   };
 
-  // Mở modal tạo/sửa và load câu hỏi đã gán
   const openCreateEditModal = async (assignment?: Assignment) => {
     if (assignment) {
       setEditing(assignment);
@@ -230,7 +255,6 @@ export default function AssignmentTeacher() {
         dueDate: assignment.dueDate ? dayjs(assignment.dueDate) : null,
       });
 
-      // Load câu hỏi đã gán từ API
       setLoadingQuestions(true);
       try {
         const res = await axios.get<{
@@ -272,7 +296,7 @@ export default function AssignmentTeacher() {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
-      const uniqueCode = uuidv4(); // 👈 mã ngẫu nhiên
+      const uniqueCode = uuidv4();
 
       const payload = {
         title: values.title.trim(),
@@ -286,9 +310,8 @@ export default function AssignmentTeacher() {
         shuffleQuestions: values.shuffleQuestions || false,
         showAnswersAfterSubmit: values.showAnswersAfterSubmit || false,
         allowLateSubmission: values.allowLateSubmission || false,
-        createdBy: teacherId, // hoặc lấy từ context, token decode
-        originalAssignmentId: uniqueCode
-        // Không gửi originalAssignmentId khi tạo mới
+        createdBy: teacherId,
+        originalAssignmentId: uniqueCode,
       };
 
       let assignmentId: number;
@@ -300,10 +323,16 @@ export default function AssignmentTeacher() {
       } else {
         const res = await axios.post(`${API_BASE}/assignments`, payload);
         assignmentId = res.data.data.id;
-        toast.success("Đã tạo bài tập mới");
+
+        // Tự động gán vào lớp khi tạo mới
+        await axios.post(
+          `${API_BASE}/sections-assignments/sections/${sectionId}/assignments`,
+          { assignmentId }
+        );
+
+        toast.success("Đã tạo và gán bài tập vào lớp");
       }
 
-      // Gán câu hỏi
       await saveQuestionAssignments(assignmentId);
 
       setModalOpen(false);
@@ -320,7 +349,6 @@ export default function AssignmentTeacher() {
     }
   };
 
-  // Lưu gán câu hỏi
   const saveQuestionAssignments = async (assignmentId: number) => {
     try {
       const toAdd = tempSelectedQuestionIds.filter(
@@ -357,7 +385,6 @@ export default function AssignmentTeacher() {
     }
   };
 
-  // Toggle checkbox câu hỏi
   const toggleTempQuestionSelection = (questionId: number, checked: boolean) => {
     if (checked) {
       setTempSelectedQuestionIds((prev) => [...prev, questionId]);
@@ -377,6 +404,109 @@ export default function AssignmentTeacher() {
     };
     return colors[type] || "default";
   };
+
+  // Tạo bảng điểm cho modal
+  const getScoreTableData = () => {
+    if (!selectedAssignment) return [];
+
+    return students.map((student) => {
+      const submission = selectedAssignment.submissions?.find(
+        (sub) => sub.studentId === student.id
+      );
+
+      return {
+        key: student.id,
+        studentCode: student.studentCode,
+        fullName: student.user.fullName,
+        email: student.user.email,
+        className: student.className,
+        submittedAt: submission?.submittedAt,
+        score: submission?.score,
+        maxScore: selectedAssignment.maxScore,
+        status: submission
+          ? submission.score !== null && submission.score !== undefined
+            ? "graded"
+            : "submitted"
+          : "not_submitted",
+      };
+    });
+  };
+
+  const scoreColumns = [
+    {
+      title: "MSSV",
+      dataIndex: "studentCode",
+      key: "studentCode",
+      width: 120,
+      fixed: "left" as const,
+    },
+    {
+      title: "Họ và tên",
+      dataIndex: "fullName",
+      key: "fullName",
+      width: 200,
+      fixed: "left" as const,
+      render: (text: string) => <strong>{text}</strong>,
+    },
+    {
+      title: "Lớp",
+      dataIndex: "className",
+      key: "className",
+      width: 100,
+    },
+    {
+      title: "Email",
+      dataIndex: "email",
+      key: "email",
+      width: 200,
+    },
+    {
+      title: "Trạng thái",
+      dataIndex: "status",
+      key: "status",
+      width: 120,
+      align: "center" as const,
+      render: (status: string) => {
+        if (status === "graded") {
+          return <Tag color="success">Đã chấm</Tag>;
+        } else if (status === "submitted") {
+          return <Tag color="warning">Chưa chấm</Tag>;
+        } else {
+          return <Tag color="default">Chưa nộp</Tag>;
+        }
+      },
+    },
+    {
+      title: "Thời gian nộp",
+      dataIndex: "submittedAt",
+      key: "submittedAt",
+      width: 150,
+      render: (date: string) =>
+        date ? dayjs(date).format("DD/MM/YYYY HH:mm") : "-",
+    },
+    {
+      title: "Điểm",
+      key: "score",
+      width: 120,
+      align: "center" as const,
+      render: (_: any, record: any) => {
+        if (record.score !== null && record.score !== undefined) {
+          const percent = (record.score / record.maxScore) * 100;
+          let color = "default";
+          if (percent >= 80) color = "success";
+          else if (percent >= 50) color = "warning";
+          else color = "error";
+
+          return (
+            <Tag color={color}>
+              {record.score}/{record.maxScore}
+            </Tag>
+          );
+        }
+        return "-";
+      },
+    },
+  ];
 
   const columns = [
     {
@@ -457,27 +587,17 @@ export default function AssignmentTeacher() {
         ),
     },
     {
-      title: "Trạng thái lớp",
-      key: "classStatus",
+      title: "Trạng thái",
+      key: "visibility",
       align: "center" as const,
-      render: (_: any, record: Assignment) =>
-        assignedIds[record.id] ? (
-          <Switch
-            checkedChildren="Hiển thị"
-            unCheckedChildren="Ẩn"
-            checked={visibility[record.id] || false}
-            onChange={(checked) => handleToggleVisibility(record.id, checked)}
-          />
-        ) : (
-          <Button
-            type="primary"
-            size="small"
-            icon={<CloudUploadOutlined />}
-            onClick={() => handleAssign(record.id)}
-          >
-            Gán vào lớp
-          </Button>
-        ),
+      render: (_: any, record: Assignment) => (
+        <Switch
+          checkedChildren="Hiển thị"
+          unCheckedChildren="Ẩn"
+          checked={visibility[record.id] || false}
+          onChange={(checked) => handleToggleVisibility(record.id, checked)}
+        />
+      ),
     },
     {
       title: "Hành động",
@@ -485,6 +605,13 @@ export default function AssignmentTeacher() {
       align: "center" as const,
       render: (_: any, record: Assignment) => (
         <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+          <Tooltip title="Xem điểm">
+            <Button
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => fetchAssignmentWithSubmissions(record.id)}
+            />
+          </Tooltip>
           <Tooltip title="Sửa">
             <Button
               size="small"
@@ -529,162 +656,21 @@ export default function AssignmentTeacher() {
     );
   });
 
-  const fetchAllAssignments = async () => {
-    try {
-      setLoadingLibrary(true);
-
-      const [allRes, myRes] = await Promise.all([
-        axios.get(`${API_BASE}/assignments`),
-        axios.get(`${API_BASE}/assignments/teacher/${teacherId}`),
-      ]);
-
-      if (allRes.data.success && myRes.data.success) {
-        const allAsgs = allRes.data.data;
-        const myAsgs = myRes.data.data;
-
-        // Lấy Set chứa originalAssignmentId của các bài tập tôi đã copy
-        const myOriginalAssignmentIds = new Set(
-          myAsgs
-            .filter((a: Assignment) => a.originalAssignmentId)
-            .map((a: Assignment) => a.originalAssignmentId)
-        );
-
-        // Bước 1: Lọc bỏ bài tập của chính mình (không phải copy)
-        const otherAssignments = allAsgs.filter((a: Assignment) => {
-          return !(a.createdBy === teacherId && !a.originalAssignmentId);
-        });
-
-        // Bước 2: Nhóm theo rootId, chỉ lấy 1 đại diện
-        const assignmentsByRootId = new Map<number, Assignment>();
-
-        otherAssignments.forEach((a: Assignment) => {
-          const rootId = a.originalAssignmentId || a.id;
-
-          // Ưu tiên bản gốc
-          if (!assignmentsByRootId.has(rootId) || !a.originalAssignmentId) {
-            assignmentsByRootId.set(rootId, a);
-          }
-        });
-
-        // Bước 3: Lọc bỏ những rootId đã copy
-        const availableAssignments = Array.from(assignmentsByRootId.entries())
-          .filter(([rootId, _]) => !myOriginalAssignmentIds.has(rootId))
-          .map(([_, assignment]) => assignment);
-
-        console.log("📚 Tổng bài tập:", allAsgs.length);
-        console.log("📖 Bài tập của tôi:", myAsgs.length);
-        console.log("✅ Có thể copy:", availableAssignments.length);
-
-        setAllAssignments(availableAssignments);
-      }
-    } catch (err) {
-      console.error("Lỗi fetch assignments:", err);
-      toast.error("Không tải được danh sách bài tập");
-    } finally {
-      setLoadingLibrary(false);
-    }
-  };
-
-  const handleCopyAssignments = async () => {
-    if (selectedAssignmentIds.length === 0) {
-      toast.error("Vui lòng chọn ít nhất 1 bài tập");
-      return;
-    }
-
-    try {
-      const selectedAssignments = allAssignments.filter((a) =>
-        selectedAssignmentIds.includes(a.id)
-      );
-
-      // Copy từng bài tập
-      const copyPromises = selectedAssignments.map(async (assignment) => {
-        // 1. Tạo bài tập mới
-        const createRes = await axios.post(`${API_BASE}/assignments`, {
-          title: assignment.title,
-          description: assignment.description,
-          type: assignment.type,
-          dueDate: assignment.dueDate,
-          maxScore: assignment.maxScore,
-          passingScore: assignment.passingScore,
-          timeLimit: assignment.timeLimit,
-          maxAttempts: assignment.maxAttempts,
-          shuffleQuestions: assignment.shuffleQuestions,
-          showAnswersAfterSubmit: assignment.showAnswersAfterSubmit,
-          allowLateSubmission: assignment.allowLateSubmission,
-          createdBy: teacherId,
-          originalAssignmentId: assignment.originalAssignmentId || assignment.id,
-        });
-
-        if (!createRes.data.success) return;
-
-        const newAssignmentId = createRes.data.data.id;
-
-        // 2. Copy câu hỏi từ bài tập gốc
-        try {
-          const questionsRes = await axios.get(
-            `${API_BASE}/assignments-questions/assignments/${assignment.id}/questions`
-          );
-
-          if (questionsRes.data.success && questionsRes.data.data.length > 0) {
-            const copyQuestionPromises = questionsRes.data.data.map(
-              (item: any) =>
-                axios.post(
-                  `${API_BASE}/assignments-questions/assignments/${newAssignmentId}/questions/${item.questionId}`
-                )
-            );
-
-            await Promise.all(copyQuestionPromises);
-          }
-        } catch (err) {
-          console.error("Lỗi copy câu hỏi:", err);
-        }
-
-        // 3. Gán vào lớp hiện tại
-        await axios.post(
-          `${API_BASE}/sections-assignments/sections/${sectionId}/assignments`,
-          { assignmentId: newAssignmentId }
-        );
-
-        return createRes;
-      });
-
-      await Promise.all(copyPromises);
-
-      toast.success(`Đã sao chép ${selectedAssignmentIds.length} bài tập`);
-      setLibraryModalOpen(false);
-      setSelectedAssignmentIds([]);
-      setLibraryKeyword("");
-      fetchData();
-    } catch (err: any) {
-      console.error("Lỗi copy:", err);
-      toast.error(err.response?.data?.message || "Không thể sao chép bài tập");
-    }
-  };
-
   const getStatistics = () => {
     const totalAssignments = assignments.length;
-    const assignedAssignments = Object.keys(assignedIds).length;
-    const unassignedAssignments = totalAssignments - assignedAssignments;
-    const visibleAssignments = Object.values(visibility).filter(v => v === true).length;
-    const hiddenAssignments = assignedAssignments - visibleAssignments;
+    const visibleAssignments = Object.values(visibility).filter((v) => v === true).length;
+    const hiddenAssignments = totalAssignments - visibleAssignments;
 
-    // Thống kê theo loại
     const byType = assignments.reduce((acc, a) => {
       acc[a.type] = (acc[a.type] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
-    // Tổng số câu hỏi trong tất cả bài tập (nếu có)
-    const totalQuestions = questions.length;
-
     return {
       totalAssignments,
-      assignedAssignments,
-      unassignedAssignments,
       visibleAssignments,
       hiddenAssignments,
       byType,
-      totalQuestions,
     };
   };
 
@@ -743,9 +729,27 @@ export default function AssignmentTeacher() {
               background: "#fff",
             }}
           >
-            <CloudUploadOutlined style={{ fontSize: 14, color: "#52c41a" }} />
-            <span>Đã gán vào lớp:</span>
-            <strong style={{ color: "#52c41a" }}>{stats.assignedAssignments}</strong>
+            <EyeOutlined style={{ fontSize: 14, color: "#52c41a" }} />
+            <span>Đang hiển thị:</span>
+            <strong style={{ color: "#52c41a" }}>{stats.visibleAssignments}</strong>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "#000",
+              border: "1px solid #ddd",
+              borderRadius: 6,
+              padding: "6px 10px",
+              background: "#fff",
+            }}
+          >
+            <UserOutlined style={{ fontSize: 14, color: "#722ed1" }} />
+            <span>Học sinh:</span>
+            <strong style={{ color: "#722ed1" }}>{students.length}</strong>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -759,15 +763,6 @@ export default function AssignmentTeacher() {
           />
           <Button icon={<ReloadOutlined />} onClick={fetchData}>
             Làm mới
-          </Button>
-          <Button
-            icon={<CopyOutlined />}
-            onClick={() => {
-              setLibraryModalOpen(true);
-              fetchAllAssignments();
-            }}
-          >
-            Lấy từ thư viện
           </Button>
           <Button
             type="primary"
@@ -786,7 +781,7 @@ export default function AssignmentTeacher() {
         bordered
         pagination={{ pageSize: 10, showSizeChanger: true }}
         scroll={{ x: "max-content" }}
-        locale={{ emptyText: "Không có bài tập nào" }}
+        locale={{ emptyText: "Không có bài tập nào trong lớp này" }}
       />
 
       {/* Modal thêm/sửa */}
@@ -808,7 +803,6 @@ export default function AssignmentTeacher() {
         bodyStyle={{ maxHeight: "70vh", overflowY: "auto", overflowX: "hidden" }}
       >
         <Row gutter={24}>
-          {/* Cột trái: Thông tin bài tập */}
           <Col span={12}>
             <Title level={5} style={{ marginBottom: 12 }}>
               Thông tin bài tập
@@ -921,7 +915,6 @@ export default function AssignmentTeacher() {
             </Form>
           </Col>
 
-          {/* Cột phải: Câu hỏi */}
           <Col span={12}>
             <Title level={5}>Câu hỏi</Title>
             <Input
@@ -1004,102 +997,37 @@ export default function AssignmentTeacher() {
           </Col>
         </Row>
       </Modal>
+
+      {/* Modal xem điểm */}
       <Modal
-        title="Lấy bài tập từ thư viện"
-        open={libraryModalOpen}
+        title={
+          <div>
+            <FileTextOutlined style={{ marginRight: 8 }} />
+            {selectedAssignment?.title} - Bảng điểm
+          </div>
+        }
+        open={scoreModalOpen}
         onCancel={() => {
-          setLibraryModalOpen(false);
-          setSelectedAssignmentIds([]);
-          setLibraryKeyword("");
+          setScoreModalOpen(false);
+          setSelectedAssignment(null);
         }}
-        onOk={handleCopyAssignments}
-        okText={`Sao chép (${selectedAssignmentIds.length})`}
-        cancelText="Hủy"
-        width={1000}
+        footer={[
+          <Button key="close" onClick={() => setScoreModalOpen(false)}>
+            Đóng
+          </Button>,
+        ]}
+        width={1200}
         centered
       >
-        <div style={{ marginBottom: 16 }}>
-          <Input
-            allowClear
-            prefix={<SearchOutlined />}
-            placeholder="Tìm bài tập..."
-            value={libraryKeyword}
-            onChange={(e) => setLibraryKeyword(e.target.value)}
-          />
-        </div>
-
-        {loadingLibrary ? (
-          <div style={{ textAlign: "center", padding: 40 }}>
-            <Spin tip="Đang tải..." />
-          </div>
-        ) : allAssignments.filter(
-          (a) =>
-            !libraryKeyword ||
-            a.title.toLowerCase().includes(libraryKeyword.toLowerCase()) ||
-            a.description?.toLowerCase().includes(libraryKeyword.toLowerCase())
-        ).length === 0 ? (
-          <div style={{ textAlign: "center", padding: 40, color: "#999" }}>
-            <FileTextOutlined style={{ fontSize: 48, marginBottom: 16 }} />
-            <div>Không có bài tập mới để sao chép</div>
-          </div>
-        ) : (
-          <Table<Assignment>
-            dataSource={allAssignments.filter(
-              (a) =>
-                !libraryKeyword ||
-                a.title.toLowerCase().includes(libraryKeyword.toLowerCase()) ||
-                a.description?.toLowerCase().includes(libraryKeyword.toLowerCase())
-            )}
-            columns={[
-              {
-                title: "Tiêu đề",
-                dataIndex: "title",
-                key: "title",
-                render: (text: string, record: Assignment) => (
-                  <div>
-                    <div style={{ fontWeight: 500 }}>{text}</div>
-                    {record.description && (
-                      <div style={{ fontSize: 12, color: "#666" }}>
-                        {record.description}
-                      </div>
-                    )}
-                  </div>
-                ),
-              },
-              {
-                title: "Loại",
-                dataIndex: "type",
-                key: "type",
-                align: "center" as const,
-                render: (type: string) => (
-                  <Tag color={getTypeColor(type)}>{type.toUpperCase()}</Tag>
-                ),
-              },
-              {
-                title: "Điểm",
-                dataIndex: "maxScore",
-                key: "maxScore",
-                align: "center" as const,
-                render: (score: number) => <Tag color="green">{score}</Tag>,
-              },
-              {
-                title: "Hạn nộp",
-                dataIndex: "dueDate",
-                key: "dueDate",
-                width: 140,
-                render: (date: string) =>
-                  date ? dayjs(date).format("DD/MM/YYYY HH:mm") : <Tag>Không giới hạn</Tag>,
-              },
-            ]}
-            rowKey="id"
-            rowSelection={{
-              selectedRowKeys: selectedAssignmentIds,
-              onChange: (keys) => setSelectedAssignmentIds(keys as number[]),
-            }}
-            pagination={{ pageSize: 5 }}
-            size="small"
-          />
-        )}
+        <Table
+          dataSource={getScoreTableData()}
+          columns={scoreColumns}
+          rowKey="key"
+          bordered
+          pagination={{ pageSize: 10 }}
+          scroll={{ x: 1000 }}
+          locale={{ emptyText: "Không có dữ liệu" }}
+        />
       </Modal>
     </div>
   );

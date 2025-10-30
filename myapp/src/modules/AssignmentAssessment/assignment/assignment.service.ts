@@ -49,7 +49,6 @@ export async function submitCodeAnswer(data: {
 
     // Đẩy job sang worker
     await queue.add("judge", { answerId: answer.id });
-
     return answer;
 }
 
@@ -86,7 +85,6 @@ export async function submitProjectAnswer(data: {
     });
 
     await queue.add("judge", { answerId: answer.id });
-
     return answer;
 }
 
@@ -143,7 +141,7 @@ export async function createAssignment(data: {
             description: data.description,
             type: data.type,
             dueDate: data.dueDate ? new Date(data.dueDate) : null,
-            maxScore: data.maxScore ?? 100,
+            maxScore: 0,
             passingScore: data.passingScore ?? null,
             timeLimit: data.timeLimit ?? null,
             maxAttempts: data.maxAttempts ?? 1,
@@ -194,9 +192,7 @@ export async function getAssignmentsBySectionForStudent(
                 where: { sectionId },
                 include: {
                     section: {
-                        select: {
-                            id: true,
-                        },
+                        select: { id: true },
                     },
                 },
             },
@@ -213,9 +209,7 @@ export async function getAssignmentsBySectionForStudent(
                     },
                 },
                 orderBy: {
-                    question: {
-                        order: "asc",
-                    },
+                    question: { order: "asc" },
                 },
             },
             submissions: {
@@ -264,7 +258,7 @@ export async function getAssignmentsBySectionForStudent(
 
         // Calculate total points
         const totalPoints = assignment.questions.reduce(
-            (sum: any, aq: any) => sum + aq.question.points,
+            (sum: number, aq: any) => sum + (aq.question.points ?? 0),
             0
         );
 
@@ -282,7 +276,7 @@ export async function getAssignmentsBySectionForStudent(
             description: assignment.description,
             type: assignment.type,
             dueDate: assignment.dueDate,
-            maxScore: assignment.maxScore,
+            maxScore: totalPoints,
             passingScore: assignment.passingScore,
             timeLimit: assignment.timeLimit,
             maxAttempts: assignment.maxAttempts,
@@ -303,7 +297,7 @@ export async function getAssignmentsBySectionForStudent(
                       completedAt: submission.completedAt,
                       submittedAt: submission.submittedAt,
                       score: submission.score,
-                      maxScore: submission.maxScore,
+                      maxScore: totalPoints,
                       autoGraded: submission.autoGraded,
                       feedback: submission.feedback,
                       gradedAt: submission.gradedAt,
@@ -336,7 +330,9 @@ export async function updateAssignment(id: number, data: any) {
 }
 
 export async function deleteAssignment(id: number) {
-    return prisma.assignment.delete({ where: { id } });
+    return prisma.assignment.delete({
+        where: { id },
+    });
 }
 
 export async function getAllAssignments(filter: any) {
@@ -435,9 +431,7 @@ async function calculateAnswerScore(answer: {
 }) {
     const question = await prisma.question.findUnique({
         where: { id: answer.questionId },
-        include: {
-            choices: true,
-        },
+        include: { choices: true },
     });
 
     if (!question) {
@@ -453,29 +447,17 @@ async function calculateAnswerScore(answer: {
             .filter((c) => c.isCorrect)
             .map((c) => c.id);
 
-        const selectedChoices = answer.selectedChoices || [];
-
-        // Kiểm tra số lượng đáp án đúng
+        const selected = answer.selectedChoices;
         const correctCount = correctChoices.length;
-
-        // Số đáp án đúng được chọn
-        const correctSelected = selectedChoices.filter((id) =>
+        const correctSelected = selected.filter((id) =>
             correctChoices.includes(id)
         ).length;
+        const wrongSelected = selected.length - correctSelected;
 
-        // Số đáp án sai được chọn
-        const wrongSelected = selectedChoices.length - correctSelected;
-
-        // Tính điểm: chỉ đúng hoàn toàn mới được điểm
-        if (
-            correctSelected === correctCount &&
-            wrongSelected === 0 &&
-            selectedChoices.length === correctCount
-        ) {
-            score = maxScore;
-        } else {
-            score = 0;
-        }
+        // ✅ partial credit
+        score =
+            (Math.max(0, correctSelected - wrongSelected) / correctCount) *
+            maxScore;
     }
 
     // Essay questions - không tự động chấm
@@ -491,7 +473,8 @@ async function calculateAnswerScore(answer: {
     return {
         score,
         maxScore,
-        isAutoGraded: question.type === "multiple_choice" || question.type === "coding",
+        isAutoGraded:
+            question.type === "multiple_choice" || question.type === "coding",
     };
 }
 
@@ -686,7 +669,8 @@ export async function submitAssignment(
             summary: {
                 totalQuestions: answers.length,
                 answeredQuestions: answers.length,
-                correctQuestions: answerResults.filter((a) => a.isCorrect).length,
+                correctQuestions: answerResults.filter((a) => a.isCorrect)
+                    .length,
                 wrongQuestions: answerResults.filter(
                     (a) =>
                         !a.isCorrect &&
@@ -696,7 +680,8 @@ export async function submitAssignment(
                 needsManualGrading: answerResults.filter(
                     (a) => a.needsManualGrading
                 ).length,
-                beingJudged: answerResults.filter((a) => a.isBeingJudged).length,
+                beingJudged: answerResults.filter((a) => a.isBeingJudged)
+                    .length,
                 totalScore,
                 totalMaxScore,
                 percentage:

@@ -3,7 +3,6 @@ import { prisma } from "./prisma/client";
 import { execa } from "execa";
 import fs from "fs-extra";
 import path from "path";
-import { chromium } from "playwright";
 
 const worker = new Worker(
     "judge",
@@ -16,6 +15,7 @@ const worker = new Worker(
             include: { question: { include: { testCases: true } } },
         });
         if (!answer) return;
+
         console.log(
             "📋 Test cases loaded:",
             answer.question.testCases.map((tc) => ({
@@ -25,6 +25,7 @@ const worker = new Worker(
                 points: tc.points,
             }))
         );
+
         await prisma.submissionAnswer.update({
             where: { id: answerId },
             data: { judgeStatus: "running" },
@@ -37,19 +38,6 @@ const worker = new Worker(
         );
         fs.ensureDirSync(workspace);
 
-        // map extension
-        const extMap: Record<string, string> = {
-            python: "main.py",
-            php: "main.php",
-            javascript: "main.js",
-            html: "index.html",
-            css: "style.css",
-        };
-
-        const fileName = extMap[answer.language as string] || "main.txt";
-        const codePath = path.join(workspace, fileName);
-        fs.writeFileSync(codePath, answer.codeAnswer || "");
-
         let score = 0;
         let maxScore = 0;
         const results: any[] = [];
@@ -57,29 +45,48 @@ const worker = new Worker(
         try {
             // -------------------- PYTHON --------------------
             if (answer.language === "python") {
+                // Tạo wrapper Python
+                const wrapper = `
+import sys
+data = sys.stdin.read().strip()
+n = int(data) if data else 0
+
+${answer.codeAnswer || ""}
+
+if "factorial" in globals():
+    print(factorial(n))
+`;
+                fs.writeFileSync(path.join(workspace, "main.py"), wrapper);
+
                 for (const tc of answer.question.testCases) {
+                    maxScore += tc.points;
                     try {
-                        const run = await execa("docker", [
-                            "run",
-                            "--rm",
-                            "-i",
-                            "-v",
-                            `${workspace}:/workspace`,
-                            "-w",
-                            "/workspace",
-                            "python:3.11-alpine",
-                            "sh",
-                            "-c",
-                            `echo "${tc.input}" | python main.py`,
-                        ]);
+                        const run = await execa(
+                            "docker",
+                            [
+                                "run",
+                                "--rm",
+                                "-i",
+                                "-v",
+                                `${workspace}:/workspace`,
+                                "-w",
+                                "/workspace",
+                                "python:3.11-alpine",
+                                "python",
+                                "main.py",
+                            ],
+                            { input: tc.input }
+                        );
+
                         const got = run.stdout.trim();
-                        const ok = got === tc.expectedOutput.trim();
+                        const expect = (tc.expectedOutput || "").trim();
+                        const ok = got === expect;
                         if (ok) score += tc.points;
-                        maxScore += tc.points;
+
                         results.push({
                             id: tc.id,
                             got,
-                            expect: tc.expectedOutput,
+                            expect,
                             status: ok ? "ok" : "fail",
                         });
                     } catch (err: any) {
@@ -88,36 +95,53 @@ const worker = new Worker(
                             status: "error",
                             stderr: err.stderr || err.message,
                         });
-                        maxScore += tc.points;
                     }
                 }
             }
 
             // -------------------- PHP --------------------
             else if (answer.language === "php") {
+                const wrapper = `<?php
+$input = trim(file_get_contents("php://stdin"));
+$n = intval($input);
+
+${answer.codeAnswer || ""}
+
+if (function_exists("factorial")) {
+    echo factorial($n);
+}
+?>`;
+                fs.writeFileSync(path.join(workspace, "main.php"), wrapper);
+
                 for (const tc of answer.question.testCases) {
+                    maxScore += tc.points;
                     try {
-                        const run = await execa("docker", [
-                            "run",
-                            "--rm",
-                            "-i",
-                            "-v",
-                            `${workspace}:/workspace`,
-                            "-w",
-                            "/workspace",
-                            "php:8.2-cli",
-                            "sh",
-                            "-c",
-                            `echo "${tc.input}" | php main.php`,
-                        ]);
+                        const run = await execa(
+                            "docker",
+                            [
+                                "run",
+                                "--rm",
+                                "-i",
+                                "-v",
+                                `${workspace}:/workspace`,
+                                "-w",
+                                "/workspace",
+                                "php:8.2-cli",
+                                "php",
+                                "main.php",
+                            ],
+                            { input: tc.input }
+                        );
+
                         const got = run.stdout.trim();
-                        const ok = got === tc.expectedOutput.trim();
+                        const expect = (tc.expectedOutput || "").trim();
+                        const ok = got === expect;
                         if (ok) score += tc.points;
-                        maxScore += tc.points;
+
                         results.push({
                             id: tc.id,
                             got,
-                            expect: tc.expectedOutput,
+                            expect,
                             status: ok ? "ok" : "fail",
                         });
                     } catch (err: any) {
@@ -126,171 +150,125 @@ const worker = new Worker(
                             status: "error",
                             stderr: err.stderr || err.message,
                         });
-                        maxScore += tc.points;
                     }
-                }
-            }
-
-            // -------------------- JAVASCRIPT --------------------
-            else if (answer.language === "javascript") {
-                try {
-                    const run = await execa("npx", ["eslint", fileName], {
-                        cwd: workspace,
-                    });
-                    results.push({
-                        tool: "eslint",
-                        status: "ok",
-                        output: run.stdout,
-                    });
-                    maxScore += 1;
-                    score += 1;
-                } catch (err: any) {
-                    results.push({
-                        tool: "eslint",
-                        status: "fail",
-                        output: err.stdout || err.message,
-                    });
-                    maxScore += 1;
                 }
             }
 
             // -------------------- HTML --------------------
             else if (answer.language === "html") {
-                try {
-                    const run = await execa("npx", ["htmlhint", fileName], {
-                        cwd: workspace,
-                    });
-                    results.push({
-                        tool: "htmlhint",
-                        status: "ok",
-                        output: run.stdout,
-                    });
-                    maxScore += 1;
-                    score += 1;
-                } catch (err: any) {
-                    results.push({
-                        tool: "htmlhint",
-                        status: "fail",
-                        output: err.stdout || err.message,
-                    });
-                    maxScore += 1;
-                }
+                const filePath = path.join(workspace, "index.html");
+                fs.writeFileSync(filePath, answer.codeAnswer || "");
+console.log("🔍 HTML user code:", answer.codeAnswer);
 
-                // ---- UI Test bằng Playwright ----
-                // ---- UI Test bằng Playwright ----
-                if (
-                    answer.language === "html" &&
-                    answer.question.testCases.length > 0
-                ) {
-                    const browser = await chromium.launch();
-                    const page = await browser.newPage();
-                    await page.goto("file://" + codePath);
+                // dùng Playwright để load trang HTML và check test case
+                const { chromium } = await import("playwright");
+                const browser = await chromium.launch();
+                const page = await browser.newPage();
+                await page.goto("file://" + filePath, {
+                    waitUntil: "domcontentloaded",
+                });
 
-                    for (const tc of answer.question.testCases) {
-                        if (tc.input.startsWith("selector:")) {
-                            const [_, selector, action, valueOrExpect] =
-                                tc.input.split("|");
+                for (const tc of answer.question.testCases) {
+                    maxScore += tc.points;
+                    try {
+                        // Format input: "selector:h1|expect|Xin chào"
+                        if (!tc.input.startsWith("selector:")) continue;
 
-                            if (action === "fill") {
-                                try {
-                                    await page.fill(selector, valueOrExpect);
-                                    results.push({
-                                        id: tc.id,
-                                        action: "fill",
-                                        selector,
-                                        value: valueOrExpect,
-                                        status: "ok",
-                                    });
-                                } catch (err: any) {
-                                    results.push({
-                                        id: tc.id,
-                                        action: "fill",
-                                        selector,
-                                        value: valueOrExpect,
-                                        status: "error",
-                                        stderr: err.message,
-                                    });
-                                }
-                                // 👉 Không cộng điểm cho thao tác fill
-                                maxScore += tc.points;
-                            } else if (action === "click") {
-                                try {
-                                    await page.click(selector);
-                                    results.push({
-                                        id: tc.id,
-                                        action: "click",
-                                        selector,
-                                        status: "ok",
-                                    });
-                                } catch (err: any) {
-                                    results.push({
-                                        id: tc.id,
-                                        action: "click",
-                                        selector,
-                                        status: "error",
-                                        stderr: err.message,
-                                    });
-                                }
-                                // 👉 Không cộng điểm cho thao tác click
-                                maxScore += tc.points;
-                            } else if (action === "expect") {
-                                try {
-                                    const got = await page.textContent(
-                                        selector
-                                    );
-                                    const ok = got?.includes(valueOrExpect);
-                                    if (ok) score += tc.points;
-                                    results.push({
-                                        id: tc.id,
-                                        action: "expect",
-                                        selector,
-                                        got,
-                                        expect: valueOrExpect,
-                                        status: ok ? "ok" : "fail",
-                                    });
-                                } catch (err: any) {
-                                    results.push({
-                                        id: tc.id,
-                                        action: "expect",
-                                        selector,
-                                        status: "error",
-                                        stderr: err.message,
-                                    });
-                                }
-                                maxScore += tc.points;
-                            }
+                        const raw = tc.input.replace(/^selector:/, "");
+                        const parts = raw.split("|");
+                        const selector = parts[0];
+                        const action = parts[1];
+                        const valueOrExpect = parts[2] ?? "";
+
+                        if (action === "expect") {
+                            const got =
+                                (await page.textContent(selector)) ?? "";
+                            const ok = got.includes(valueOrExpect);
+                            if (ok) score += tc.points;
+                            results.push({
+                                id: tc.id,
+                                selector,
+                                got,
+                                expect: valueOrExpect,
+                                status: ok ? "ok" : "fail",
+                            });
+                        } else {
+                            results.push({
+                                id: tc.id,
+                                status: "error",
+                                stderr: `Unknown action: ${action}`,
+                            });
                         }
+                    } catch (err: any) {
+                        results.push({
+                            id: tc.id,
+                            status: "error",
+                            stderr: err.message,
+                        });
                     }
-
-                    await browser.close();
                 }
+
+                await browser.close();
             }
 
-            // -------------------- CSS --------------------
-            else if (answer.language === "css") {
-                try {
-                    const run = await execa("npx", ["stylelint", fileName], {
-                        cwd: workspace,
-                    });
-                    results.push({
-                        tool: "stylelint",
-                        status: "ok",
-                        output: run.stdout,
-                    });
-                    maxScore += 1;
-                    score += 1;
-                } catch (err: any) {
-                    results.push({
-                        tool: "stylelint",
-                        status: "fail",
-                        output: err.stdout || err.message,
-                    });
-                    maxScore += 1;
+            // -------------------- JAVASCRIPT --------------------
+            else if (answer.language === "javascript") {
+                const wrapper = `
+const fs = require("fs");
+const raw = fs.readFileSync(0, "utf8").trim();
+const n = Number(raw);
+
+${answer.codeAnswer || ""}
+
+if (typeof factorial === "function") {
+  console.log(String(factorial(n)));
+}
+`;
+                fs.writeFileSync(path.join(workspace, "main.js"), wrapper);
+
+                for (const tc of answer.question.testCases) {
+                    maxScore += tc.points;
+                    try {
+                        const run = await execa(
+                            "docker",
+                            [
+                                "run",
+                                "--rm",
+                                "-i",
+                                "-v",
+                                `${workspace}:/workspace`,
+                                "-w",
+                                "/workspace",
+                                "node:20-alpine",
+                                "node",
+                                "main.js",
+                            ],
+                            { input: tc.input }
+                        );
+
+                        const got = run.stdout.trim();
+                        const expect = (tc.expectedOutput || "").trim();
+                        const ok = got === expect;
+                        if (ok) score += tc.points;
+
+                        results.push({
+                            id: tc.id,
+                            got,
+                            expect,
+                            status: ok ? "ok" : "fail",
+                        });
+                    } catch (err: any) {
+                        results.push({
+                            id: tc.id,
+                            status: "error",
+                            stderr: err.stderr || err.message,
+                        });
+                    }
                 }
             }
 
             // -------------------- Update DB --------------------
-            await prisma.submissionAnswer.update({
+            const updatedAnswer = await prisma.submissionAnswer.update({
                 where: { id: answerId },
                 data: {
                     judgeStatus: score === maxScore ? "passed" : "failed",
@@ -298,7 +276,11 @@ const worker = new Worker(
                     maxScore,
                     testResults: results,
                 },
+                include: { submission: true },
             });
+
+            // Recalculate tổng điểm của submission
+            await recalcSubmissionScore(updatedAnswer.submissionId);
 
             console.log(
                 `✅ answerId=${answerId} done, score=${score}/${maxScore}`
@@ -319,3 +301,22 @@ const worker = new Worker(
 
 worker.on("ready", () => console.log("✅ Worker started..."));
 worker.on("failed", (job, err) => console.error("❌ Job failed", job?.id, err));
+
+export async function recalcSubmissionScore(submissionId: number) {
+    const answers = await prisma.submissionAnswer.findMany({
+        where: { submissionId },
+        select: { score: true, maxScore: true },
+    });
+
+    const totalScore = answers.reduce((sum, a) => sum + (a.score ?? 0), 0);
+    const totalMax = answers.reduce((sum, a) => sum + (a.maxScore ?? 0), 0);
+
+    await prisma.submission.update({
+        where: { id: submissionId },
+        data: {
+            score: totalScore,
+            maxScore: totalMax,
+            gradedAt: new Date(),
+        },
+    });
+}

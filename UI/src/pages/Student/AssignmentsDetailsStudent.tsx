@@ -3,6 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
 import dayjs from "dayjs";
 import "dayjs/locale/vi";
+import { pathToFileURL } from "url";
+import { Link } from "react-router-dom";
 
 dayjs.locale("vi");
 
@@ -91,7 +93,9 @@ export default function AssignmentsDetailsStudent() {
 
 	const [assignment, setAssignment] = useState<Assignment | null>(null);
 	const [answers, setAnswers] = useState<Map<number, Answer>>(new Map());
-	const [codeResults, setCodeResults] = useState<Map<number, CodeSubmissionResult>>(new Map());
+	const [codeResults, setCodeResults] = useState<Map<number, CodeSubmissionResult>>(
+		new Map()
+	);
 	const [loading, setLoading] = useState(true);
 	const [submitting, setSubmitting] = useState(false);
 	const [testingCode, setTestingCode] = useState<Set<number>>(new Set());
@@ -107,6 +111,7 @@ export default function AssignmentsDetailsStudent() {
 		if (assignmentId) {
 			fetchAssignmentDetails();
 		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [assignmentId]);
 
 	useEffect(() => {
@@ -129,7 +134,6 @@ export default function AssignmentsDetailsStudent() {
 	const fetchAssignmentDetails = async () => {
 		setLoading(true);
 		try {
-			// 1. Fetch assignment info
 			const assignmentRes = await fetch(
 				`http://localhost:4000/api/v1/assignments/${assignmentId}`,
 				{ credentials: "include" }
@@ -142,9 +146,6 @@ export default function AssignmentsDetailsStudent() {
 				return;
 			}
 
-			console.log("Assignment data:", assignmentData.data);
-
-			// 2. Fetch all questions details
 			const questionsRes = await fetch(
 				`http://localhost:4000/api/v1/questions`,
 				{ credentials: "include" }
@@ -157,23 +158,17 @@ export default function AssignmentsDetailsStudent() {
 				return;
 			}
 
-			console.log("Questions data:", questionsData.data);
-
-			// 3. Map questionId to full question details
 			const assignmentQuestions = assignmentData.data.questions || [];
 			const allQuestions = questionsData.data || [];
 
 			const questionIds = assignmentQuestions.map((q: any) => q.questionId);
-			const questionsMap = new Map(
-				allQuestions.map((q: Question) => [q.id, q])
-			);
+			const questionsMap = new Map(allQuestions.map((q: Question) => [q.id, q]));
 
 			const fullQuestions: Question[] = questionIds
 				.map((id: number) => questionsMap.get(id))
 				.filter((q: any): q is Question => q !== undefined)
 				.sort((a: any, b: any) => a.order - b.order);
 
-			// 4. Fetch test cases for coding questions
 			for (const question of fullQuestions) {
 				if (question.type === "coding") {
 					try {
@@ -194,8 +189,6 @@ export default function AssignmentsDetailsStudent() {
 					}
 				}
 			}
-
-			console.log("Full questions with test cases:", fullQuestions);
 
 			setAssignment({
 				...assignmentData.data,
@@ -301,8 +294,6 @@ export default function AssignmentsDetailsStudent() {
 
 			const data = await res.json();
 
-			console.log("Test code response:", data);
-
 			if (data.success) {
 				setCodeResults((prev) => {
 					const newResults = new Map(prev);
@@ -328,9 +319,7 @@ export default function AssignmentsDetailsStudent() {
 	};
 
 	const handleSubmit = async () => {
-		const unansweredQuestions = assignment?.questions.filter(
-			(q) => !answers.has(q.id)
-		);
+		const unansweredQuestions = assignment?.questions.filter((q) => !answers.has(q.id));
 
 		if (unansweredQuestions && unansweredQuestions.length > 0) {
 			const confirm = window.confirm(
@@ -348,10 +337,6 @@ export default function AssignmentsDetailsStudent() {
 				answers: answersArray,
 			};
 
-			console.log("=== SUBMIT DATA ===");
-			console.log("Assignment ID:", assignmentId);
-			console.log("Payload:", payload);
-
 			const res = await fetch(
 				`http://localhost:4000/api/v1/assignments/${assignmentId}/submit`,
 				{
@@ -368,10 +353,6 @@ export default function AssignmentsDetailsStudent() {
 			} catch {
 				throw new Error("Không đọc được phản hồi từ server");
 			}
-
-			console.log("=== SUBMIT RESPONSE ===");
-			console.log("Status:", res.status);
-			console.log("Response:", data);
 
 			if (!res.ok) {
 				throw new Error(data?.message || `Lỗi HTTP ${res.status}`);
@@ -405,7 +386,7 @@ export default function AssignmentsDetailsStudent() {
 			);
 			if (!confirm) return;
 		}
-		navigate(`/student/sections/${sectionId}/assignments`);
+		navigate(`/student/courses/${sectionId}/assignments`);
 	};
 
 	const formatTime = (seconds: number) => {
@@ -437,18 +418,18 @@ export default function AssignmentsDetailsStudent() {
 					<div className="flex items-center gap-2">
 						<span
 							className={`text-lg font-bold ${result.score === result.maxScore
-									? "text-green-600"
-									: "text-orange-600"
+								? "text-green-600"
+								: "text-orange-600"
 								}`}
 						>
 							{result.score} / {result.maxScore} điểm
 						</span>
 						<span
 							className={`text-xs px-2 py-1 rounded ${result.judgeStatus === "accepted"
-									? "bg-green-100 text-green-700"
-									: result.judgeStatus === "queued"
-										? "bg-yellow-100 text-yellow-700"
-										: "bg-red-100 text-red-700"
+								? "bg-green-100 text-green-700"
+								: result.judgeStatus === "queued"
+									? "bg-yellow-100 text-yellow-700"
+									: "bg-red-100 text-red-700"
 								}`}
 						>
 							{result.judgeStatus}
@@ -456,7 +437,6 @@ export default function AssignmentsDetailsStudent() {
 					</div>
 				</div>
 
-				{/* Compile/Runtime Errors */}
 				{result.compileLog && (
 					<div className="mb-3 p-3 bg-red-50 border border-red-200 rounded">
 						<p className="text-xs font-medium text-red-700 mb-1">
@@ -479,7 +459,6 @@ export default function AssignmentsDetailsStudent() {
 					</div>
 				)}
 
-				{/* Test Cases Results */}
 				{result.testResults && result.testResults.length > 0 && (
 					<div className="space-y-2">
 						<p className="text-sm font-medium text-gray-700">Test Cases:</p>
@@ -487,8 +466,8 @@ export default function AssignmentsDetailsStudent() {
 							<div
 								key={test.id}
 								className={`p-3 rounded border ${test.status === "ok"
-										? "bg-green-50 border-green-200"
-										: "bg-red-50 border-red-200"
+									? "bg-green-50 border-green-200"
+									: "bg-red-50 border-red-200"
 									}`}
 							>
 								<div className="flex items-center justify-between mb-2">
@@ -497,8 +476,8 @@ export default function AssignmentsDetailsStudent() {
 									</span>
 									<span
 										className={`text-xs px-2 py-1 rounded ${test.status === "ok"
-												? "bg-green-100 text-green-700"
-												: "bg-red-100 text-red-700"
+											? "bg-green-100 text-green-700"
+											: "bg-red-100 text-red-700"
 											}`}
 									>
 										{test.status === "ok" ? "✓ Passed" : "✗ Failed"}
@@ -532,7 +511,6 @@ export default function AssignmentsDetailsStudent() {
 					</div>
 				)}
 
-				{/* Stdout Log */}
 				{result.stdoutLog && (
 					<div className="mt-3 p-3 bg-gray-100 rounded">
 						<p className="text-xs font-medium text-gray-700 mb-1">Output:</p>
@@ -550,26 +528,22 @@ export default function AssignmentsDetailsStudent() {
 		const isTesting = testingCode.has(question.id);
 
 		return (
-			<div key={question.id} className="bg-white rounded-lg border p-6 mb-4">
+			<div key={question.id} className="bg-white rounded-lg border p-6 mb-4 shadow-sm">
 				{/* Question Header */}
 				<div className="flex items-start justify-between mb-4">
 					<div className="flex-1">
 						<div className="flex items-center gap-2 mb-2">
-							<span className="bg-blue-600 text-white text-sm font-medium px-3 py-1 rounded">
+							<span className="bg-indigo-600 text-white text-sm font-medium px-3 py-1 rounded">
 								Câu {index + 1}
 							</span>
-							<span className="text-sm text-gray-600">
-								({question.points} điểm)
-							</span>
+							<span className="text-sm text-gray-600">({question.points} điểm)</span>
 							{question.type === "coding" && (
 								<span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded">
 									💻 Code
 								</span>
 							)}
 						</div>
-						<p className="text-gray-900 whitespace-pre-wrap">
-							{question.content}
-						</p>
+						<p className="text-gray-900 whitespace-pre-wrap">{question.content}</p>
 					</div>
 				</div>
 
@@ -589,8 +563,8 @@ export default function AssignmentsDetailsStudent() {
 										<label
 											key={choice.id}
 											className={`flex items-start gap-3 p-3 border rounded cursor-pointer transition-colors ${isSelected
-													? "bg-blue-50 border-blue-500"
-													: "hover:bg-gray-50"
+												? "bg-indigo-50 border-indigo-200"
+												: "hover:bg-gray-50"
 												}`}
 										>
 											<input
@@ -607,9 +581,7 @@ export default function AssignmentsDetailsStudent() {
 												className="mt-1"
 												disabled={!hasStarted}
 											/>
-											<span className="flex-1 text-gray-900">
-												{choice.content}
-											</span>
+											<span className="flex-1 text-gray-900">{choice.content}</span>
 										</label>
 									);
 								})}
@@ -634,8 +606,8 @@ export default function AssignmentsDetailsStudent() {
 									<label
 										key={option.id}
 										className={`flex items-start gap-3 p-3 border rounded cursor-pointer transition-colors ${isSelected
-												? "bg-blue-50 border-blue-500"
-												: "hover:bg-gray-50"
+											? "bg-indigo-50 border-indigo-200"
+											: "hover:bg-gray-50"
 											}`}
 									>
 										<input
@@ -650,9 +622,7 @@ export default function AssignmentsDetailsStudent() {
 											className="mt-1"
 											disabled={!hasStarted}
 										/>
-										<span className="flex-1 text-gray-900">
-											{option.content}
-										</span>
+										<span className="flex-1 text-gray-900">{option.content}</span>
 									</label>
 								);
 							})}
@@ -669,7 +639,7 @@ export default function AssignmentsDetailsStudent() {
 									})
 								}
 								placeholder="Nhập câu trả lời của bạn..."
-								className="w-full min-h-[150px] p-3 border rounded focus:outline-none focus:border-blue-500"
+								className="w-full min-h-[150px] p-3 border rounded focus:outline-none focus:border-indigo-500"
 								disabled={!hasStarted}
 							/>
 							<p className="text-xs text-gray-600 mt-2">
@@ -682,9 +652,7 @@ export default function AssignmentsDetailsStudent() {
 						<div>
 							<div className="mb-3 flex items-center justify-between">
 								<div className="flex items-center gap-2">
-									<label className="text-sm font-medium text-gray-700">
-										Ngôn ngữ:
-									</label>
+									<label className="text-sm font-medium text-gray-700">Ngôn ngữ:</label>
 									<select
 										value={answer?.language || "javascript"}
 										onChange={(e) =>
@@ -692,13 +660,14 @@ export default function AssignmentsDetailsStudent() {
 												language: e.target.value,
 											})
 										}
-										className="px-3 py-1.5 border rounded text-sm focus:outline-none focus:border-blue-500"
+										className="px-3 py-1.5 border rounded text-sm focus:outline-none focus:border-indigo-500"
 										disabled={!hasStarted}
 									>
 										<option value="javascript">JavaScript</option>
 										<option value="python">Python</option>
 										<option value="java">Java</option>
 										<option value="cpp">C++</option>
+										<option value="html">HTML</option>
 										<option value="csharp">C#</option>
 										<option value="php">PHP</option>
 									</select>
@@ -712,7 +681,6 @@ export default function AssignmentsDetailsStudent() {
 								</button>
 							</div>
 
-							{/* Code Editor */}
 							<textarea
 								value={answer?.codeAnswer || ""}
 								onChange={(e) =>
@@ -721,32 +689,29 @@ export default function AssignmentsDetailsStudent() {
 									})
 								}
 								placeholder="// Nhập code của bạn..."
-								className="w-full min-h-[300px] p-3 border rounded font-mono text-sm focus:outline-none focus:border-blue-500 bg-gray-900 text-green-400"
+								className="w-full min-h-[260px] p-3 border rounded font-mono text-sm focus:outline-none focus:border-indigo-500 bg-gray-900 text-green-400"
 								disabled={!hasStarted}
 								spellCheck={false}
 							/>
 
-							{/* Test Cases Info */}
 							{question.testCases && question.testCases.length > 0 && (
-								<div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
-									<p className="text-sm font-medium text-blue-900 mb-2">
+								<div className="mt-3 p-3 bg-indigo-50 border border-indigo-200 rounded">
+									<p className="text-sm font-medium text-indigo-900 mb-2">
 										📋 Thông tin Test Cases:
 									</p>
-									<ul className="text-sm text-blue-800 space-y-1">
+									<ul className="text-sm text-indigo-800 space-y-1">
 										<li>
 											• Tổng số test cases:{" "}
-											<span className="font-medium">
-												{question.testCases.length}
-											</span>
+											<span className="font-medium">{question.testCases.length}</span>
 										</li>
 										<li>
-											• Test cases công khai:{" "}
+											• Công khai:{" "}
 											<span className="font-medium">
 												{question.testCases.filter((tc) => !tc.isHidden).length}
 											</span>
 										</li>
 										<li>
-											• Test cases ẩn:{" "}
+											• Ẩn:{" "}
 											<span className="font-medium">
 												{question.testCases.filter((tc) => tc.isHidden).length}
 											</span>
@@ -755,7 +720,6 @@ export default function AssignmentsDetailsStudent() {
 								</div>
 							)}
 
-							{/* Test Results */}
 							{renderTestResults(question.id)}
 						</div>
 					)}
@@ -768,7 +732,7 @@ export default function AssignmentsDetailsStudent() {
 		return (
 			<div className="w-full min-h-screen bg-gray-50 flex items-center justify-center">
 				<div className="text-center">
-					<div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+					<div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
 					<p className="text-gray-600">Đang tải...</p>
 				</div>
 			</div>
@@ -780,10 +744,7 @@ export default function AssignmentsDetailsStudent() {
 			<div className="w-full min-h-screen bg-gray-50 flex items-center justify-center">
 				<div className="text-center">
 					<p className="text-red-600 mb-4">Không tìm thấy bài tập</p>
-					<button
-						onClick={handleBack}
-						className="text-blue-600 hover:underline"
-					>
+					<button onClick={handleBack} className="text-indigo-600 hover:underline">
 						Quay lại
 					</button>
 				</div>
@@ -796,15 +757,10 @@ export default function AssignmentsDetailsStudent() {
 			<div className="w-full min-h-screen bg-gray-50">
 				<div className="bg-white border-b">
 					<div className="px-4 py-4">
-						<button
-							onClick={handleBack}
-							className="text-sm text-blue-600 hover:underline mb-2"
-						>
+						<button onClick={handleBack} className="text-sm text-indigo-600 hover:underline mb-2">
 							← Quay lại
 						</button>
-						<h1 className="text-xl font-medium text-gray-900">
-							{assignment.title}
-						</h1>
+						<h1 className="text-xl font-medium text-gray-900">{assignment.title}</h1>
 					</div>
 				</div>
 				<div className="px-4 py-8">
@@ -817,136 +773,187 @@ export default function AssignmentsDetailsStudent() {
 	}
 
 	return (
-		<div className="w-full min-h-screen bg-gray-50 pb-20">
-			{/* Header */}
-			<div className="bg-white border-b sticky top-0 z-10 shadow-sm">
-				<div className="px-4 py-4">
-					<button
-						onClick={handleBack}
-						className="text-sm text-blue-600 hover:underline mb-2"
-					>
-						← Quay lại
-					</button>
-					<div className="flex items-center justify-between">
+		<div className="w-full min-h-screen bg-gray-50 pb-28">
+			{/* Top Bar */}
+			<div className="bg-white border-b sticky top-0 z-20 shadow-sm">
+				<div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+					<div className="flex items-center gap-3">
+						<button onClick={handleBack} className="text-indigo-600 hover:underline text-sm">
+							← Quay lại
+						</button>
 						<div>
-							<h1 className="text-xl font-medium text-gray-900">
-								{assignment.title}
-							</h1>
+							<h1 className="text-lg font-semibold text-gray-900">{assignment.title}</h1>
 							{assignment.description && (
-								<p className="text-sm text-gray-600 mt-1">
-									{assignment.description}
-								</p>
+								<p className="text-sm text-gray-600">{assignment.description}</p>
 							)}
 						</div>
+					</div>
+
+					{/* Header Right: timer & progress */}
+					<div className="flex items-center gap-4">
 						{hasStarted && timeRemaining !== null && (
-							<div
-								className={`text-right ${timeRemaining < 300
-										? "text-red-600 animate-pulse"
-										: "text-gray-900"
-									}`}
-							>
-								<div className="text-2xl font-bold font-mono">
-									{formatTime(timeRemaining)}
-								</div>
+							<div className={`text-right ${timeRemaining < 300 ? "text-red-600 animate-pulse" : "text-gray-900"}`}>
+								<div className="text-lg font-bold font-mono">{formatTime(timeRemaining)}</div>
 								<div className="text-xs">Thời gian còn lại</div>
 							</div>
 						)}
-					</div>
-				</div>
-			</div>
 
-			{/* Info Bar */}
-			<div className="bg-white border-b px-4 py-3">
-				<div className="flex flex-wrap gap-4 text-sm text-gray-600">
-					<div>
-						<span className="font-medium">Tổng câu hỏi:</span>{" "}
-						{assignment.questions.length}
-					</div>
-					<div>
-						<span className="font-medium">Tổng điểm:</span> {assignment.maxScore}
-					</div>
-					{assignment.timeLimit && (
-						<div>
-							<span className="font-medium">Thời gian:</span>{" "}
-							{assignment.timeLimit} phút
-						</div>
-					)}
-					<div>
-						<span className="font-medium">Đã trả lời:</span>{" "}
-						<span
-							className={
-								getAnsweredCount() === assignment.questions.length
-									? "text-green-600 font-medium"
-									: "text-blue-600 font-medium"
-							}
-						>
-							{getAnsweredCount()} / {assignment.questions.length}
-						</span>
-					</div>
-					{assignment.dueDate && (
-						<div>
-							<span className="font-medium">Hạn nộp:</span>{" "}
-							{dayjs(assignment.dueDate).format("DD/MM/YYYY HH:mm")}
-						</div>
-					)}
-				</div>
-			</div>
-
-			{/* Error */}
-			{error && (
-				<div className="px-4 py-3">
-					<div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
-						⚠️ {error}
-					</div>
-				</div>
-			)}
-
-			{/* Start Button */}
-			{!hasStarted && (
-				<div className="px-4 py-8">
-					<div className="max-w-2xl mx-auto bg-white rounded-lg border p-8 text-center shadow-lg">
-						<div className="text-4xl mb-4">📝</div>
-						<h2 className="text-xl font-medium text-gray-900 mb-4">
-							Sẵn sàng làm bài?
-						</h2>
-						<p className="text-gray-600 mb-6">
-							Nhấn nút bên dưới để bắt đầu làm bài tập.
-							{assignment.timeLimit && (
-								<> Bạn sẽ có {assignment.timeLimit} phút để hoàn thành.</>
-							)}
-						</p>
-						<button
-							onClick={handleStartAssignment}
-							className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-md hover:shadow-lg"
-						>
-							Bắt đầu làm bài
-						</button>
-					</div>
-				</div>
-			)}
-
-			{/* Questions */}
-			{hasStarted && (
-				<div className="px-4 py-6 max-w-4xl mx-auto">
-					{assignment.questions.map((question, index) =>
-						renderQuestion(question, index)
-					)}
-				</div>
-			)}
-
-			{/* Submit Button */}
-			{hasStarted && (
-				<div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg z-10">
-					<div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
 						<div className="text-sm text-gray-600">
-							Đã trả lời: {getAnsweredCount()} / {assignment.questions.length}
+							Đã trả lời:{" "}
+							<span className={getAnsweredCount() === assignment.questions.length ? "text-green-600 font-medium" : "text-indigo-600 font-medium"}>
+								{getAnsweredCount()} / {assignment.questions.length}
+							</span>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			{/* Two-column layout */}
+			<div className="max-w-7xl mx-auto px-4 py-8">
+				<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+					{/* Left column: Assignment info */}
+					<aside className="md:col-span-1">
+						<div className="sticky top-20 space-y-4">
+							<div className="bg-white border rounded-lg p-5 shadow-sm">
+								<h3 className="text-lg font-semibold text-gray-900 mb-2">Thông tin bài tập</h3>
+								<p className="text-sm text-gray-600 mb-3">{assignment.description}</p>
+
+								<div className="grid grid-cols-2 gap-3 text-sm text-gray-700">
+									<div className="flex flex-col">
+										<span className="text-xs text-gray-500">Loại</span>
+										<span className="font-medium">{assignment.type}</span>
+									</div>
+									<div className="flex flex-col">
+										<span className="text-xs text-gray-500">Tổng câu</span>
+										<span className="font-medium">{assignment.questions.length}</span>
+									</div>
+									<div className="flex flex-col">
+										<span className="text-xs text-gray-500">Tổng điểm</span>
+										<span className="font-medium">{assignment.maxScore}</span>
+									</div>
+									<div className="flex flex-col">
+										<span className="text-xs text-gray-500">Thời gian</span>
+										<span className="font-medium">{assignment.timeLimit ? `${assignment.timeLimit} phút` : "Không giới hạn"}</span>
+									</div>
+									{assignment.dueDate && (
+										<div className="col-span-2">
+											<span className="text-xs text-gray-500">Hạn nộp</span>
+											<div className="font-medium text-sm">{dayjs(assignment.dueDate).format("DD/MM/YYYY HH:mm")}</div>
+										</div>
+									)}
+								</div>
+
+								{/* Progress Bar */}
+								<div className="mt-4">
+									<div className="text-xs text-gray-500 mb-1">Tiến độ làm bài</div>
+									<div className="w-full bg-gray-100 h-3 rounded-full overflow-hidden">
+										<div
+											className="h-3 bg-indigo-600"
+											style={{
+												width: `${Math.round((getAnsweredCount() / assignment.questions.length) * 100)}%`,
+											}}
+										/>
+									</div>
+									<div className="text-xs text-gray-500 mt-1">
+										{Math.round((getAnsweredCount() / assignment.questions.length) * 100)}%
+									</div>
+								</div>
+
+
+								<div className="mt-4 flex flex-col gap-2">
+									{!hasStarted ? (
+										<>
+											<button
+												onClick={handleStartAssignment}
+												className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-medium"
+											>
+												Bắt đầu làm bài
+											</button>
+											<Link
+												to={`/student/courses/${sectionId}/assignments/${assignmentId}/history`}
+												className="w-full px-4 py-2 border border-indigo-600 text-indigo-600 hover:bg-indigo-50 rounded-md font-medium text-center"
+											>
+												📜 Xem lịch sử nộp bài
+											</Link>
+										</>
+									) : (
+										<button
+											disabled
+											className="w-full px-4 py-2 bg-gray-200 text-gray-600 rounded-md font-medium"
+										>
+											Đang làm bài
+										</button>
+									)}
+
+									<button
+										onClick={() => navigator.clipboard.writeText(window.location.href)}
+										className="w-full px-4 py-2 border rounded-md text-sm hover:bg-gray-50"
+									>
+										Sao chép liên kết bài tập
+									</button>
+								</div>
+							</div>
+
+							{/* Tips / Rules */}
+							<div className="bg-white border rounded-lg p-4 text-sm text-gray-700 shadow-sm">
+								<h4 className="font-medium mb-2">Lưu ý</h4>
+								<ul className="list-disc pl-5 space-y-1">
+									<li>Nhớ kiểm tra kỹ trước khi nộp.</li>
+									<li>Nộp bài sẽ kết thúc phiên làm (nếu có thời gian).</li>
+									<li>Nếu có mã lỗi khi test, kiểm tra chi tiết trong phần kết quả.</li>
+								</ul>
+							</div>
+						</div>
+					</aside>
+
+					{/* Right column: Questions */}
+					<main className="md:col-span-2">
+						{error && (
+							<div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+								⚠️ {error}
+							</div>
+						)}
+
+						{/* Questions list */}
+						<div className="space-y-4">
+							{hasStarted ? (
+								assignment.questions.map((question, index) => renderQuestion(question, index))
+							) : (
+								<div className="bg-white border rounded-lg p-8 text-center shadow">
+									<div className="text-3xl mb-3">📝</div>
+									<h3 className="text-xl font-semibold mb-2">Sẵn sàng làm bài?</h3>
+									<p className="text-gray-600 mb-4">
+										Nhấn nút bên trái để bắt đầu. {assignment.timeLimit ? `Bạn sẽ có ${assignment.timeLimit} phút.` : ""}
+									</p>
+									<button
+										onClick={handleStartAssignment}
+										className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-medium"
+									>
+										Bắt đầu làm bài
+									</button>
+								</div>
+							)}
+						</div>
+					</main>
+				</div>
+			</div>
+
+			{/* Fixed submit bar on bottom right when started */}
+			{hasStarted && (
+				<div className="fixed bottom-4 right-4 z-30">
+					<div className="flex items-center gap-3">
+						<div className="bg-white border rounded-lg p-3 shadow flex items-center gap-3">
+							<div className="text-sm text-gray-600">Đã trả lời</div>
+							<div className="text-lg font-bold text-indigo-600">
+								{getAnsweredCount()} / {assignment.questions.length}
+							</div>
 						</div>
 						<button
 							onClick={handleSubmit}
 							disabled={submitting}
-							className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+							className="px-5 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium shadow-lg disabled:bg-gray-400"
 						>
-							{submitting ? "Đang nộp bài..." : "✅ Nộp bài"}
+							{submitting ? "Đang nộp..." : "✅ Nộp bài"}
 						</button>
 					</div>
 				</div>

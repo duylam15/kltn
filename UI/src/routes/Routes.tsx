@@ -61,6 +61,8 @@ import OverviewStudent from "../pages/Student/OverviewStudent";
 import DashboardStudent from "../pages/Student/DashboardStudent";
 import AssignmentsDetailsStudent from "../pages/Student/AssignmentsDetailsStudent";
 import AssignmentsTeacher2 from "../pages/Teacher/AssignmentsTeacher2";
+import VRPage from "../pages/VRPage";
+import AssignmentSubmissionHistory from "../pages/Student/AssignmentSubmissionHistory";
 
 export const router = createBrowserRouter([
   // ========== Root check auth ==========
@@ -92,6 +94,12 @@ export const router = createBrowserRouter([
       <PublicRoute>
         <Login />
       </PublicRoute>
+    ),
+  },
+   {
+    path: "/qr",
+    element: (
+      <VRPage />
     ),
   },
   {
@@ -129,6 +137,7 @@ export const router = createBrowserRouter([
           { path: "roll-call", element: <RollCallStudent /> },
           { path: "assignments", element: <AssignmentsStudent /> },
           { path: "assignments/:assignmentId", element: <AssignmentsDetailsStudent /> },
+          { path: "assignments/:assignmentId/history", element: <AssignmentSubmissionHistory /> },
           { path: "chat", element: <Chat /> },
           { path: "grades", element: <GradesStudent /> },
         ],
