@@ -3,7 +3,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
 import dayjs from "dayjs";
 import "dayjs/locale/vi";
-import { pathToFileURL } from "url";
 import { Link } from "react-router-dom";
 
 dayjs.locale("vi");
@@ -360,7 +359,11 @@ export default function AssignmentsDetailsStudent() {
 
 			if (data.success) {
 				alert("✅ Nộp bài thành công!");
-				navigate(`/student/courses/${sectionId}/assignments`);
+				console.log(data.data);
+				navigate(
+					`/student/courses/${sectionId}/assignments/${assignmentId}/score`,
+					{ state: data.data } // 👈 truyền data qua route
+				);
 			} else {
 				throw new Error(data?.message || "Nộp bài thất bại");
 			}

@@ -83,7 +83,7 @@ export default function MaterialsTeacher() {
 	const { user } = useAuth();
 	const userId = user?.id;
 	const teacherId = user?.teacher?.id;
-	console.log("teacherId", teacherId);		
+	console.log("teacherId", teacherId);
 
 	const [loading, setLoading] = useState(true);
 	const [materials, setMaterials] = useState<Material[]>([]);
@@ -147,57 +147,53 @@ export default function MaterialsTeacher() {
 	};
 
 
- // ====== SAO CHÉP TÀI LIỆU  ======
-async function copyOne(materialId: number, forceDuplicate = false) {
-  await axios.post(`${API_BASE}/materials/copy`, {
-  materialId,
-  userId,  // 👈 thuộc "tủ của tôi"
-});
-}
+	// ====== SAO CHÉP TÀI LIỆU  ======
+	async function copyOne(materialId: number, forceDuplicate = false) {
+		await axios.post(`${API_BASE}/materials/copy`, {
+			materialId,
+			userId,  // 👈 thuộc "tủ của tôi"
+		});
+	}
 
 
+	const handleCopyMaterials = async () => {
+		if (selectedMaterialIds.length === 0) {
+			toast.error("Vui lòng chọn ít nhất 1 tài liệu");
+			return;
+		}
+
+		try {
+			for (const id of selectedMaterialIds) {
+				await copyOne(id);
+			}
+
+			toast.success(`Đã xử lý sao chép ${selectedMaterialIds.length} tài liệu`);
+			setLibraryModalOpen(false);
+			setSelectedMaterialIds([]);
+			setLibraryKeyword("");
+			fetchData(); // refresh "tủ của tôi"
+		} catch (e: any) {
+			if (e?.message !== "cancelled") {
+				toast.error(e?.response?.data?.message || "Không thể sao chép tài liệu");
+			}
+		}
+	};
 
 
+	const fetchAllMaterials = async () => {
+		try {
+			setLoadingLibrary(true);
+			const { data } = await axios.get(`${API_BASE}/materials/public`, {
+				params: { page: 1, size: 50, userId }, // 👈 gửi userId hiện tại
+			});
 
-
-  const handleCopyMaterials = async () => {
-  if (selectedMaterialIds.length === 0) {
-    toast.error("Vui lòng chọn ít nhất 1 tài liệu");
-    return;
-  }
-
-  try {
-    for (const id of selectedMaterialIds) {
-      await copyOne(id);  
-    }
-
-    toast.success(`Đã xử lý sao chép ${selectedMaterialIds.length} tài liệu`);
-    setLibraryModalOpen(false);
-    setSelectedMaterialIds([]);
-    setLibraryKeyword("");
-    fetchData(); // refresh "tủ của tôi"
-  } catch (e: any) {
-    if (e?.message !== "cancelled") {
-      toast.error(e?.response?.data?.message || "Không thể sao chép tài liệu");
-    }
-  }
-};
-
-
-  const fetchAllMaterials = async () => {
-    try {
-      setLoadingLibrary(true);
-      const { data } = await axios.get(`${API_BASE}/materials/public`, {
-  params: { page: 1, size: 50, userId }, // 👈 gửi userId hiện tại
-});
-
-      if (data?.success) setAllMaterials(data.data || []);
-    } catch (err) {
-      toast.error("Không tải được danh sách tài liệu chung");
-    } finally {
-      setLoadingLibrary(false);
-    }
-  };
+			if (data?.success) setAllMaterials(data.data || []);
+		} catch (err) {
+			toast.error("Không tải được danh sách tài liệu chung");
+		} finally {
+			setLoadingLibrary(false);
+		}
+	};
 
 
 	const handleTogglePublic = async (materialId: number, isPublic: boolean) => {
@@ -232,9 +228,9 @@ async function copyOne(materialId: number, forceDuplicate = false) {
 			formData.append("title", values.title);
 			formData.append("description", values.description || "");
 			formData.append("isPublic", values.isPublic ? "true" : "false");
-			formData.append("userId", String(userId));
+			formData.append("uploadedBy", String(userId));
 
-			await axios.post(`${API_BASE}/materials`, formData, {
+			await axios.post(`${API_BASE}/materials/upload`, formData, {
 				headers: { "Content-Type": "multipart/form-data" },
 			});
 
@@ -246,7 +242,7 @@ async function copyOne(materialId: number, forceDuplicate = false) {
 		} catch (err: any) {
 			if (err?.errorFields) return;
 			console.error("Lỗi add:", err);
-			toast.error("Không thể thêm tài liệu");
+			toast.error("Không thể thêm tài lxxiệu");
 		}
 	};
 
@@ -301,7 +297,7 @@ async function copyOne(materialId: number, forceDuplicate = false) {
 		}
 	};
 
-	
+
 
 	const handleView = (material: Material) => {
 		if (material.filePath) {
@@ -869,7 +865,7 @@ async function copyOne(materialId: number, forceDuplicate = false) {
 										)}
 									</div>
 								),
-							},{
+							}, {
 								title: "Người tải lên",
 								key: "uploader",
 								width: 150,

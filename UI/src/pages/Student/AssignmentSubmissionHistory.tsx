@@ -505,7 +505,7 @@ export default function AssignmentSubmissionHistory() {
 				<div className="text-center">
 					<p className="text-red-600 mb-4">{error}</p>
 					<button
-						onClick={() => navigate(`/student/sections/${sectionId}/assignments`)}
+						onClick={() => navigate(`/student/courses/${sectionId}/assignments`)}
 						className="text-indigo-600 hover:underline"
 					>
 						Quay lại danh sách bài tập
@@ -521,7 +521,7 @@ export default function AssignmentSubmissionHistory() {
 			<div className="bg-white border-b sticky top-0 z-20 shadow-sm">
 				<div className="max-w-7xl mx-auto px-4 py-4">
 					<button
-						onClick={() => navigate(`/student/sections/${sectionId}/assignments`)}
+						onClick={() => navigate(`/student/courses/${sectionId}/assignments`)}
 						className="text-indigo-600 hover:underline text-sm mb-2"
 					>
 						← Quay lại danh sách bài tập

@@ -28,6 +28,9 @@ import subjectInstructorRoute from "@/modules/CourseSectionManagement/subjectIns
 import statsRoute from "../modules/stats/stats.admin.routes";
 import catalogRoute from "../modules/catalog/catalog.routes";
 import testCaseRoute from "@/modules/AssignmentAssessment/testCase/testCase.route";
+import submissionAnswerRoutes from "@/modules/AssignmentAssessment/submissionAnswer/submissionAnswer.route";
+import codeSubmissionResultRoutes from "@/modules/AssignmentAssessment/codeSubmissionResult/codeSubmissionResult.route";
+import submissionRoutes from "@/modules/AssignmentAssessment/submission/submission.route";
 
 
 const router = Router();
@@ -62,4 +65,10 @@ router.use("/subject-instructors", subjectInstructorRoute);
 router.use("/stats", statsRoute);
 router.use("/catalog", catalogRoute);
 router.use("/test-cases", testCaseRoute);
+
+router.use("/submission-answers", submissionAnswerRoutes);
+router.use("/submissions", submissionRoutes);
+
+router.use("/code-submission-results", codeSubmissionResultRoutes);
+
 export default router;

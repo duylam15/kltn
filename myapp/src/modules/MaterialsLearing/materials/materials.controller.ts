@@ -72,7 +72,7 @@ export async function uploadMaterial(req: Request, res: Response) {
                 fileSize: BigInt(req.file.size),
                 fileType: req.file.mimetype,
                 uploadedBy: Number(uploadedBy),
-                originalMaterialId: originalMaterialId || undefined, // 👈 giữ nguyên string
+                originalMaterialId: originalMaterialId || Date.now().toString(),
             },
         });
 

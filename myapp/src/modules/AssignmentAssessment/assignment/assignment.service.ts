@@ -11,46 +11,44 @@ export async function submitCodeAnswer(data: {
     codeAnswer: string;
     language: string;
 }) {
-    const submission = await prisma.submission.upsert({
+    // Tìm submission cuối cùng của học sinh cho assignment này
+    const lastSubmission = await prisma.submission.findFirst({
         where: {
-            assignmentId_studentId: {
-                assignmentId: data.assignmentId,
-                studentId: data.studentId,
-            },
+            assignmentId: data.assignmentId,
+            studentId: data.studentId,
         },
-        update: {},
-        create: {
+        orderBy: { attempt: "desc" },
+    });
+
+    const attempt = lastSubmission ? lastSubmission.attempt + 1 : 1;
+
+    // 👇 Luôn tạo mới submission
+    const submission = await prisma.submission.create({
+        data: {
             assignmentId: data.assignmentId,
             studentId: data.studentId,
             startedAt: new Date(),
+            attempt,
         },
     });
 
-    const answer = await prisma.submissionAnswer.upsert({
-        where: {
-            submissionId_questionId: {
-                submissionId: submission.id,
-                questionId: data.questionId,
-            },
-        },
-        update: {
+    // 👇 Luôn tạo mới answer
+    const answer = await prisma.submissionAnswer.create({
+        data: {
+            submissionId: submission.id,
+            questionId: data.questionId,
             codeAnswer: data.codeAnswer,
             language: data.language as any,
             judgeStatus: "queued",
-        },
-        create: {
-            codeAnswer: data.codeAnswer,
-            language: data.language as any,
-            judgeStatus: "queued",
-            submission: { connect: { id: submission.id } },
-            question: { connect: { id: data.questionId } },
         },
     });
 
     // Đẩy job sang worker
     await queue.add("judge", { answerId: answer.id });
-    return answer;
+
+    return { submission, answer };
 }
+
 
 // Folder (project) submission
 export async function submitProjectAnswer(data: {
@@ -59,18 +57,22 @@ export async function submitProjectAnswer(data: {
     questionId: number;
     filePath: string;
 }) {
-    const submission = await prisma.submission.upsert({
+    const lastSubmission = await prisma.submission.findFirst({
         where: {
-            assignmentId_studentId: {
-                assignmentId: data.assignmentId,
-                studentId: data.studentId,
-            },
+            assignmentId: data.assignmentId,
+            studentId: data.studentId,
         },
-        update: {},
-        create: {
+        orderBy: { attempt: "desc" },
+    });
+
+    const attempt = lastSubmission ? lastSubmission.attempt + 1 : 1;
+
+    const submission = await prisma.submission.create({
+        data: {
             assignmentId: data.assignmentId,
             studentId: data.studentId,
             startedAt: new Date(),
+            attempt,
         },
     });
 
@@ -85,8 +87,10 @@ export async function submitProjectAnswer(data: {
     });
 
     await queue.add("judge", { answerId: answer.id });
-    return answer;
+
+    return { submission, answer };
 }
+
 
 export async function getAnswerStatus(answerId: number) {
     return prisma.submissionAnswer.findUnique({
@@ -395,14 +399,14 @@ export async function startAssignment(studentId: number, assignmentId: number) {
         }
 
         // Kiểm tra đã có submission chưa
-        const existingSubmission = await prisma.submission.findUnique({
-            where: {
-                assignmentId_studentId: {
-                    assignmentId,
-                    studentId,
-                },
-            },
-        });
+       const existingSubmission = await prisma.submission.findFirst({
+           where: {
+               assignmentId,
+               studentId,
+           },
+           orderBy: { attempt: "desc" }, // lấy lần nộp mới nhất
+       });
+
 
         if (existingSubmission) {
             // Nếu đã có, trả về submission hiện tại
@@ -485,24 +489,23 @@ export async function submitAssignment(
     answers: any[]
 ) {
     try {
-        // 1. Tìm hoặc tạo submission
-        const submission = await prisma.submission.upsert({
-            where: {
-                assignmentId_studentId: {
-                    assignmentId,
-                    studentId,
-                },
-            },
-            update: {
-                completedAt: new Date(),
-                submittedAt: new Date(),
-            },
-            create: {
+        // 1. Xác định attempt mới
+        const lastSubmission = await prisma.submission.findFirst({
+            where: { assignmentId, studentId },
+            orderBy: { attempt: "desc" },
+        });
+
+        const attempt = lastSubmission ? lastSubmission.attempt + 1 : 1;
+
+        // 2. Tạo submission mới
+        const submission = await prisma.submission.create({
+            data: {
                 assignmentId,
                 studentId,
                 startedAt: new Date(),
                 completedAt: new Date(),
                 submittedAt: new Date(),
+                attempt,
             },
         });
 
@@ -511,20 +514,14 @@ export async function submitAssignment(
         let allAutoGraded = true;
         const answerResults = [];
 
-        // 2. Lưu từng câu trả lời và tính điểm
+        // 3. Lưu từng câu trả lời
         for (const ans of answers) {
-            // Tính điểm cho câu trả lời
             const scoreResult = await calculateAnswerScore(ans);
 
-            // Lưu câu trả lời
-            const savedAnswer = await prisma.submissionAnswer.upsert({
-                where: {
-                    submissionId_questionId: {
-                        submissionId: submission.id,
-                        questionId: ans.questionId,
-                    },
-                },
-                update: {
+            const savedAnswer = await prisma.submissionAnswer.create({
+                data: {
+                    submissionId: submission.id,
+                    questionId: ans.questionId,
                     codeAnswer: ans.codeAnswer || null,
                     language: ans.language
                         ? (ans.language as ProgrammingLanguage)
@@ -536,21 +533,6 @@ export async function submitAssignment(
                     maxScore: scoreResult.maxScore,
                     judgeStatus:
                         ans.codeAnswer && ans.language ? "queued" : "running",
-                },
-                create: {
-                    codeAnswer: ans.codeAnswer || null,
-                    language: ans.language
-                        ? (ans.language as ProgrammingLanguage)
-                        : null,
-                    selectedChoices: ans.selectedChoices
-                        ? { set: ans.selectedChoices }
-                        : { set: [] },
-                    score: scoreResult.score,
-                    maxScore: scoreResult.maxScore,
-                    judgeStatus:
-                        ans.codeAnswer && ans.language ? "queued" : "running",
-                    submission: { connect: { id: submission.id } },
-                    question: { connect: { id: ans.questionId } },
                 },
                 include: {
                     question: {
@@ -571,13 +553,12 @@ export async function submitAssignment(
                 },
             });
 
-            // Đẩy code questions vào queue để judge
+            // Đẩy code vào queue judge
             if (ans.codeAnswer && ans.language) {
                 await queue.add("judge", { answerId: savedAnswer.id });
                 allAutoGraded = false;
             }
 
-            // Nếu là essay, cần chấm thủ công
             if (savedAnswer.question.type === "essay") {
                 allAutoGraded = false;
             }
@@ -605,7 +586,7 @@ export async function submitAssignment(
             });
         }
 
-        // 3. Cập nhật tổng điểm cho submission
+        // 4. Cập nhật điểm tổng cho submission
         const updatedSubmission = await prisma.submission.update({
             where: { id: submission.id },
             data: {
@@ -616,16 +597,7 @@ export async function submitAssignment(
             },
             include: {
                 answers: {
-                    include: {
-                        question: {
-                            select: {
-                                id: true,
-                                type: true,
-                                content: true,
-                                points: true,
-                            },
-                        },
-                    },
+                    include: { question: true },
                 },
                 assignment: {
                     select: {
@@ -639,18 +611,18 @@ export async function submitAssignment(
             },
         });
 
-        // 4. Kiểm tra đạt/không đạt
         const isPassing = updatedSubmission.assignment.passingScore
             ? totalScore >= updatedSubmission.assignment.passingScore
             : true;
 
-        // 5. Trả về kết quả chi tiết
+        // 5. Trả kết quả
         return {
             submission: {
                 id: updatedSubmission.id,
                 assignmentId: updatedSubmission.assignmentId,
                 assignmentTitle: updatedSubmission.assignment.title,
                 studentId: updatedSubmission.studentId,
+                attempt,
                 startedAt: updatedSubmission.startedAt,
                 completedAt: updatedSubmission.completedAt,
                 submittedAt: updatedSubmission.submittedAt,
@@ -690,7 +662,6 @@ export async function submitAssignment(
                         : 0,
                 isPassing,
             },
-            // Chỉ hiển thị đáp án nếu được phép
             showAnswers: updatedSubmission.assignment.showAnswersAfterSubmit,
         };
     } catch (error: any) {
@@ -698,3 +669,4 @@ export async function submitAssignment(
         throw error;
     }
 }
+

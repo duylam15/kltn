@@ -275,41 +275,85 @@ export async function start(req: Request, res: Response) {
 
 export async function recommendPath(req: Request, res: Response) {
     try {
-        const { id } = req.params;
-        const {
-            studentId,
-            score,
-            completionTime,
-            attemptCount,
-            avgScore,
-            attendanceRate,
-            activityCount,
-        } = req.body;
+        const assignmentId = Number(req.params.id);
+        const { studentId, score } = req.body;
 
-        // Gọi AI microservice (FastAPI) với đủ các field
+        if (!studentId || typeof score !== "number") {
+            return res.status(400).json({
+                success: false,
+                message: "Thiếu studentId hoặc score không hợp lệ",
+            });
+        }
+
+        // Lấy các field khác từ DB
+        const [submissions, attendances, grades] = await Promise.all([
+            prisma.submission.findMany({
+                where: { assignmentId, studentId },
+                orderBy: { submittedAt: "desc" },
+            }),
+            prisma.attendance.findMany({
+                where: { studentId },
+            }),
+            prisma.studentGrade.findMany({
+                where: { studentId },
+            }),
+        ]);
+
+        // Tính toán các giá trị
+        const completionTime =
+            submissions.length > 0
+                ? Math.floor(
+                      (submissions[0].completedAt?.getTime() ?? Date.now()) -
+                          (submissions[0].startedAt?.getTime() ?? Date.now())
+                  ) /
+                  1000 /
+                  60 // phút
+                : null;
+
+        const attemptCount = submissions.length;
+
+        const avgScore =
+            submissions.length > 0
+                ? submissions.reduce((sum, s) => sum + (s.score ?? 0), 0) /
+                  submissions.length
+                : null;
+
+        const attendanceRate =
+            attendances.length > 0
+                ? attendances.filter((a) => a.status === "present").length /
+                  attendances.length
+                : null;
+
+        const activityCount = grades.length;
+
+        // Gọi AI service với dữ liệu đầy đủ
         const aiRes = await axios.post("http://localhost:8000/predict", {
-            score,
-            completionTime,
-            attemptCount,
-            avgScore,
-            attendanceRate,
-            activityCount,
+            score: score ?? 0,
+            completionTime: completionTime ?? 0,
+            attemptCount: attemptCount ?? 0,
+            avgScore: avgScore ?? 0,
+            attendanceRate: attendanceRate ?? 0,
+            activityCount: activityCount ?? 0,
         });
 
         return res.json({
             success: true,
-            assignmentId: id,
+            assignmentId,
             studentId,
             ...aiRes.data, // label + suggestions
         });
     } catch (error: any) {
-        console.error("Error calling AI service:", error.message);
+        console.error(
+            "Error calling AI service:",
+            error.response?.data || error.message
+        );
         return res.status(500).json({
             success: false,
             message: "Không thể gợi ý lộ trình học tập",
         });
     }
 }
+
 
 export async function clusterStudents(req: Request, res: Response) {
     try {

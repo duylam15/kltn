@@ -1,24 +1,30 @@
 import multer from "multer";
 import path from "path";
+import fs from "fs-extra";
 
-// Nơi lưu file (uploads/)
+// Đảm bảo thư mục uploads tồn tại
+fs.ensureDirSync("uploads/");
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, "uploads/"); // nhớ tạo sẵn thư mục uploads/ trong dự án
+        cb(null, "uploads/");
     },
     filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
+        cb(
+            null,
+            file.fieldname +
+                "-" +
+                uniqueSuffix +
+                path.extname(file.originalname)
+        );
     },
 });
 
-// Giới hạn & validate loại file
 function fileFilter(req: any, file: Express.Multer.File, cb: any) {
-    // nếu dùng cho bài project code → cho phép .zip
     const allowed = [
         ".zip",
         ".rar",
-        ".tar.gz",
         ".pdf",
         ".doc",
         ".docx",
@@ -27,6 +33,11 @@ function fileFilter(req: any, file: Express.Multer.File, cb: any) {
         ".mp4",
     ];
     const ext = path.extname(file.originalname).toLowerCase();
+    const base = file.originalname.toLowerCase();
+
+    if (ext === ".gz" && base.endsWith(".tar.gz")) {
+        return cb(null, true);
+    }
     if (!allowed.includes(ext)) {
         return cb(new Error("File type not allowed"), false);
     }
@@ -35,9 +46,7 @@ function fileFilter(req: any, file: Express.Multer.File, cb: any) {
 
 const upload = multer({
     storage,
-    limits: {
-        fileSize: 20 * 1024 * 1024, // 20MB
-    },
+    limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
     fileFilter,
 });
 

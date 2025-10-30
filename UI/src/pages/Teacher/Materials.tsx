@@ -31,23 +31,31 @@ import { useAuth } from "../../context/authContext";
 const { Title, Text } = Typography;
 const API_BASE = "http://localhost:4000/api/v1";
 
-type Material = {
-	id: number;
-	materialId: number;
-	title: string;
-	description?: string;
-	fileName?: string;
-	filePath?: string;
-	fileType?: string;
-	fileSize?: number;
-	uploadedBy: number;
-	uploadedAt: string;
+type CourseMaterial = {
+	id: number;              // id trong CourseMaterial
+	materialId: number;      // id tài liệu
 	isOpen: boolean;
-	uploader?: {
-		fullName: string;
-		email: string;
+	assignedAt: string;
+	assignedBy: number;
+	courseSectionId: number;
+	material: {
+		id: number;
+		title: string;
+		description?: string;
+		fileName?: string;
+		filePath?: string;
+		fileType?: string;
+		fileSize?: number;
+		uploadedBy: number;
+		uploadedAt: string;
+		updatedAt: string;
+		isPublic: boolean;
+		category: string;
+		originalMaterialId: string;
+		uploader?: { fullName: string; email: string }; // chỉ có nếu bạn include trong backend
 	};
-};
+}
+
 
 export default function Materials() {
 	const { user } = useAuth();
@@ -55,7 +63,7 @@ export default function Materials() {
 	const sectionId = Number(path.split("/")[3]);
 
 	const [loading, setLoading] = useState(true);
-	const [materials, setMaterials] = useState<Material[]>([]);
+	const [materials, setMaterials] = useState<CourseMaterial[]>([]);
 	const [keyword, setKeyword] = useState("");
 
 	useEffect(() => {
@@ -69,6 +77,7 @@ export default function Materials() {
 
 			if (res.data.success) {
 				setMaterials(res.data.data || []);
+				console.log(materials);	
 			}
 		} catch (err) {
 			console.error("Lỗi khi tải dữ liệu:", err);
@@ -101,25 +110,26 @@ export default function Materials() {
 		}
 	};
 
-	const handleView = (material: Material) => {
-		if (material.filePath) {
-			window.open(`http://localhost:4000/${material.filePath}`, "_blank");
+	const handleView = (record: CourseMaterial) => {
+		if (record.material.filePath) {
+			window.open(`http://localhost:4000/${record.material.filePath}`, "_blank");
 		} else {
 			toast.error("Tài liệu này chưa có file để xem");
 		}
 	};
 
-	const handleDownload = (material: Material) => {
-		if (material.filePath && material.fileName) {
+	const handleDownload = (record: CourseMaterial) => {
+		if (record.material.filePath && record.material.fileName) {
 			const link = document.createElement("a");
-			link.href = `http://localhost:4000/${material.filePath}`;
-			link.download = material.fileName;
+			link.href = `http://localhost:4000/${record.material.filePath}`;
+			link.download = record.material.fileName;
 			link.click();
 			toast.success("Đang tải xuống...");
 		} else {
 			toast.error("Tài liệu này chưa có file để tải");
 		}
 	};
+
 
 	const getFileTypeTag = (fileType: string) => {
 		const type = fileType?.toLowerCase();
@@ -144,19 +154,20 @@ export default function Materials() {
 	const columns = [
 		{
 			title: "Tiêu đề",
-			dataIndex: "title",
+			dataIndex: ["material", "title"], // ✅ nested key
 			key: "title",
 			width: "30%",
-			sorter: (a: Material, b: Material) => a.title.localeCompare(b.title),
-			render: (text: string, record: Material) => (
+			sorter: (a: CourseMaterial, b: CourseMaterial) =>
+				a.material.title.localeCompare(b.material.title),
+			render: (_: any, record: CourseMaterial) => (
 				<div>
 					<div style={{ fontWeight: 600, color: "#1890ff", marginBottom: 4 }}>
 						<FileOutlined style={{ marginRight: 8 }} />
-						{text}
+						{record.material.title}
 					</div>
-					{record.description && (
+					{record.material.description && (
 						<div style={{ fontSize: 12, color: "#666" }}>
-							{record.description}
+							{record.material.description}
 						</div>
 					)}
 				</div>
@@ -166,15 +177,15 @@ export default function Materials() {
 			title: "File",
 			key: "fileInfo",
 			width: "20%",
-			render: (_: any, record: Material) => (
+			render: (_: any, record: CourseMaterial) => (
 				<div>
 					<div style={{ marginBottom: 4 }}>
-						{record.fileName ? (
-							<Tooltip title={record.fileName}>
+						{record.material.fileName ? (
+							<Tooltip title={record.material.fileName}>
 								<span style={{ fontSize: 12, color: "#666" }}>
-									{record.fileName.length > 30
-										? record.fileName.substring(0, 30) + "..."
-										: record.fileName}
+									{record.material.fileName.length > 30
+										? record.material.fileName.substring(0, 30) + "..."
+										: record.material.fileName}
 								</span>
 							</Tooltip>
 						) : (
@@ -182,10 +193,10 @@ export default function Materials() {
 						)}
 					</div>
 					<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-						{getFileTypeTag(record.fileType || "")}
-						{record.fileSize && (
+						{getFileTypeTag(record.material.fileType || "")}
+						{record.material.fileSize && (
 							<Tag color="default" style={{ margin: 0 }}>
-								{formatFileSize(record.fileSize)}
+								{formatFileSize(record.material.fileSize)}
 							</Tag>
 						)}
 					</div>
@@ -196,14 +207,14 @@ export default function Materials() {
 			title: "Người tải lên",
 			key: "uploader",
 			width: "15%",
-			render: (_: any, record: Material) => (
+			render: (_: any, record: CourseMaterial) => (
 				<div>
 					<div style={{ fontWeight: 500 }}>
-						{record.uploader?.fullName || "Không rõ"}
+						{record.material.uploader?.fullName || "Không rõ"}
 					</div>
-					{record.uploader?.email && (
+					{record.material.uploader?.email && (
 						<div style={{ fontSize: 11, color: "#666" }}>
-							{record.uploader.email}
+							{record.material.uploader.email}
 						</div>
 					)}
 				</div>
@@ -211,11 +222,12 @@ export default function Materials() {
 		},
 		{
 			title: "Ngày tải lên",
-			dataIndex: "uploadedAt",
+			dataIndex: ["material", "uploadedAt"],
 			key: "uploadedAt",
 			width: "12%",
-			sorter: (a: Material, b: Material) =>
-				new Date(a.uploadedAt).getTime() - new Date(b.uploadedAt).getTime(),
+			sorter: (a: CourseMaterial, b: CourseMaterial) =>
+				new Date(a.material.uploadedAt).getTime() -
+				new Date(b.material.uploadedAt).getTime(),
 			render: (date: string) => (
 				<div>
 					<div>{dayjs(date).format("DD/MM/YYYY")}</div>
@@ -230,10 +242,18 @@ export default function Materials() {
 			key: "status",
 			width: "13%",
 			align: "center" as const,
-			render: (_: any, record: Material) => (
+			render: (_: any, record: CourseMaterial) => (
 				<Switch
-					checkedChildren={<><CheckCircleOutlined /> Hiển thị</>}
-					unCheckedChildren={<><EyeInvisibleOutlined /> Ẩn</>}
+					checkedChildren={
+						<>
+							<CheckCircleOutlined /> Hiển thị
+						</>
+					}
+					unCheckedChildren={
+						<>
+							<EyeInvisibleOutlined /> Ẩn
+						</>
+					}
 					checked={record.isOpen}
 					onChange={(checked) =>
 						handleToggleVisibility(record.materialId, checked)
@@ -246,14 +266,14 @@ export default function Materials() {
 			key: "actions",
 			width: "10%",
 			align: "center" as const,
-			render: (_: any, record: Material) => (
+			render: (_: any, record: CourseMaterial) => (
 				<div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
 					<Tooltip title="Xem tài liệu">
 						<Button
 							size="small"
 							icon={<EyeOutlined />}
 							onClick={() => handleView(record)}
-							disabled={!record.filePath}
+							disabled={!record.material.filePath}
 						/>
 					</Tooltip>
 					<Tooltip title="Tải xuống">
@@ -261,7 +281,7 @@ export default function Materials() {
 							size="small"
 							icon={<DownloadOutlined />}
 							onClick={() => handleDownload(record)}
-							disabled={!record.filePath}
+							disabled={!record.material.filePath}
 						/>
 					</Tooltip>
 				</div>
@@ -272,10 +292,10 @@ export default function Materials() {
 	const filteredMaterials = materials.filter(
 		(m) =>
 			!keyword ||
-			m.title.toLowerCase().includes(keyword.toLowerCase()) ||
-			m.description?.toLowerCase().includes(keyword.toLowerCase()) ||
-			m.fileName?.toLowerCase().includes(keyword.toLowerCase()) ||
-			m.uploader?.fullName?.toLowerCase().includes(keyword.toLowerCase())
+			m.material.title.toLowerCase().includes(keyword.toLowerCase()) ||
+			m.material.description?.toLowerCase().includes(keyword.toLowerCase()) ||
+			m.material.fileName?.toLowerCase().includes(keyword.toLowerCase()) ||
+			m.material.uploader?.fullName?.toLowerCase().includes(keyword.toLowerCase())
 	);
 
 	const getStatistics = () => {
@@ -283,7 +303,7 @@ export default function Materials() {
 		const visibleMaterials = materials.filter((m) => m.isOpen).length;
 		const hiddenMaterials = totalMaterials - visibleMaterials;
 		const totalFileSize = materials.reduce(
-			(sum, m) => sum + (m.fileSize || 0),
+			(sum, m) => sum + (m.material.fileSize || 0),
 			0
 		);
 
@@ -294,6 +314,7 @@ export default function Materials() {
 			totalFileSize,
 		};
 	};
+
 
 	const stats = getStatistics();
 
@@ -389,7 +410,7 @@ export default function Materials() {
 					</Text>
 				</Card>
 			) : (
-				<Table<Material>
+				<Table<CourseMaterial>
 					dataSource={filteredMaterials}
 					columns={columns}
 					rowKey="id"
