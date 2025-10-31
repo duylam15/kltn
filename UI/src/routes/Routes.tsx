@@ -13,6 +13,12 @@ import Register from "../pages/Auth/Register";
 
 // Student pages
 import Dashboard from "../pages/Teacher/Dashboard";
+import StudentDashboard from "../pages/Student/StudentDashboard";
+import Courses from "../pages/Student/Courses";
+import ClassList from "../pages/Student/ClassList";
+import MaterialsStudent from "../pages/Student/MaterialsStudent";
+import AttendanceStudent from "../pages/Student/AttendanceStudent";
+import CourseDetail from "../pages/Student/CourseDetail";
 
 // Teacher pages
 import Overview from "../pages/Teacher/Overview";
@@ -126,12 +132,17 @@ export const router = createBrowserRouter([
     ),
     errorElement: <Error />,
     children: [
-      { index: true, element: <DashboardStudent /> },
+      { index: true, element: <StudentDashboard /> },
+      { path: "courses", element: <Courses /> },
       {
         path: "courses/:courseId",
         element: <CourseLayoutStudent />,
         children: [
           { index: true, loader: () => redirect("overview") },
+          { path: "overview", element: <Overview /> },
+          { path: "friend", element: <ClassList /> },
+          { path: "materials", element: <MaterialsStudent /> },
+          { path: "roll-call", element: < AttendanceStudent />},
           { path: "overview", element: <OverviewStudent /> },
           { path: "groups", element: <Group /> },
           { path: "materials", element: <MaterialStudent /> },
@@ -157,6 +168,8 @@ export const router = createBrowserRouter([
     ),
     errorElement: <Error />,
     children: [
+      { index: true, element: <DashboardStudent /> },
+      { path: "courses", element: <Courses /> },
       { index: true, element: <Dashboard /> },
       {
         path: "courses/:courseId",
@@ -225,17 +238,11 @@ export const router = createBrowserRouter([
       },
       {
         path: "students",
-        lazy: async () => {
-          const { default: Students } = await import("../pages/Admin/Students");
-          const { default: RequirePermission } = await import("./RequirePermission");
-          return {
-            element: (
-              <RequirePermission permission="*">
-                <Students />
-              </RequirePermission>
-            ),
-          };
-        },
+        element: (
+          <RequirePermission permission="user:view">
+            <Students />
+          </RequirePermission>
+        )
       },
 
 

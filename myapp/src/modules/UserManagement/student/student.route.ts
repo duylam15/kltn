@@ -29,4 +29,6 @@ router.get("/:id", validate(studentIdParamSchema), controller.detail);
 router.patch("/:id", validate(updateStudentSchema), controller.update);
 router.delete("/:id", validate(studentIdParamSchema), controller.remove);
 
+// Lấy thông tin sinh viên theo userId
+router.get("/user/:userId", controller.getStudentByUserId);
 export default router;

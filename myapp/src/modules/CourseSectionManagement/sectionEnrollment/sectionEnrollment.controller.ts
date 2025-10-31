@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import * as sectionEnrollmentService from "./sectionEnrollment.service";
+import { prisma } from "../../prisma/client";
 import catchAsync from "@/utils/catchAsync";
 import { sendResponse } from "@/utils/response";
 import ApiError from "@/utils/ApiError";
@@ -164,3 +165,33 @@ export const getSectionsByStudent = catchAsync(async (req, res, next) => {
     sendResponse(res, { success: true, data });
 });
 
+// Lấy tất cả lớp mà sinh viên (đang đăng nhập)
+export const listCoursesByUserId = catchAsync(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const userId = Number(req.params.userId);
+    if (isNaN(userId)) return next(new ApiError(400, "Invalid userId"));
+
+    // 🔸 Tìm student theo userId
+    const student = await prisma.student.findUnique({
+      where: { userId },
+    });
+
+    if (!student) return next(new ApiError(404, "Student not found for this user"));
+
+    // 🔸 Tìm tất cả lớp mà student đã ghi danh
+    const enrollments = await prisma.sectionEnrollment.findMany({
+      where: { studentId: student.id },
+      orderBy: { enrolledAt: "desc" }, // hoặc createdAt nếu không có enrolledAt
+      include: {
+        section: {
+          include: {
+            subject: true,
+            term: true,
+          },
+        },
+      },
+    });
+
+    sendResponse(res, { success: true, data: enrollments });
+  }
+);

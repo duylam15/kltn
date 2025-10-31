@@ -16,12 +16,12 @@ router.get("/class/:courseSectionId", controller.getMaterialsByClass);
 // Cập nhật mở/đóng tài liệu cho lớp
 router.patch("/visibility", controller.updateMaterialVisibility);
 router.get("/teacher/:teacherId", controller.getMaterialsByTeacher);
-
+// chỉ lấy tài liệu mở cho SV theo section
+router.get("/class/:sectionId/open", controller.listOpenBySection);
+// CRUD tài liệu
 // Lấy danh sách tài liệu công khai(share gv#)
 router.get("/public", controller.listPublicMaterialsGrouped);
 router.post("/copy", controller.copyMaterial);
-
-// CRUD tài liệu
 router.get("/", controller.getMaterials);
 router.get("/:id", controller.getMaterial);
 router.post("/", controller.createMaterial);

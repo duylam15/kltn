@@ -20,6 +20,9 @@ router.get("/sessions/:id", attendanceController.getSession);
 // Xóa session
 router.delete("/sessions/:id", attendanceController.deleteSession);
 
+// Danh sách điểm danh của 1 session
+router.get("/section/:sectionId/student/:studentId", attendanceController.listBySection);
+
 // 🔥 GV chỉnh điểm danh
 router.put(
     "/attendances/:attendanceId/adjust",
