@@ -13,6 +13,12 @@ import Register from "../pages/Auth/Register";
 
 // Student pages
 import Dashboard from "../pages/Teacher/Dashboard";
+import StudentDashboard from "../pages/Student/StudentDashboard";
+import Courses from "../pages/Student/Courses";
+import ClassList from "../pages/Student/ClassList";
+import MaterialsStudent from "../pages/Student/MaterialsStudent";
+import AttendanceStudent from "../pages/Student/AttendanceStudent";
+import CourseDetail from "../pages/Student/CourseDetail";
 
 // Teacher pages
 import Overview from "../pages/Teacher/Overview";
@@ -126,7 +132,7 @@ export const router = createBrowserRouter([
     ),
     errorElement: <Error />,
     children: [
-      { index: true, element: <DashboardStudent /> },
+      { index: true, element: <StudentDashboard /> },
       {
         path: "courses/:courseId",
         element: <CourseLayoutStudent />,
