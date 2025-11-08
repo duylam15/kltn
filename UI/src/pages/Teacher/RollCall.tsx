@@ -10,7 +10,7 @@ import {
   Tooltip,
   Form,
   DatePicker,
-  Space,
+  Space,InputNumber
 } from "antd";
 import {
   ReloadOutlined,
@@ -102,15 +102,14 @@ export default function RollCall() {
   const [createForm] = Form.useForm<Session>();
 
   useEffect(() => {
-  if (!listModalOpen || !selectedSession?.id) return;
-  const t = setInterval(() => fetchStudents(selectedSession.id!), 5000);
-  return () => clearInterval(t);
-}, [listModalOpen, selectedSession?.id]);
+    if (!listModalOpen || !selectedSession?.id) return;
+    const t = setInterval(() => fetchStudents(selectedSession.id!), 5000);
+    return () => clearInterval(t);
+  }, [listModalOpen, selectedSession?.id]);
 
   useEffect(() => {
     fetchSessions();
   }, [sectionId]);
-  
 
   const fetchSessions = async () => {
     try {
@@ -131,36 +130,33 @@ export default function RollCall() {
     }
   };
 
-  // THAY HẾT HÀM fetchStudents CŨ:
-const fetchStudents = async (sessionId: number) => {
-  try {
-    // lấy enrollments và session (attendances) MỚI NHẤT song song
-    const [enrollRes, sessionRes] = await Promise.all([
-      axios.get(`${API_BASE}/sections-enrollments/section/${sectionId}/students`),
-      axios.get(`${API_BASE}/attendance/sessions/${sessionId}`),
-    ]);
+  const fetchStudents = async (sessionId: number) => {
+    try {
+      const [enrollRes, sessionRes] = await Promise.all([
+        axios.get(`${API_BASE}/sections-enrollments/section/${sectionId}/students`),
+        axios.get(`${API_BASE}/attendance/sessions/${sessionId}`),
+      ]);
 
-    if (!enrollRes.data?.success) throw new Error("Enrollments failed");
-    if (!sessionRes.data?.success) throw new Error("Session failed");
+      if (!enrollRes.data?.success) throw new Error("Enrollments failed");
+      if (!sessionRes.data?.success) throw new Error("Session failed");
 
-    const freshSession: Session = sessionRes.data.data; // có attendances mới
-    setSelectedSession(freshSession);
+      const freshSession: Session = sessionRes.data.data;
+      setSelectedSession(freshSession);
 
-    const attendances: Attendance[] = freshSession.attendances ?? [];
-    const merged = enrollRes.data.data.map((enrollment: any) => {
-      const attendance = attendances.find(
-        (a: Attendance) => a.studentId === enrollment.studentId
-      );
-      return { ...enrollment, attendance };
-    });
+      const attendances: Attendance[] = freshSession.attendances ?? [];
+      const merged = enrollRes.data.data.map((enrollment: any) => {
+        const attendance = attendances.find(
+          (a: Attendance) => a.studentId === enrollment.studentId
+        );
+        return { ...enrollment, attendance };
+      });
 
-    setStudentList(merged);
-  } catch (err) {
-    console.error(err);
-    toast.error("Không tải được danh sách sinh viên/điểm danh mới");
-  }
-};
-
+      setStudentList(merged);
+    } catch (err) {
+      console.error(err);
+      toast.error("Không tải được danh sách sinh viên/điểm danh mới");
+    }
+  };
 
   const createSession = async () => {
     try {
@@ -175,6 +171,18 @@ const fetchStudents = async (sessionId: number) => {
 
       const latitude = pos.coords.latitude;
       const longitude = pos.coords.longitude;
+      const accuracy = pos.coords.accuracy ?? null;
+
+      // chặn nếu độ chính xác của GV quá kém
+      const MAX_ALLOWED_ACCURACY_FOR_TEACHER = 100; // mét
+      if (accuracy == null || accuracy > MAX_ALLOWED_ACCURACY_FOR_TEACHER) {
+        toast.error(
+          `Không thể lấy vị trí chính xác (Sai số: ${
+            Math.round(accuracy || 0)
+          }m > ${MAX_ALLOWED_ACCURACY_FOR_TEACHER}m). Bật Wi-Fi/High Accuracy và thử lại.`
+        );
+        return;
+      }
 
       const payload = {
         sectionId,
@@ -182,7 +190,8 @@ const fetchStudents = async (sessionId: number) => {
         expiresAt: values.expiresAt ? values.expiresAt.toString() : null,
         latitude,
         longitude,
-        radius: 100,
+        radius: Number(values.radius) || 100, // lấy từ form
+        teacherAccuracy: accuracy, // gửi để server kiểm
       };
 
       const res = await axios.post(`${API_BASE}/attendance/sessions`, payload);
@@ -196,7 +205,7 @@ const fetchStudents = async (sessionId: number) => {
     } catch (err: any) {
       if (err?.errorFields) return;
       console.error(err);
-      toast.error("Tạo phiên điểm danh thất bại hoặc không lấy được vị trí");
+      toast.error(err?.response?.data?.message || "Tạo phiên thất bại");
     }
   };
 
@@ -207,6 +216,7 @@ const fetchStudents = async (sessionId: number) => {
       const values = await form.validateFields();
       const payload = {
         ...values,
+         radius: Number(values.radius),
         expiresAt: values.expiresAt ? dayjs(values.expiresAt).toISOString() : null,
       };
 
@@ -235,9 +245,7 @@ const fetchStudents = async (sessionId: number) => {
 
   const handleManualCheckIn = async (studentCode: string) => {
     if (!selectedSession) return;
-    
 
-    // Đã có bản ghi thì không gọi nữa
     const has = studentList.find(
       (x) => x.student.studentCode === studentCode
     )?.attendance;
@@ -259,7 +267,6 @@ const fetchStudents = async (sessionId: number) => {
         toast.success(res.data.message || "Điểm danh thủ công thành công");
         const newAttendance = res.data.data;
 
-        // 1) Cập nhật bảng modal
         setStudentList((prev) =>
           prev.map((enr) =>
             enr.student.studentCode === studentCode
@@ -268,9 +275,8 @@ const fetchStudents = async (sessionId: number) => {
           )
         );
 
-        // 2) Đồng bộ session.attendances để đếm đúng
         setSelectedSession((prev) => {
-          if (!prev) return prev;
+          if (!prev) return prev as any;
           const updated = { ...prev };
           if (!updated.attendances) updated.attendances = [];
           const idx = updated.attendances.findIndex(
@@ -307,7 +313,6 @@ const fetchStudents = async (sessionId: number) => {
       if (res.data.success) {
         toast.success("Đã hủy điểm danh");
 
-        // 1) Xóa attendance ở bảng modal
         setStudentList((prev) =>
           prev.map((enr) =>
             enr.student.studentCode === studentCode
@@ -316,14 +321,13 @@ const fetchStudents = async (sessionId: number) => {
           )
         );
 
-        // 2) Đồng bộ session.attendances để đếm đúng
         const removedStudentId: number | undefined =
           res.data.studentId ??
           studentList.find((s) => s.student.studentCode === studentCode)?.student
             .id;
 
         setSelectedSession((prev) => {
-          if (!prev) return prev;
+          if (!prev) return prev as any;
           const updated = { ...prev };
           if (updated.attendances && removedStudentId) {
             updated.attendances = updated.attendances.filter(
@@ -372,6 +376,14 @@ const fetchStudents = async (sessionId: number) => {
       render: (text: string) => text || <Tag color="default">N/A</Tag>,
     },
     {
+      title: "Bán kính (m)",
+      dataIndex: "radius",
+      key: "radius",
+      width: 120,
+      align: "center" as const,
+      render: (v: number) => v ?? 50,
+    },
+    {
       title: "Link điểm danh",
       key: "attendanceLink",
       render: (_: any, record: Session) => (
@@ -401,8 +413,7 @@ const fetchStudents = async (sessionId: number) => {
       dataIndex: "createdAt",
       key: "createdAt",
       sorter: (a: Session, b: Session) =>
-        new Date(a.createdAt).getTime() -
-        new Date(b.createdAt).getTime(),
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
       render: (v: string) => dayjs(v).format("DD/MM/YYYY HH:mm"),
     },
     {
@@ -410,16 +421,18 @@ const fetchStudents = async (sessionId: number) => {
       dataIndex: "expiresAt",
       key: "expiresAt",
       sorter: (a: Session, b: Session) => {
-        const aTime = a.expiresAt
-          ? typeof a.expiresAt === "string"
+        const aTime =
+          typeof a.expiresAt === "string"
             ? a.expiresAt
-            : a.expiresAt.toISOString()
-          : "0";
-        const bTime = b.expiresAt
-          ? typeof b.expiresAt === "string"
+            : a.expiresAt
+            ? a.expiresAt.toISOString()
+            : "0";
+        const bTime =
+          typeof b.expiresAt === "string"
             ? b.expiresAt
-            : b.expiresAt.toISOString()
-          : "0";
+            : b.expiresAt
+            ? b.expiresAt.toISOString()
+            : "0";
         return new Date(aTime).getTime() - new Date(bTime).getTime();
       },
       render: (v: string) => (v ? dayjs(v).format("DD/MM/YYYY HH:mm") : "—"),
@@ -458,6 +471,7 @@ const fetchStudents = async (sessionId: number) => {
                 setEditing(record);
                 form.setFieldsValue({
                   ...record,
+                  radius: record.radius ?? 100,
                   expiresAt: record.expiresAt ? dayjs(record.expiresAt) : null,
                 });
                 setEditModalOpen(true);
@@ -882,7 +896,7 @@ const fetchStudents = async (sessionId: number) => {
         pagination={{ pageSize: 10 }}
       />
 
-      {/* Modal xem QR Code */}
+      {/* Modal QR */}
       <Modal
         title="QR Code điểm danh"
         open={qrModalOpen}
@@ -892,16 +906,12 @@ const fetchStudents = async (sessionId: number) => {
         centered
       >
         {selectedSession && (
-          <div
-            style={{ textAlign: "center" }}
-            className="flex justify-center items-center flex-col"
-          >
+          <div style={{ textAlign: "center" }}>
             <img
               src={`http://localhost:4000${selectedSession.qrCodeUrl}`}
               alt="QR Code"
               width={400}
               height={400}
-              className="flex justify-center items-center"
             />
           </div>
         )}
@@ -931,24 +941,38 @@ const fetchStudents = async (sessionId: number) => {
 
       {/* Modal sửa phiên */}
       <Modal
-        title="Chỉnh sửa phiên điểm danh"
-        open={editModalOpen}
-        onCancel={() => setEditModalOpen(false)}
-        onOk={updateSession}
-        okText="Lưu"
-      >
-        <Form form={form} layout="vertical">
-          <Form.Item label="Mã phiên" name="sessionCode">
-            <Input disabled />
-          </Form.Item>
-          <Form.Item label="Tên phiên" name="name">
-            <Input placeholder="VD: Buổi học CSDL ngày 25/09" />
-          </Form.Item>
-          <Form.Item label="Ngày hết hạn" name="expiresAt">
-            <DatePicker showTime style={{ width: "100%" }} />
-          </Form.Item>
-        </Form>
-      </Modal>
+  title="Chỉnh sửa phiên điểm danh"
+  open={editModalOpen}
+  onCancel={() => setEditModalOpen(false)}
+  onOk={updateSession}
+  okText="Lưu"
+>
+  <Form form={form} layout="vertical">
+    <Form.Item label="Mã phiên" name="sessionCode">
+      <Input disabled />
+    </Form.Item>
+
+    <Form.Item label="Tên phiên" name="name">
+      <Input placeholder="VD: Buổi học CSDL ngày 25/09" />
+    </Form.Item>
+
+    <Form.Item
+      label="Bán kính cho phép (m)"
+      name="radius"
+      rules={[
+        { required: true, message: "Vui lòng nhập bán kính" },
+        { type: "number", transform: v => Number(v), min: 20, max: 500, message: "20–500 m" },
+      ]}
+    >
+      <InputNumber style={{ width: "100%" }} min={20} max={500} placeholder="VD: 100" />
+    </Form.Item>
+
+    <Form.Item label="Ngày hết hạn" name="expiresAt">
+      <DatePicker showTime style={{ width: "100%" }} />
+    </Form.Item>
+  </Form>
+</Modal>
+
 
       {/* Modal tạo phiên */}
       <Modal
@@ -958,7 +982,7 @@ const fetchStudents = async (sessionId: number) => {
         onOk={createSession}
         okText="Tạo mới"
       >
-        <Form form={createForm} layout="vertical">
+        <Form form={createForm} layout="vertical" initialValues={{ radius: 100 }}>
           <Form.Item
             label="Tên phiên điểm danh"
             name="name"
@@ -966,12 +990,24 @@ const fetchStudents = async (sessionId: number) => {
           >
             <Input placeholder="VD: Buổi học CSDL ngày 25/09" />
           </Form.Item>
+
           <Form.Item
             label="Ngày hết hạn"
             name="expiresAt"
             rules={[{ required: true, message: "Vui lòng nhập ngày hết hạn" }]}
           >
             <DatePicker showTime style={{ width: "100%" }} />
+          </Form.Item>
+
+          <Form.Item
+            label="Bán kính cho phép (m)"
+            name="radius"
+            rules={[
+              { required: true, message: "Vui lòng nhập bán kính" },
+              { type: "number", transform: v => Number(v), min: 20, max: 500, message: "20–500 m" }
+            ]}
+          >
+            <Input type="number" placeholder="VD: 100" />
           </Form.Item>
         </Form>
       </Modal>

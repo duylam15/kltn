@@ -1,11 +1,12 @@
+// src/pages/AdminStats.tsx
 import { useEffect, useMemo, useState } from "react";
 import {
   Card, Tabs, Form, Select, DatePicker, Button, Space, Row, Col,
-  Statistic, Table, Tag, Divider, message, Segmented, Empty, Spin
+  Statistic, Table, Tag, Divider, message, Segmented, Empty, Spin, InputNumber, Tooltip
 } from "antd";
 import {
   BarChartOutlined, LineChartOutlined, ClockCircleOutlined,
-  PieChartOutlined, ReloadOutlined
+  PieChartOutlined, ReloadOutlined, DownloadOutlined, InfoCircleOutlined
 } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import axios from "axios";
@@ -15,6 +16,7 @@ import {
   Legend, LineChart, Line, AreaChart, Area
 } from "recharts";
 import { PrettyTooltip } from "../../components/PrettyTooltip";
+import { exportToXlsx } from "../../utils/xlsx-export";
 
 /* === Types & API === */
 type CatalogTerm = { id:number; code:string; name:string; startDate:string; endDate:string };
@@ -28,23 +30,14 @@ type AttendanceItem = { sectionId:number; present:number; late:number; excused:n
 
 const API_BASE = "http://localhost:4000/api/v1";
 
-/* === CSS Glassmorphism & Neumorphism === */
-const glassStyle = {
+/* === CSS Glassmorphism === */
+const glassStyle: React.CSSProperties = {
   background: "rgba(255, 255, 255, 0.75)",
   backdropFilter: "blur(12px)",
   WebkitBackdropFilter: "blur(12px)",
   border: "1px solid rgba(255, 255, 255, 0.3)",
   boxShadow: "0 8px 32px rgba(0, 0, 0, 0.07), inset 0 0 0 0.5px rgba(255, 255, 255, 0.2)",
-  borderRadius: "16px",
-};
-
-const darkGlassStyle = {
-  background: "rgba(15, 15, 30, 0.7)",
-  backdropFilter: "blur(12px)",
-  WebkitBackdropFilter: "blur(12px)",
-  border: "1px solid rgba(255, 255, 255, 0.1)",
-  boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
-  borderRadius: "16px",
+  borderRadius: 16,
 };
 
 const kpiIconStyle = (color1: string, color2: string) => ({
@@ -58,6 +51,13 @@ const kpiIconStyle = (color1: string, color2: string) => ({
   color: "white",
   fontSize: 20,
 });
+
+/* === Sort helpers === */
+type Order = "ascend" | "descend";
+const cmpStr = (a?: string, b?: string, ord: Order="ascend") =>
+  (a||"").localeCompare(b||"") * (ord==="ascend" ? 1 : -1);
+const cmpNum = (a?: number, b?: number, ord: Order="ascend") =>
+  ((a ?? -Infinity) - (b ?? -Infinity)) * (ord==="ascend" ? 1 : -1);
 
 /* === useCatalog === */
 function useCatalog() {
@@ -93,6 +93,7 @@ function useCatalog() {
   return { loading, terms, subjects, teachers, sections, teacherById, subjectById, termById, reload };
 }
 
+/* === Section option renderer === */
 function SectionOption({ s, subjectById, termById, teacherById }: {
   s: CatalogSection;
   subjectById: Map<number, CatalogSubject>;
@@ -102,7 +103,6 @@ function SectionOption({ s, subjectById, termById, teacherById }: {
   const subject = subjectById.get(s.subjectId);
   const term = termById.get(s.termId);
   const tNames = s.teacherIds.map(id => teacherById.get(id)?.fullName).filter(Boolean).join(", ");
-
   return (
     <div className="flex flex-col">
       <div><b>{s.sectionName}</b> <Tag color="blue" style={{ marginLeft: 6, borderRadius: 8 }}>{s.sectionCode}</Tag></div>
@@ -115,7 +115,7 @@ function SectionOption({ s, subjectById, termById, teacherById }: {
 
 /* === MAIN PAGE === */
 export default function AdminStats() {
-  const { loading: catLoading, sections, subjects, teacherById, subjectById, termById, reload } = useCatalog();
+  const { loading: catLoading, sections, subjects, teacherById, subjectById, termById } = useCatalog();
   const [activeKey, setActiveKey] = useState("grades");
 
   return (
@@ -137,10 +137,14 @@ export default function AdminStats() {
           onChange={setActiveKey}
           tabBarStyle={{ marginBottom: 0 }}
           items={[
-            { key: "grades", label: <Space><LineChartOutlined />Điểm trung bình</Space>, children: <GradesTab {...{ sections, subjects, subjectById, termById, teacherById, catalogLoading: catLoading }} /> },
-            { key: "buckets", label: <Space><PieChartOutlined />Phân bố điểm</Space>, children: <BucketsTab {...{ sections, subjects, catalogLoading: catLoading }} /> },
-            { key: "attendance", label: <Space><ClockCircleOutlined />Chuyên cần</Space>, children: <AttendanceTab {...{ sections, subjects, catalogLoading: catLoading }} /> },
-            { key: "dept", label: <Space><BarChartOutlined />Tổng quan Khoa</Space>, children: <DepartmentTab {...{ sections, subjects, subjectById, termById, catalogLoading: catLoading }} /> },
+            { key: "grades", label: <Space><LineChartOutlined />Điểm trung bình</Space>, children:
+              <GradesTab {...{ sections, subjects, subjectById, termById, teacherById, catalogLoading: catLoading }} /> },
+            { key: "buckets", label: <Space><PieChartOutlined />Phân bố điểm</Space>, children:
+              <BucketsTab {...{ sections, subjects, catalogLoading: catLoading }} /> },
+            { key: "attendance", label: <Space><ClockCircleOutlined />Chuyên cần</Space>, children:
+              <AttendanceTab {...{ sections, subjects, catalogLoading: catLoading }} /> },
+            { key: "dept", label: <Space><BarChartOutlined />Tổng quan Khoa</Space>, children:
+              <DepartmentTab {...{ sections, subjects, subjectById, termById, catalogLoading: catLoading }} /> },
           ]}
         />
       </Space>
@@ -148,7 +152,9 @@ export default function AdminStats() {
   );
 }
 
-/* === GradesTab === */
+/* ========================================
+   GRADES TAB – Lọc điểm + Xuất Excel + Sort
+======================================== */
 function GradesTab({ sections, subjects, subjectById, termById, teacherById, catalogLoading }: any) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -156,6 +162,13 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
   const [mode, setMode] = useState<"section" | "subject">("section");
   const [sectionIds, setSectionIds] = useState<number[]>([]);
   const [subjectIds, setSubjectIds] = useState<number[]>([]);
+  const [minScore, setMinScore] = useState<number | undefined>();
+  const [maxScore, setMaxScore] = useState<number | undefined>();
+
+  // sort for chart
+  const [chartSort, setChartSort] = useState<"name_az"|"avg_asc"|"avg_desc">("name_az");
+  // sorted table for export
+  const [sortedTable, setSortedTable] = useState<any[]>([]);
 
   useEffect(() => {
     form.setFieldsValue({ ids: mode === "section" ? sectionIds : subjectIds });
@@ -194,6 +207,9 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
       if (mode === "section") params.sectionIds = ids.join(",");
       else params.subjectIds = ids.join(",");
 
+      if (minScore != null) params.minTotal = minScore;
+      if (maxScore != null) params.maxTotal = maxScore;
+
       const { data } = await axios.get(`${API_BASE}/stats/grades`, { params });
       setItems(data.items || []);
     } catch (e:any) {
@@ -203,46 +219,99 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
     }
   };
 
-  const dataSource = useMemo(() => {
-    const secLabel = (id: number) => {
-      const s = sections.find((x: any) => x.id === id);
-      if (!s) return String(id);
-      const subj = subjectById.get(s.subjectId);
-      const term = termById.get(s.termId);
-      const tNames = s.teacherIds.map((tid: number) => teacherById.get(tid)?.fullName).filter(Boolean).join(", ");
-      return `${s.sectionName} · ${subj?.subjectCode ?? ""} · ${term?.code ?? ""}${tNames ? " · " + tNames : ""}`;
-    };
+  const secLabel = (id: number) => {
+    const s = sections.find((x: any) => x.id === id);
+    if (!s) return String(id);
+    const subj = subjectById.get(s.subjectId);
+    const term = termById.get(s.termId);
+    const tNames = s.teacherIds.map((tid: number) => teacherById.get(tid)?.fullName).filter(Boolean).join(", ");
+    return `${s.sectionName} · ${subj?.subjectCode ?? ""} · ${term?.code ?? ""}${tNames ? " · " + tNames : ""}`;
+  };
 
-    return items.map(r => ({
-      ...r,
-      key: `${r.sectionId}-${r.studentId}`,
-      sectionLabel: mode === "section" ? secLabel(r.sectionId) : `${subjectById.get(sections.find((x: any) => x.id === r.sectionId)?.subjectId || 0)?.subjectCode} – ${subjectById.get(sections.find((x: any) => x.id === r.sectionId)?.subjectId || 0)?.subjectName}`,
-    }));
+  const dataSource = useMemo(() => {
+    const rows = items.map(r => {
+      const s = sections.find((x: any) => x.id === r.sectionId);
+      const subjCode = subjectById.get(s?.subjectId || 0)?.subjectCode;
+      const subjName = subjectById.get(s?.subjectId || 0)?.subjectName;
+      return {
+        ...r,
+        key: `${r.sectionId}-${r.studentId}`,
+        sectionLabel: mode === "section" ? secLabel(r.sectionId) : `${subjCode} – ${subjName}`,
+      };
+    });
+    return rows;
   }, [items, sections, subjectById, termById, teacherById, mode]);
 
+  // keep sorted table in sync initially
+  useEffect(()=>{ setSortedTable(dataSource); }, [dataSource]);
+
   const chartData = useMemo(() => {
-    return Array.from(groupedBySection.entries()).map(([secId, list]) => {
+    const arr = Array.from(groupedBySection.entries()).map(([secId, list]) => {
       const st = statsBySection[secId];
       const s = sections.find((x: any) => x.id === secId);
-      const label = mode === "section" ? (s?.sectionName || String(secId)) : (subjectById.get(s?.subjectId || 0)?.subjectCode || "Unknown");
+      const label = mode === "section"
+        ? (s?.sectionName || String(secId))
+        : (subjectById.get(s?.subjectId || 0)?.subjectCode || "Unknown");
       return { name: label, avg: st?.avg || 0 };
-    }).sort((a, b) => a.name.localeCompare(b.name));
-  }, [groupedBySection, statsBySection, sections, subjectById, mode]);
+    });
+
+    if (chartSort === "name_az") return arr.sort((a,b)=>a.name.localeCompare(b.name));
+    if (chartSort === "avg_asc") return arr.sort((a,b)=>a.avg-b.avg);
+    return arr.sort((a,b)=>b.avg-a.avg);
+  }, [groupedBySection, statsBySection, sections, subjectById, mode, chartSort]);
 
   const values = items.map(i => i.total10 ?? 0);
   const avg = values.length ? +(values.reduce((a,b)=>a+b,0)/values.length).toFixed(2) : 0;
   const pass = values.filter(v=>v>=5).length;
   const excellent = values.filter(v=>v>=8).length;
 
+  const gradeColumns: ColumnsType<any> = [
+    { title: "Mã SV", dataIndex: "studentCode", width: 110,
+      sorter: (a,b)=>cmpStr(a.studentCode,b.studentCode), },
+    { title: "Họ tên", dataIndex: "studentName",
+      sorter: (a,b)=>cmpStr(a.studentName,b.studentName), },
+    { title: mode === "section" ? "Lớp" : "Môn", dataIndex: "sectionLabel",
+      sorter: (a,b)=>cmpStr(a.sectionLabel,b.sectionLabel), },
+    { title: "Điểm TB", dataIndex: "total10", align: "right",
+      sorter: (a,b)=>cmpNum(a.total10,b.total10),
+      render: (v:number) => <Tag color={v>=8?"green":v>=6.5?"geekblue":v>=5?"gold":"red"} style={{ borderRadius: 8 }}>{v.toFixed(2)}</Tag> },
+  ];
+
+  const onGradeTableChange = (_p:any,_f:any,sorter:any) => {
+    if (!sorter || !sorter.field) { setSortedTable([...dataSource]); return; }
+    const { field, order } = sorter as { field:string; order:Order };
+    const arr = [...dataSource];
+    const sortNum = (k:string)=>arr.sort((a,b)=>cmpNum(a[k],b[k],order));
+    const sortStr = (k:string)=>arr.sort((a,b)=>cmpStr(a[k],b[k],order));
+
+    if (field === "total10") sortNum("total10");
+    else if (field === "studentCode") sortStr("studentCode");
+    else if (field === "studentName") sortStr("studentName");
+    else if (field === "sectionLabel") sortStr("sectionLabel");
+    setSortedTable(arr);
+  };
+
+  const onExport = () => {
+    const rows = (sortedTable.length ? sortedTable : dataSource).map(r => ({
+      "Mã SV": r.studentCode,
+      "Họ tên": r.studentName,
+      [mode === "section" ? "Lớp" : "Môn"]: r.sectionLabel,
+      "Điểm (thang 10)": Number(r.total10).toFixed(2),
+    }));
+    exportToXlsx("grades.xlsx", "Grades", rows);
+  };
+
   return (
     <Space direction="vertical" size={20} style={{ width: "100%" }}>
       {/* Filter */}
-      <Card style={glassStyle} className="sticky top-0 z-10" bodyStyle={{ padding: "16px" }}>
+      <Card style={glassStyle} className="sticky top-0 z-10" bodyStyle={{ padding: 16 }}>
         <Form form={form} layout="inline" onFinish={onFetch}>
           <Space wrap>
             <Form.Item label="Chế độ">
-              <Segmented value={mode} onChange={v => setMode(v as any)} options={[{ label: "Theo lớp", value: "section" }, { label: "Theo môn", value: "subject" }]} />
+              <Segmented value={mode} onChange={v => setMode(v as any)}
+                options={[{ label: "Theo lớp", value: "section" }, { label: "Theo môn", value: "subject" }]} />
             </Form.Item>
+
             <Form.Item name="ids" style={{ minWidth: 300 }}>
               <Select
                 mode="multiple"
@@ -255,7 +324,34 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
                 onChange={(vals: number[]) => mode === "section" ? setSectionIds(vals) : setSubjectIds(vals)}
               />
             </Form.Item>
+
+            {/* Lọc điểm */}
+            <Form.Item label="Điểm min">
+              <InputNumber min={0} max={10} step={0.5} value={minScore} onChange={setMinScore} style={{ width: 100 }} />
+            </Form.Item>
+            <Form.Item label="Điểm max">
+              <InputNumber min={0} max={10} step={0.5} value={maxScore} onChange={setMaxScore} style={{ width: 100 }} />
+            </Form.Item>
+            <Tooltip title="Thang 10; để trống = bỏ qua lọc">
+              <InfoCircleOutlined style={{ color: "#999" }} />
+            </Tooltip>
+
+            {/* Sort biểu đồ */}
+            <Form.Item label="Sắp xếp biểu đồ">
+              <Select
+                value={chartSort}
+                onChange={setChartSort}
+                style={{ width: 170 }}
+                options={[
+                  { value: "name_az", label: "Tên A→Z" },
+                  { value: "avg_asc", label: "Điểm ↑" },
+                  { value: "avg_desc", label: "Điểm ↓" },
+                ]}
+              />
+            </Form.Item>
+
             <Button type="primary" htmlType="submit" icon={<LineChartOutlined />} loading={loading}>Xem</Button>
+            <Button onClick={onExport} icon={<DownloadOutlined />}>Xuất Excel</Button>
           </Space>
         </Form>
       </Card>
@@ -266,14 +362,14 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
           { label: "Số bản ghi", value: items.length, icon: "📄", color: ["#10b981", "#34d399"] },
           { label: "Điểm TB", value: avg, icon: <AreaChart data={values.map((v,i)=>({i,v}))} style={{ height: 36 }} />, color: ["#6c5ce7", "#8e79ff"] },
           { label: "≥ 5 điểm", value: pass, icon: "✅", color: ["#f59e0b", "#fbbf24"] },
-          { label: "≥ 8 điểm", value: excellent, icon: "Trophy", color: ["#ec4899", "#f43f5e"] },
+          { label: "≥ 8 điểm", value: excellent, icon: "🏆", color: ["#ec4899", "#f43f5e"] },
         ].map((kpi, i) => (
           <Col xs={12} md={6} key={i}>
             <Card style={glassStyle} className="hover:scale-105 transition-transform">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm opacity-70">{kpi.label}</div>
-                  <div className="text-2xl font-bold">{typeof kpi.value === "number" ? kpi.value : kpi.value}</div>
+                  <div className="text-2xl font-bold">{kpi.value}</div>
                 </div>
                 <div style={kpiIconStyle(kpi.color[0], kpi.color[1])}>{kpi.icon}</div>
               </div>
@@ -302,12 +398,13 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
         </Col>
         <Col xs={24} lg={14}>
           <Card style={glassStyle} title="Danh sách sinh viên">
-            <Table size="small" dataSource={dataSource} columns={[
-              { title: "Mã SV", dataIndex: "studentCode", width: 100 },
-              { title: "Họ tên", dataIndex: "studentName" },
-              { title: mode === "section" ? "Lớp" : "Môn", dataIndex: "sectionLabel" },
-              { title: "Điểm", dataIndex: "total10", align: "right", render: v => <Tag color={v>=8?"green":v>=6.5?"geekblue":v>=5?"gold":"red"} style={{ borderRadius: 8 }}>{v.toFixed(2)}</Tag> },
-            ]} pagination={{ pageSize: 8 }} />
+            <Table
+              size="small"
+              dataSource={dataSource}
+              columns={gradeColumns}
+              onChange={onGradeTableChange}
+              pagination={{ pageSize: 8 }}
+            />
           </Card>
         </Col>
       </Row>
@@ -315,9 +412,8 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
   );
 }
 
-
 /* ========================================
-   BUCKETS TAB – PHÂN BỐ ĐIỂM
+   BUCKETS TAB – Xuất Excel
 ======================================== */
 function BucketsTab({
   sections,
@@ -362,12 +458,21 @@ function BucketsTab({
     }
   };
 
-  const chartData = useMemo(() => data?.series?.map((s, i) => ({ idx: i + 1, label: s.label, count: s.count })) || [], [data]);
+  const chartData = useMemo(
+    () => data?.series?.map((s, i) => ({ idx: i + 1, label: s.label, count: s.count })) || [],
+    [data]
+  );
+
+  const onExport = () => {
+    if (!data) return message.info("Chưa có dữ liệu để xuất");
+    const rows = data.series.map(s => ({ "Nhóm điểm": s.label, "Số SV": s.count }));
+    exportToXlsx("grade-buckets.xlsx", "Buckets", rows);
+  };
 
   return (
     <Space direction="vertical" size={20} style={{ width: "100%" }}>
       {/* Filter */}
-      <Card style={glassStyle} className="sticky top-0 z-10" bodyStyle={{ padding: "16px" }}>
+      <Card style={glassStyle} className="sticky top-0 z-10" bodyStyle={{ padding: 16 }}>
         <Form form={form} layout="inline" onFinish={onFetch} initialValues={{ mode: "section" }}>
           <Space wrap>
             <Form.Item name="mode" label="Chế độ">
@@ -386,36 +491,12 @@ function BucketsTab({
               />
             </Form.Item>
             <Button type="primary" htmlType="submit" icon={<PieChartOutlined />} loading={loading}>Xem phân bố</Button>
+            <Button onClick={onExport} icon={<DownloadOutlined />}>Xuất Excel</Button>
           </Space>
         </Form>
       </Card>
 
-      {/* KPI + Chart */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} md={8}>
-          <Card style={glassStyle} className="hover:scale-105 transition-transform">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm opacity-70">Tổng bài ghi nhận</div>
-                <div className="text-2xl font-bold">{data?.total || 0}</div>
-              </div>
-              <div style={kpiIconStyle("#8b5cf6", "#a78bfa")}>📊</div>
-            </div>
-          </Card>
-        </Col>
-        <Col xs={24} md={8}>
-          <Card style={glassStyle} className="hover:scale-105 transition-transform">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm opacity-70">Số nhóm điểm</div>
-                <div className="text-2xl font-bold">{data?.series?.length || 0}</div>
-              </div>
-              <div style={kpiIconStyle("#ec4899", "#f43f5e")}>🎯</div>
-            </div>
-          </Card>
-        </Col>
-      </Row>
-
+      {/* Chart */}
       <Row gutter={[16, 16]}>
         <Col xs={24}>
           <Card style={glassStyle} title="Phân bố điểm theo nhóm" bodyStyle={{ height: 380, padding: 0 }}>
@@ -441,7 +522,7 @@ function BucketsTab({
 }
 
 /* ========================================
-   ATTENDANCE TAB – CHUYÊN CẦN
+   ATTENDANCE TAB – Xuất Excel + Sort
 ======================================== */
 function AttendanceTab({
   sections,
@@ -458,6 +539,9 @@ function AttendanceTab({
   const [sectionIds, setSectionIds] = useState<number[]>([]);
   const [subjectIds, setSubjectIds] = useState<number[]>([]);
   const mode = Form.useWatch("mode", form) || "section";
+
+  // sorted table for export
+  const [sortedAttend, setSortedAttend] = useState<any[]>([]);
 
   const handleIdsChange = (vals: number[]) => {
     if (mode === "section") setSectionIds(vals);
@@ -478,8 +562,8 @@ function AttendanceTab({
       setLoading(true);
       const params: any = { mode, ids: ids.join(",") };
       if (range) {
-        params.from = range[0].startOf("day").toISOString();
-        params.to = range[1].endOf("day").toISOString();
+        params.from = (range[0] as any).startOf("day").toISOString();
+        params.to   = (range[1] as any).endOf("day").toISOString();
       }
       const { data } = await axios.get(`${API_BASE}/stats/attendance`, { params });
       setItems(data.items || []);
@@ -498,12 +582,59 @@ function AttendanceTab({
     }));
   }, [items, sections]);
 
+  // keep sorted for export
+  useEffect(()=>{ setSortedAttend(dataSource); }, [dataSource]);
+
   const chartData = useMemo(() => dataSource.map(it => ({ section: it.sectionLabel, rate: it.rate })), [dataSource]);
+
+  const attendColumns: ColumnsType<any> = [
+    { title: mode==="section"?"Lớp":"Môn", dataIndex:"sectionLabel",
+      sorter:(a,b)=>cmpStr(a.sectionLabel,b.sectionLabel) },
+    { title:"Có mặt", dataIndex:"present", align:"right", width:90,
+      sorter:(a,b)=>cmpNum(a.present,b.present) },
+    { title:"Trễ", dataIndex:"late", align:"right", width:70,
+      sorter:(a,b)=>cmpNum(a.late,b.late) },
+    { title:"Có phép", dataIndex:"excused", align:"right", width:90,
+      sorter:(a,b)=>cmpNum(a.excused,b.excused) },
+    { title:"Vắng", dataIndex:"absent", align:"right", width:70,
+      sorter:(a,b)=>cmpNum(a.absent,b.absent) },
+    { title:"Tổng", dataIndex:"total", align:"right", width:80,
+      sorter:(a,b)=>cmpNum(a.total,b.total) },
+    { title:"Tỷ lệ", dataIndex:"rate", align:"right",
+      sorter:(a,b)=>cmpNum(a.rate,b.rate),
+      render:(v:number)=>(<Tag color={v>=90?"green":v>=80?"geekblue":v>=65?"gold":"red"} style={{borderRadius:8}}>
+        {v.toFixed(1)}%
+      </Tag>) },
+  ];
+
+  const onAttendTableChange = (_p:any,_f:any,sorter:any)=>{
+    if (!sorter || !sorter.field) { setSortedAttend([...dataSource]); return; }
+    const { field, order } = sorter as { field:string; order:Order };
+    const arr = [...dataSource];
+    const numeric = ["present","late","excused","absent","total","rate"];
+    if (numeric.includes(field)) arr.sort((a,b)=>cmpNum(a[field],b[field],order));
+    else if (field==="sectionLabel") arr.sort((a,b)=>cmpStr(a.sectionLabel,b.sectionLabel,order));
+    setSortedAttend(arr);
+  };
+
+  const onExport = () => {
+    const list = sortedAttend.length ? sortedAttend : dataSource;
+    const rows = list.map(r => ({
+      "Lớp/Môn": r.sectionLabel,
+      "Có mặt": r.present,
+      "Trễ": r.late,
+      "Có phép": r.excused,
+      "Vắng": r.absent,
+      "Tổng": r.total,
+      "Tỷ lệ (%)": r.rate,
+    }));
+    exportToXlsx("attendance.xlsx", "Attendance", rows);
+  };
 
   return (
     <Space direction="vertical" size={20} style={{ width: "100%" }}>
       {/* Filter */}
-      <Card style={glassStyle} className="sticky top-0 z-10" bodyStyle={{ padding: "16px" }}>
+      <Card style={glassStyle} className="sticky top-0 z-10" bodyStyle={{ padding: 16 }}>
         <Form form={form} layout="inline" onFinish={onFetch} initialValues={{ mode: "section" }}>
           <Space wrap>
             <Form.Item name="mode" label="Chế độ">
@@ -525,6 +656,7 @@ function AttendanceTab({
               <DatePicker.RangePicker allowEmpty={[true, true]} />
             </Form.Item>
             <Button type="primary" htmlType="submit" icon={<ClockCircleOutlined />} loading={loading}>Xem</Button>
+            <Button onClick={onExport} icon={<DownloadOutlined />}>Xuất Excel</Button>
           </Space>
         </Form>
       </Card>
@@ -536,9 +668,6 @@ function AttendanceTab({
             {loading ? <Spin /> : chartData.length ? (
               <ResponsiveContainer>
                 <LineChart data={chartData}>
-                  <defs>
-                    <linearGradient id="lineG"><stop offset="0%" stopColor="#10b981" stopOpacity={0.9}/><stop offset="100%" stopColor="#10b981" stopOpacity={0.3}/></linearGradient>
-                  </defs>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="section" angle={-15} textAnchor="end" height={70} />
                   <YAxis domain={[0, 100]} />
@@ -554,15 +683,8 @@ function AttendanceTab({
             <Table
               size="small"
               dataSource={dataSource}
-              columns={[
-                { title: mode === "section" ? "Lớp" : "Môn", dataIndex: "sectionLabel" },
-                { title: "Có mặt", dataIndex: "present", align: "right", width: 90 },
-                { title: "Trễ", dataIndex: "late", align: "right", width: 70 },
-                { title: "Có phép", dataIndex: "excused", align: "right", width: 90 },
-                { title: "Vắng", dataIndex: "absent", align: "right", width: 70 },
-                { title: "Tổng", dataIndex: "total", align: "right", width: 80 },
-                { title: "Tỷ lệ", dataIndex: "rate", align: "right", render: v => <Tag color={v>=90?"green":v>=80?"geekblue":v>=65?"gold":"red"} style={{ borderRadius: 8 }}>{v.toFixed(1)}%</Tag> },
-              ]}
+              columns={attendColumns}
+              onChange={onAttendTableChange}
               pagination={{ pageSize: 8 }}
             />
           </Card>
@@ -573,7 +695,7 @@ function AttendanceTab({
 }
 
 /* ========================================
-   DEPARTMENT TAB – TỔNG QUAN KHOA
+   DEPARTMENT TAB – Top/Bottom linh động + Lọc điểm + Xuất Excel + Sort
 ======================================== */
 function DepartmentTab({
   sections,
@@ -592,6 +714,12 @@ function DepartmentTab({
   const [loading, setLoading] = useState(false);
   const [grades, setGrades] = useState<TotalRow[]>([]);
   const [attendance, setAttendance] = useState<AttendanceItem[]>([]);
+  const [minScore, setMinScore] = useState<number | undefined>();
+  const [maxScore, setMaxScore] = useState<number | undefined>();
+  const [topN, setTopN] = useState<number>(5);
+  const [bottomN, setBottomN] = useState<number>(5);
+
+  const [deptChartSort, setDeptChartSort] = useState<"name_az"|"avg_asc"|"avg_desc">("avg_desc");
 
   const filteredSections = useMemo(() => {
     const termId: number | undefined = form.getFieldValue("termId");
@@ -608,8 +736,12 @@ function DepartmentTab({
 
     try {
       setLoading(true);
+      const gradeParams: any = { sectionIds: sectionIds.join(",") };
+      if (minScore != null) gradeParams.minTotal = minScore;
+      if (maxScore != null) gradeParams.maxTotal = maxScore;
+
       const [gRes, aRes] = await Promise.all([
-        axios.get(`${API_BASE}/stats/grades`, { params: { sectionIds: sectionIds.join(",") } }),
+        axios.get(`${API_BASE}/stats/grades`, { params: gradeParams }),
         axios.get(`${API_BASE}/stats/attendance`, { params: { mode: "section", ids: sectionIds.join(",") } }),
       ]);
       setGrades(gRes.data.items || []);
@@ -621,6 +753,7 @@ function DepartmentTab({
     }
   };
 
+  // Build summary theo môn
   const subjectSummary = useMemo(() => {
     const map = new Map<number, TotalRow[]>();
     filteredSections.forEach(s => {
@@ -640,9 +773,11 @@ function DepartmentTab({
     }).sort((a,b) => String(a.subject).localeCompare(String(b.subject)));
   }, [grades, filteredSections, subjectById]);
 
-  const top5 = [...subjectSummary].sort((a,b)=>b.avg-a.avg).slice(0,5);
-  const bottom5 = [...subjectSummary].sort((a,b)=>a.avg-b.avg).slice(0,5);
+  // Top/Bottom linh động
+  const topList = useMemo(() => [...subjectSummary].sort((a,b)=>b.avg-a.avg).slice(0, Math.max(0, topN)), [subjectSummary, topN]);
+  const bottomList = useMemo(() => [...subjectSummary].sort((a,b)=>a.avg-b.avg).slice(0, Math.max(0, bottomN)), [subjectSummary, bottomN]);
 
+  // Attendance theo môn để vẽ line
   const attendanceChart = useMemo(() => {
     const agg = new Map<number, { present:number; late:number; total:number }>();
     attendance.forEach(it => {
@@ -655,32 +790,74 @@ function DepartmentTab({
     return Array.from(agg.entries()).map(([subId, v]) => {
       const subj = subjectById.get(subId);
       const rate = v.total ? +(((v.present + v.late) / v.total) * 100).toFixed(1) : 0;
-      return { subject: subj?.subjectCode || subId, rate };
+      return { subject: subj?.subjectCode || String(subId), rate };
     }).sort((a,b) => a.subject.localeCompare(b.subject));
   }, [attendance, filteredSections, subjectById]);
 
-  const exportCSV = () => {
-    const lines = [
-      "Môn học,Số SV,Điểm TB,>=5,>=8",
-      ...subjectSummary.map(r => `${r.subject.replace(/,/g," ")},${r.n},${r.avg},${r.pass},${r.excellent}`)
-    ];
-    const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "khoa-summary.csv"; a.click();
-    URL.revokeObjectURL(url);
+  const subjectSummarySortedForChart = useMemo(()=>{
+    const arr = [...subjectSummary];
+    if (deptChartSort === "name_az") return arr.sort((a,b)=>String(a.subject).localeCompare(String(b.subject)));
+    if (deptChartSort === "avg_asc") return arr.sort((a,b)=>a.avg-b.avg);
+    return arr.sort((a,b)=>b.avg-a.avg);
+  }, [subjectSummary, deptChartSort]);
+
+  // Exports
+  const exportSummary = () => {
+    const rows = subjectSummary.map(r => ({
+      "Môn học": r.subject.replace(/,/g," "),
+      "Số SV": r.n,
+      "Điểm TB": r.avg,
+      "≥5": r.pass,
+      "≥8": r.excellent,
+    }));
+    exportToXlsx("department-summary.xlsx", "Summary", rows);
+  };
+  const exportTop = () => {
+    const rows = topList.map(r => ({ "Môn học": r.subject, "Điểm TB": r.avg, "Số SV": r.n }));
+    exportToXlsx("top-subjects.xlsx", "Top", rows);
+  };
+  const exportBottom = () => {
+    const rows = bottomList.map(r => ({ "Môn học": r.subject, "Điểm TB": r.avg, "Số SV": r.n }));
+    exportToXlsx("bottom-subjects.xlsx", "Bottom", rows);
   };
 
   return (
     <Space direction="vertical" size={20} style={{ width: "100%" }}>
       {/* Filter */}
-      <Card style={glassStyle} className="sticky top-0 z-10" bodyStyle={{ padding: "16px" }}>
+      <Card style={glassStyle} className="sticky top-0 z-10" bodyStyle={{ padding: 16 }}>
         <Form form={form} layout="inline" onFinish={onFetch}>
           <Space wrap>
             <Form.Item name="termId" label="Học kỳ">
-              <Select allowClear loading={catalogLoading} options={[...termById.values()].map(t => ({ value: t.id, label: `${t.code} – ${t.name}` }))} style={{ width: 200 }} />
+              <Select allowClear loading={catalogLoading}
+                options={[...termById.values()].map(t => ({ value: t.id, label: `${t.code} – ${t.name}` }))}
+                style={{ width: 220 }} />
             </Form.Item>
+
+            {/* Lọc điểm */}
+            <Form.Item label="Điểm min">
+              <InputNumber min={0} max={10} step={0.5} value={minScore} onChange={setMinScore} style={{ width: 100 }} />
+            </Form.Item>
+            <Form.Item label="Điểm max">
+              <InputNumber min={0} max={10} step={0.5} value={maxScore} onChange={setMaxScore} style={{ width: 100 }} />
+            </Form.Item>
+            <Tooltip title="Thang 10; để trống = bỏ qua lọc"><InfoCircleOutlined style={{ color: "#999" }} /></Tooltip>
+
+            {/* sort biểu đồ */}
+            <Form.Item label="Sắp xếp biểu đồ">
+              <Select
+                value={deptChartSort}
+                onChange={setDeptChartSort}
+                style={{ width: 170 }}
+                options={[
+                  { value: "name_az", label: "Tên A→Z" },
+                  { value: "avg_asc", label: "Điểm ↑" },
+                  { value: "avg_desc", label: "Điểm ↓" },
+                ]}
+              />
+            </Form.Item>
+
             <Button type="primary" htmlType="submit" icon={<BarChartOutlined />} loading={loading}>Tổng hợp</Button>
-            <Button onClick={exportCSV} icon={<ReloadOutlined />}>Xuất CSV</Button>
+            <Button onClick={exportSummary} icon={<DownloadOutlined />}>Xuất Excel</Button>
           </Space>
         </Form>
       </Card>
@@ -689,23 +866,25 @@ function DepartmentTab({
       <Row gutter={[16,16]}>
         <Col xs={24} md={8}>
           <Card style={glassStyle} className="hover:scale-105 transition-transform">
-            <Statistic title="Số môn" value={subjectSummary.length} prefix={<div style={kpiIconStyle("#6366f1", "#4f46e5")}>📚</div>} />
+            <Statistic title="Số môn" value={subjectSummary.length}
+              prefix={<div style={kpiIconStyle("#6366f1", "#4f46e5")}>📚</div>} />
           </Card>
         </Col>
         <Col xs={24} md={8}>
           <Card style={glassStyle} className="hover:scale-105 transition-transform">
-            <Statistic title="Số lớp" value={filteredSections.length} prefix={<div style={kpiIconStyle("#ec4899", "#f43f5e")}>🏫</div>} />
+            <Statistic title="Số lớp" value={filteredSections.length}
+              prefix={<div style={kpiIconStyle("#ec4899", "#f43f5e")}>🏫</div>} />
           </Card>
         </Col>
       </Row>
 
-      {/* Chart */}
+      {/* Chart: Avg by Subject */}
       <Row gutter={[16,16]}>
         <Col xs={24}>
           <Card style={glassStyle} title="Điểm trung bình theo môn" bodyStyle={{ height: 380, padding: 0 }}>
             {loading ? <Spin /> : subjectSummary.length ? (
               <ResponsiveContainer>
-                <BarChart data={subjectSummary}>
+                <BarChart data={subjectSummarySortedForChart}>
                   <defs><linearGradient id="barG3"><stop offset="0%" stopColor="#6366f1" stopOpacity={0.9}/><stop offset="100%" stopColor="#6366f1" stopOpacity={0.3}/></linearGradient></defs>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="subject" angle={-15} textAnchor="end" height={80} />
@@ -722,18 +901,34 @@ function DepartmentTab({
       {/* Top/Bottom + Attendance */}
       <Row gutter={[16,16]}>
         <Col xs={24} lg={12}>
-          <Card style={glassStyle} title="Top 5 môn điểm cao">
-            <Table size="small" dataSource={top5} columns={[
-              { title: "Môn", dataIndex: "subject" },
-              { title: "Điểm TB", dataIndex: "avg", render: v => <Tag color="green" style={{ borderRadius: 8 }}>{v}</Tag> },
+          <Card style={glassStyle} title={
+            <div className="flex items-center gap-3">
+              <span>Top môn điểm cao</span>
+              <InputNumber min={0} max={50} value={topN} onChange={(v)=>setTopN((v||0))} style={{ width: 90 }} />
+              <Button size="small" onClick={exportTop} icon={<DownloadOutlined />}>Xuất Excel</Button>
+            </div>
+          }>
+            <Table size="small" dataSource={topList} columns={[
+              { title: "Môn", dataIndex: "subject", sorter:(a:any,b:any)=>cmpStr(a.subject,b.subject) },
+              { title: "Điểm TB", dataIndex: "avg", sorter:(a:any,b:any)=>cmpNum(a.avg,b.avg),
+                render: (v:number) => <Tag color="green" style={{ borderRadius: 8 }}>{v}</Tag> },
+              { title: "Số SV", dataIndex: "n", width: 90, align: "right", sorter:(a:any,b:any)=>cmpNum(a.n,b.n) },
             ]} pagination={false} />
           </Card>
         </Col>
         <Col xs={24} lg={12}>
-          <Card style={glassStyle} title="Bottom 5 môn điểm thấp">
-            <Table size="small" dataSource={bottom5} columns={[
-              { title: "Môn", dataIndex: "subject" },
-              { title: "Điểm TB", dataIndex: "avg", render: v => <Tag color="red" style={{ borderRadius: 8 }}>{v}</Tag> },
+          <Card style={glassStyle} title={
+            <div className="flex items-center gap-3">
+              <span>Bottom môn điểm thấp</span>
+              <InputNumber min={0} max={50} value={bottomN} onChange={(v)=>setBottomN((v||0))} style={{ width: 90 }} />
+              <Button size="small" onClick={exportBottom} icon={<DownloadOutlined />}>Xuất Excel</Button>
+            </div>
+          }>
+            <Table size="small" dataSource={bottomList} columns={[
+              { title: "Môn", dataIndex: "subject", sorter:(a:any,b:any)=>cmpStr(a.subject,b.subject) },
+              { title: "Điểm TB", dataIndex: "avg", sorter:(a:any,b:any)=>cmpNum(a.avg,b.avg),
+                render: (v:number) => <Tag color="red" style={{ borderRadius: 8 }}>{v}</Tag> },
+              { title: "Số SV", dataIndex: "n", width: 90, align: "right", sorter:(a:any,b:any)=>cmpNum(a.n,b.n) },
             ]} pagination={false} />
           </Card>
         </Col>

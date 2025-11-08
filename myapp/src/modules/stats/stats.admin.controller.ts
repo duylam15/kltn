@@ -1,3 +1,4 @@
+
 import { Request, Response, NextFunction } from "express";
 import {
   computeTotalsBySections,
@@ -5,6 +6,7 @@ import {
   computeBucketSeries,
   resolveSectionIds,
   getAttendanceAgg,
+  computeCumulative10BySections
 } from "../stats/stats.admin.service";
 import { prisma } from "../../prisma/client";
 
@@ -13,51 +15,74 @@ import { prisma } from "../../prisma/client";
  * FE dùng cho tab "Điểm trung bình" (GradesTab)
  *
  * Query:
- *    sectionIds=1,2,3
- *
- * Response:
- *    { count, items: TotalRow[] }
+ *    sectionIds=1,2,3  |  subjectIds=4,5
+ *    minTotal?=5       |  maxTotal?=8.5
  */
-// src/modules/stats/stats.admin.controller.ts
+
+
 export async function getSectionGrades(req: Request, res: Response, next: NextFunction) {
   try {
+    // --- Parse ids ---
     let sectionIds: number[] = [];
 
-    // Ưu tiên sectionIds
-    if (req.query.sectionIds) {
-      sectionIds = String(req.query.sectionIds || "")
-        .split(",")
-        .map(s => Number(s.trim()))
-        .filter(Boolean);
-    }
-    // Nếu không có → dùng subjectIds
-    else if (req.query.subjectIds) {
-      const subjectIds = String(req.query.subjectIds || "")
-        .split(",")
-        .map(s => Number(s.trim()))
-        .filter(Boolean);
+    // Ưu tiên cặp sectionIds/subjectIds để tương thích FE cũ
+    const sectionIdsRaw = req.query.sectionIds ? String(req.query.sectionIds) : "";
+    const subjectIdsRaw = req.query.subjectIds ? String(req.query.subjectIds) : "";
 
+    if (sectionIdsRaw) {
+      sectionIds = sectionIdsRaw.split(",").map(s => Number(s.trim())).filter(Boolean);
+    } else if (subjectIdsRaw) {
+      const subjectIds = subjectIdsRaw.split(",").map(s => Number(s.trim())).filter(Boolean);
       if (!subjectIds.length) {
         return res.status(400).json({ message: "subjectIds required" });
       }
-
-      const sections = await prisma.courseSection.findMany({
+      // map subject -> section
+      const secs = await prisma.courseSection.findMany({
         where: { subjectId: { in: subjectIds } },
         select: { id: true },
       });
-      sectionIds = sections.map(s => s.id);
+      sectionIds = secs.map(s => s.id);
+    } else {
+      // Cho phép kiểu gọi đồng nhất với các API khác: mode + ids
+      const mode = String(req.query.mode || "").toLowerCase(); // "section" | "subject" | ...
+      const ids = String(req.query.ids || "")
+        .split(",")
+        .map(s => Number(s.trim()))
+        .filter(Boolean);
+
+      if (!ids.length) {
+        return res.status(400).json({ message: "sectionIds or subjectIds or (mode+ids) required" });
+      }
+      sectionIds = await resolveSectionIds(mode || "section", ids);
     }
 
     if (!sectionIds.length) {
-      return res.status(400).json({ message: "sectionIds or subjectIds required" });
+      return res.status(400).json({ message: "No sections resolved from input" });
     }
 
+    // --- Parse bộ lọc ---
+    const minTotal = req.query.minTotal != null ? Number(req.query.minTotal) : undefined;
+    const maxTotal = req.query.maxTotal != null ? Number(req.query.maxTotal) : undefined;
+
+    // --- Lấy dữ liệu & lọc ---
     const rows = await computeTotalsBySections(sectionIds);
-    res.json({ count: rows.length, items: rows });
+
+    const filtered = rows.filter(r => {
+      const v = Number(r.total10 ?? 0);
+      if (Number.isNaN(v)) return false;
+      if (minTotal != null && v < minTotal) return false;
+      if (maxTotal != null && v > maxTotal) return false;
+      return true;
+    });
+
+    return res.json({ count: filtered.length, items: filtered });
   } catch (err) {
     next(err);
   }
 }
+
+/* ... các API getCumulative10, getGradeBuckets, getAttendance giữ nguyên như bạn đã có ... */
+
 
 /**
  * 2) Phân bố điểm (BucketsTab)
@@ -65,17 +90,7 @@ export async function getSectionGrades(req: Request, res: Response, next: NextFu
  * Query:
  *    mode = "section" | "subject"
  *    ids  = "1,2,3"
- *    scheme = "0-10" | "5-6.5" | ... (FE gửi gì cũng được, ta map về default)
- *
- * Response:
- *    {
- *      scheme: "vn10",
- *      buckets: [{label,from,to}, ...],
- *      total: <tổng số SV>,
- *      series: [{label,count}, ...]
- *    }
- *
- * FE dùng để vẽ cột “<5 / 5-6.5 / …”
+ *    scheme = "vn10" | ...
  */
 export async function getGradeBuckets(req: Request, res: Response, next: NextFunction) {
   try {
@@ -126,8 +141,6 @@ export async function getGradeBuckets(req: Request, res: Response, next: NextFun
  *
  * Response:
  *   { items: [ { sectionId, present, late, excused, absent, total, rate }, ... ] }
- *
- * FE sẽ map sang bảng + line chart.
  */
 export async function getAttendance(req: Request, res: Response, next: NextFunction) {
   try {
@@ -151,7 +164,7 @@ export async function getAttendance(req: Request, res: Response, next: NextFunct
 
     const items = await getAttendanceAgg(sectionIds, from, to);
 
-    // 🔢 Chuẩn hóa theo yêu cầu: total & rate
+    // 🔢 Chuẩn hóa total & rate
     const normalized = items.map(row => {
       const present = row.present ?? 0;
       const late    = row.late ?? 0;
@@ -161,7 +174,7 @@ export async function getAttendance(req: Request, res: Response, next: NextFunct
       const total = present + late + excused + absent;
       const attended = present + late + excused;
 
-      // rate tính theo %, làm tròn 2 chữ số thập phân
+      // rate (%) làm tròn 2 chữ số
       const rate = total > 0 ? Number(((attended / total) * 100).toFixed(2)) : 0;
 
       return { ...row, total, rate };
@@ -173,5 +186,35 @@ export async function getAttendance(req: Request, res: Response, next: NextFunct
   }
 }
 
+// NEW
+export async function getCumulative10(req: Request, res: Response, next: NextFunction) {
+  try {
+    const mode = String(req.query.mode || "section").toLowerCase();
+    const ids = String(req.query.ids || "")
+      .split(",")
+      .map(s => Number(s.trim()))
+      .filter(Boolean);
 
+    if (!ids.length) {
+      return res.status(400).json({ message: "ids required" });
+    }
 
+    const sectionIds = await resolveSectionIds(mode, ids);
+    if (!sectionIds.length) return res.json({ items: [] });
+
+    const items = await computeCumulative10BySections(sectionIds);
+
+    // (tùy chọn) lọc theo danh sách studentIds nếu được truyền
+    if (req.query.studentIds) {
+      const sids = String(req.query.studentIds)
+        .split(",")
+        .map(s => Number(s.trim()))
+        .filter(Boolean);
+      return res.json({ items: items.filter(x => sids.includes(x.studentId)) });
+    }
+
+    res.json({ items });
+  } catch (err) {
+    next(err);
+  }
+}

@@ -1,8 +1,10 @@
 {
   "dependencies": {
     "@fingerprintjs/fingerprintjs": "^5.0.1",
+    "file-saver": "^2.0.5",
     "geoip-lite": "^1.4.10",
-    "ua-parser-js": "^2.0.6"
+    "ua-parser-js": "^2.0.6",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/geoip-lite": "^1.4.4"

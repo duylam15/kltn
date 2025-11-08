@@ -173,6 +173,71 @@ export async function computeTotalsBySections(sectionIds: number[]): Promise<Tot
   return rows;
 }
 
+// === NEW: Lấy map sectionId -> credits (Subject.credits) ===
+async function getSectionCredits(sectionIds: number[]): Promise<Map<number, number>> {
+  if (!sectionIds.length) return new Map();
+  const secs = await prisma.courseSection.findMany({
+    where: { id: { in: sectionIds } },
+    select: {
+      id: true,
+      subject: { select: { credits: true } },
+    },
+  });
+  const m = new Map<number, number>();
+  for (const s of secs) {
+    const c = s.subject?.credits ?? 3; // fallback nếu thiếu
+    m.set(s.id, c);
+  }
+  return m;
+}
+
+/**
+ * NEW: GPA tích lũy thang 10 có trọng số tín chỉ
+ * - Đầu vào: sectionIds (phạm vi tính)
+ * - Đầu ra: mỗi sinh viên 1 dòng { studentId, studentCode, studentName, credits, gpa10 }
+ */
+export async function computeCumulative10BySections(sectionIds: number[]) {
+  if (!sectionIds.length) return [];
+
+  // 1) Điểm tổng kết từng SV/section (đã có)
+  const totals = await computeTotalsBySections(sectionIds); // [{sectionId, studentId, total10, ...}]
+
+  // 2) Map sectionId -> credits
+  const creditMap = await getSectionCredits(sectionIds);
+
+  // 3) Cộng dồn theo SV với trọng số tín chỉ
+  type Acc = { studentCode: string; studentName: string; wSum: number; cSum: number };
+  const acc = new Map<number, Acc>(); // key: studentId
+
+  for (const row of totals) {
+    const credits = creditMap.get(row.sectionId) ?? 3;
+    const a = acc.get(row.studentId) || {
+      studentCode: row.studentCode,
+      studentName: row.studentName,
+      wSum: 0,
+      cSum: 0,
+    };
+    a.wSum += (row.total10 ?? 0) * credits;
+    a.cSum += credits;
+    acc.set(row.studentId, a);
+  }
+
+  // 4) Kết quả
+  const items = Array.from(acc.entries()).map(([studentId, a]) => {
+    const gpa10 = a.cSum > 0 ? +(a.wSum / a.cSum).toFixed(2) : 0;
+    return {
+      studentId,
+      studentCode: a.studentCode,
+      studentName: a.studentName,
+      credits: a.cSum,
+      gpa10,
+    };
+  });
+
+  return items;
+}
+
+
 /**
  * Gộp dữ liệu điểm thành buckets để vẽ biểu đồ phân bố.
  * Input:
@@ -355,3 +420,5 @@ export async function getAttendanceAgg(
 
   return result;
 }
+
+
