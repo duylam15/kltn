@@ -3,6 +3,9 @@
     "@fingerprintjs/fingerprintjs": "^5.0.1",
     "file-saver": "^2.0.5",
     "geoip-lite": "^1.4.10",
+    "otpauth": "^9.4.1",
+    "otplib": "^12.0.1",
+    "react-qr-reader": "^3.0.0-beta-1",
     "ua-parser-js": "^2.0.6",
     "xlsx": "^0.18.5"
   },

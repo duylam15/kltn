@@ -600,8 +600,11 @@ model AttendanceSession {
   expiresAt  DateTime?
 
   requireDeviceCheck Boolean @default(true)
-  maxCheckInsPerIP   Int     @default(3)
-  allowedDevices     Json?
+
+    // === TOTP dynamic QR ===
+  totpSecretBase32 String?   // bí mật, chỉ trả về cho GV
+  totpPeriod       Int?      @default(10) // 10s/step
+  totpDigits       Int?      @default(6)  // 6 chữ số
 
   fingerprints DeviceFingerprint[]
 

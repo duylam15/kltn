@@ -31,6 +31,7 @@ import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/authContext";
+import { DynamicQr } from "../../pages/Teacher/DynamicQr"; 
 
 const { Title } = Typography;
 const API_BASE = "http://localhost:4000/api/v1";
@@ -48,6 +49,9 @@ type Session = {
   updatedAt?: string;
   attendances?: Attendance[];
   expiresAt?: string | Dayjs | null;
+   totpSecretBase32?: string | null;
+  totpPeriod?: number | null;
+  totpDigits?: number | null;
 };
 
 type Attendance = {
@@ -111,24 +115,39 @@ export default function RollCall() {
     fetchSessions();
   }, [sectionId]);
 
-  const fetchSessions = async () => {
-    try {
-      setLoading(true);
-      const res = await axios.get(
-        `${API_BASE}/attendance/sections/${sectionId}/sessions`
-      );
-      if (res.data.success) {
-        setSessions(
-          res.data.data.filter((s: Session) => s.sectionId === sectionId)
-        );
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error("Không tải được danh sách phiên điểm danh");
-    } finally {
-      setLoading(false);
-    }
-  };
+ const fetchSessions = async () => {
+  try {
+    setLoading(true);
+    const listRes = await axios.get(
+      `${API_BASE}/attendance/sections/${sectionId}/sessions`
+    );
+
+    if (!listRes.data.success) throw new Error("Failed");
+
+    const sessionsBasic = listRes.data.data;
+
+    // Lấy chi tiết từng session để có totpSecretBase32
+    const sessionsWithTotp = await Promise.all(
+      sessionsBasic.map(async (s: Session) => {
+        try {
+          const detailRes = await axios.get(
+            `${API_BASE}/attendance/sessions/${s.id}`
+          );
+          return detailRes.data.success ? detailRes.data.data : s;
+        } catch {
+          return s; // fallback nếu lỗi
+        }
+      })
+    );
+
+    setSessions(sessionsWithTotp);
+  } catch (err) {
+    console.error(err);
+    toast.error("Không tải được danh sách phiên điểm danh");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const fetchStudents = async (sessionId: number) => {
     try {
@@ -897,25 +916,45 @@ export default function RollCall() {
       />
 
       {/* Modal QR */}
-      <Modal
-        title="QR Code điểm danh"
-        open={qrModalOpen}
-        onCancel={() => setQrModalOpen(false)}
-        footer={null}
-        width={600}
-        centered
-      >
-        {selectedSession && (
-          <div style={{ textAlign: "center" }}>
-            <img
-              src={`http://localhost:4000${selectedSession.qrCodeUrl}`}
-              alt="QR Code"
-              width={400}
-              height={400}
-            />
-          </div>
-        )}
-      </Modal>
+<Modal
+  title="QR Code điểm danh (Động - Cập nhật mỗi 10 giây)"
+  open={qrModalOpen}
+  onCancel={() => setQrModalOpen(false)}
+  footer={null}
+  width={500}
+  centered // ← Ant Design tự động căn giữa theo chiều dọc
+  bodyStyle={{ 
+    padding: 24,
+    display: "flex",
+    justifyContent: "center",  // ← Căn giữa ngang
+    alignItems: "center",      // ← Căn giữa dọc
+    minHeight: 400,            // Đảm bảo Modal đủ cao
+  }}
+>
+  {selectedSession?.totpSecretBase32 ? (
+    <DynamicQr
+      secretBase32={selectedSession.totpSecretBase32}
+      period={selectedSession.totpPeriod ?? 10}
+      digits={selectedSession.totpDigits ?? 6}
+      size={320}
+    />
+  ) : selectedSession?.qrCodeUrl ? (
+    <div style={{ textAlign: "center" }}>
+      <img
+        src={`http://localhost:4000${selectedSession.qrCodeUrl}`}
+        alt="QR Code động"
+        width={320}
+        height={320}
+      />
+      <p style={{ color: "orange", marginTop: 8 }}>
+        Warning: Không có TOTP → đang dùng QR tĩnh
+      </p>
+    </div>
+  ) : (
+    <p>Không có QR để hiển thị</p>
+  )}
+</Modal>
+
 
       {/* Modal danh sách sinh viên */}
       <Modal

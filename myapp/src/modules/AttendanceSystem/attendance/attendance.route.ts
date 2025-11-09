@@ -9,6 +9,9 @@ router.post("/sessions", attendanceController.createSession);
 // Điểm danh
 router.post("/check-in", attendanceController.checkIn);
 
+// Lấy cấu hình TOTP của session (chỉ GV dùng)
+router.get("/sessions/:id/totp", attendanceController.getSessionTotpConfig);
+
 // Danh sách session của section
 router.get("/sections/:sectionId/sessions", attendanceController.listSessions);
 router.get("/sessions", attendanceController.listAllSessions);
