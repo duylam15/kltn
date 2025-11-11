@@ -183,7 +183,7 @@ model Subject {
   subjectInstructors SubjectInstructor[] // Thêm relation này
   chapters           Chapter[]
   questions          Question[]
-
+  assignments        Assignment[]      // 🆕 Thêm relation ngược về Assignment
   @@index([subjectCode])
 }
 
@@ -398,6 +398,14 @@ model Assignment {
   createdBy              Int
   originalAssignmentId   String    @db.VarChar(100)
 
+  // 🆕 Phân loại theo môn học
+  subjectId Int?
+  subject   Subject?   @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  // 🆕 Phân loại theo chương
+  chapterId Int?
+  chapter   Chapter?   @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -407,8 +415,10 @@ model Assignment {
   notifications Notification[]
   ChatRoom      ChatRoom[]
   gradeColumns  GradeColumnAssignment[]
-}
 
+  @@index([subjectId])
+  @@index([chapterId])
+}
 model SectionAssignment {
   id           Int      @id @default(autoincrement())
   sectionId    Int
@@ -492,7 +502,7 @@ model Chapter {
 
   subject   Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   questions Question[]
-
+  assignments Assignment[]   // 🆕 thêm quan hệ ngược với Assignment
   @@unique([subjectId, chapterCode])
   @@index([subjectId])
   @@index([chapterCode])
