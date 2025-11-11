@@ -17,9 +17,14 @@ router.get("/class/:courseSectionId", controller.getMaterialsByClass);
 router.patch("/visibility", controller.updateMaterialVisibility);
 router.get("/teacher/:teacherId", controller.getMaterialsByTeacher);
 
+<<<<<<< HEAD:myapp/src/modules/MaterialsLearing/materials/materials.route.ts
 // Lấy danh sách tài liệu công khai(share gv#)
 router.get("/public", controller.listPublicMaterialsGrouped);
 router.post("/copy", controller.copyMaterial);
+=======
+// chỉ lấy tài liệu mở cho SV theo section
+router.get("/class/:sectionId/open", controller.listOpenBySection);
+>>>>>>> locdev:myapp/src/modules/materials/materials.route.ts
 
 // CRUD tài liệu
 router.get("/", controller.getMaterials);

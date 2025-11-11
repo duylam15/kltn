@@ -3,12 +3,22 @@ import { NavLink, Outlet, useLocation, useParams } from "react-router-dom";
 import { Card, Tabs, Tag, Skeleton, Typography } from "antd";
 
 const tabDefs = [
+<<<<<<< HEAD
 	{ key: "overview", label: "Tổng quan" },          // cái nhìn chung
 	{ key: "groups", label: "Nhóm học tập" },         // nhóm nhỏ
 	{ key: "roll-call", label: "Điểm danh" },         // điểm danh
 	{ key: "materials", label: "Tài liệu" },          // tài liệu / slide
 	{ key: "chat", label: "Thảo luận" },              // thảo luận nhóm/lớp
 	{ key: "assignments", label: "Bài tập" }, 			// giao & làm bài
+=======
+	{ key: "overview", label: "Tổng quan" },
+	{ key: "materials", label: "Tài liệu" },
+	{ key: "roll-call", label: "Điểm danh" },
+	{ key: "friend", label: "Mọi người" },  // 👈 thêm
+	// { key: "qa", label: "Thảo luận" },
+	// { key: "assignments", label: "Bài kiểm tra" },
+	// { key: "grades", label: "Điểm số" },
+>>>>>>> locdev
 ];
 
 const CourseLayoutStudent: React.FC = () => {

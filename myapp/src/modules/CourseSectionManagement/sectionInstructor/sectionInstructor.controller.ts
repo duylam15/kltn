@@ -1,8 +1,12 @@
 import { Request, Response, NextFunction } from "express";
 import * as sectionInstructorService from "./sectionInstructor.service";
+<<<<<<< HEAD:myapp/src/modules/CourseSectionManagement/sectionInstructor/sectionInstructor.controller.ts
 import catchAsync from "@/utils/catchAsync";
 import { sendResponse } from "@/utils/response";
 import ApiError from "@/utils/ApiError";
+=======
+import { prisma } from "../../prisma/client";
+>>>>>>> locdev:myapp/src/modules/sectionInstructor/sectionInstructor.controller.ts
 
 export const create = catchAsync(async (req: Request, res: Response) => {
     const sectionInstructor =
@@ -97,3 +101,28 @@ export const remove = catchAsync(
         });
     }
 );
+
+
+export const getTeacherBySection = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+  const sectionId = Number(req.params.sectionId); 
+  if (isNaN(sectionId)) return next(new ApiError(400, "Invalid sectionId"));
+
+  const owner = await prisma.sectionInstructor.findFirst({
+    where: { sectionId, role: "owner" },
+    include: {
+      teacher: {
+        include: {
+          user: {
+            select: { id: true, email: true, fullName: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!owner) return next(new ApiError(404, "Owner teacher not found"));
+
+  sendResponse(res, { success: true, data: owner });
+});
+
+

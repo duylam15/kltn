@@ -79,3 +79,24 @@ export const remove = catchAsync(
         sendResponse(res, { success: true, message: "Student deleted" });
     }
 );
+
+export const getStudentByUserId = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+  const userId = Number(req.params.userId);
+
+  if (isNaN(userId)) return next(new ApiError(400, "Invalid userId"));
+
+  const student = await prisma.student.findUnique({
+    where: { userId },
+    select: {
+      id: true,
+      userId: true,
+      studentCode: true,
+      user: { select: { id: true, fullName: true, email: true } }
+    }
+  });
+
+  if (!student) return next(new ApiError(404, "Student not found for this user"));
+
+  sendResponse(res, { success: true, data: student });
+});
+
