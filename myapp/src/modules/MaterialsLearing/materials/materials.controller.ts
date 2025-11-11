@@ -3,6 +3,9 @@ import * as materialService from "./materials.service";
 import { prisma } from "@/prisma/client";
 import { jsonSafe } from "@/utils/bigint";
 import { log } from "node:console";
+import catchAsync from "@/utils/catchAsync";
+import ApiError from "@/utils/ApiError";
+import { sendResponse } from "@/utils/response";
 
 
 export async function getMaterials(req: Request, res: Response) {
@@ -364,6 +367,34 @@ export async function copyMaterial(
   }
 }
 
+
+
+// chỉ lấy tài liệu mở cho SV theo section
+export const listOpenBySection = catchAsync(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const sectionId = Number(req.params.sectionId);
+    if (isNaN(sectionId)) return next(new ApiError(400, "Invalid sectionId"));
+
+    const rows = await prisma.courseMaterial.findMany({
+      where: {
+        courseSectionId: sectionId,   // 👈 đúng field
+        isOpen: true,                 // 👈 chỉ lấy tài liệu đã mở
+      },
+      include: {
+        material: true,               // 👈 lấy thông tin file từ Material
+      },
+      orderBy: {
+        // sắp xếp theo thời gian đăng của Material
+        material: { uploadedAt: "desc" },
+      },
+    });
+
+    // FE của bạn (MaterialsStudent) chỉ cần mảng Material
+    const materials = rows.map((r) => r.material);
+
+    sendResponse(res, { success: true, data: jsonSafe(materials) });
+  }
+);
 
 
 
