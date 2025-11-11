@@ -12,25 +12,39 @@ export const getAssignmentsBySectionForStudentSchema = z.object({
     }),
 });
 
+// Không yêu cầu params
+export const publicSchema = z.object({
+  params: z.object({}).optional(),
+});
+
+
+
 
 export const createAssignmentSchema = z.object({
     body: z.object({
         title: z.string().min(1, "Tiêu đề không được bỏ trống"),
         description: z.string().nullable().optional(),
         type: z.enum(["exercise", "quiz", "homework"]).default("exercise"),
+
         dueDate: z.string().datetime().nullable().optional(),
         maxScore: z.number().default(100),
         passingScore: z.number().nullable().optional(),
         timeLimit: z.number().nullable().optional(),
         maxAttempts: z.number().default(1),
+
         createdBy: z.coerce.number().int(),
-        isPublic: z.boolean().optional(), 
-        originalAssignmentId: z.string().uuid().optional(), // 👈 đổi sang string
+        isPublic: z.boolean().optional(),
+        originalAssignmentId: z.string().uuid().optional(),
         shuffleQuestions: z.boolean().default(false),
         showAnswersAfterSubmit: z.boolean().default(false),
         allowLateSubmission: z.boolean().default(false),
+
+        // 🆕 Thêm hai trường phân loại
+        subjectId: z.number().int().nullable().optional(),
+        chapterId: z.number().int().nullable().optional(),
     }),
 });
+
 
 export const updateAssignmentSchema = z.object({
     params: z.object({

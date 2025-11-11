@@ -60,7 +60,7 @@ import GradesStudent from "../pages/Student/GradesStudent";
 import OverviewStudent from "../pages/Student/OverviewStudent";
 import DashboardStudent from "../pages/Student/DashboardStudent";
 import AssignmentsDetailsStudent from "../pages/Student/AssignmentsDetailsStudent";
-import AssignmentsTeacher2 from "../pages/Teacher/AssignmentsTeacher2";
+import AssignmentsTeacherOut from "../pages/Teacher/AssignmentsTeacherOut";
 import VRPage from "../pages/VRPage";
 import AssignmentSubmissionHistory from "../pages/Student/AssignmentSubmissionHistory";
 import AssignmentsScore from "../pages/Student/AssignmentsScore";
@@ -179,7 +179,7 @@ export const router = createBrowserRouter([
       },
       {
         path: "assignments",
-        element: <AssignmentsTeacher2 />,
+        element: <AssignmentsTeacherOut />,
       },
     ],
   },

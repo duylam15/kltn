@@ -91,6 +91,7 @@ export default function AssignmentsDetailsStudent() {
 	const { user } = useAuth();
 
 	const [assignment, setAssignment] = useState<Assignment | null>(null);
+	const [displayQuestions, setDisplayQuestions] = useState<Question[]>([]); // 🔥 Questions sau khi shuffle
 	const [answers, setAnswers] = useState<Map<number, Answer>>(new Map());
 	const [codeResults, setCodeResults] = useState<Map<number, CodeSubmissionResult>>(
 		new Map()
@@ -101,6 +102,7 @@ export default function AssignmentsDetailsStudent() {
 	const [error, setError] = useState("");
 	const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
 	const [hasStarted, setHasStarted] = useState(false);
+	const [isLateSubmission, setIsLateSubmission] = useState(false); // 🔥 Trạng thái nộp muộn
 
 	const studentId = user?.student?.id;
 	const path = window.location.pathname;
@@ -189,10 +191,22 @@ export default function AssignmentsDetailsStudent() {
 				}
 			}
 
-			setAssignment({
+			const assignmentObj = {
 				...assignmentData.data,
 				questions: fullQuestions,
-			});
+			};
+
+			setAssignment(assignmentObj);
+
+			// 🔥 Kiểm tra nộp muộn
+			if (assignmentObj.dueDate) {
+				const now = dayjs();
+				const dueDate = dayjs(assignmentObj.dueDate);
+				if (now.isAfter(dueDate)) {
+					setIsLateSubmission(true);
+				}
+			}
+
 		} catch (err) {
 			console.error("Fetch error:", err);
 			setError("Lỗi kết nối server");
@@ -201,7 +215,23 @@ export default function AssignmentsDetailsStudent() {
 		}
 	};
 
+	// 🔥 Hàm shuffle questions
+	const shuffleArray = <T,>(array: T[]): T[] => {
+		const shuffled = [...array];
+		for (let i = shuffled.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+		}
+		return shuffled;
+	};
+
 	const handleStartAssignment = async () => {
+		// 🔥 Kiểm tra allowLateSubmission
+		if (isLateSubmission && !assignment?.allowLateSubmission) {
+			alert("⚠️ Bài tập đã hết hạn nộp và không cho phép nộp muộn!");
+			return;
+		}
+
 		try {
 			const res = await fetch(
 				`http://localhost:4000/api/v1/assignments/${assignmentId}/start`,
@@ -223,6 +253,14 @@ export default function AssignmentsDetailsStudent() {
 				setHasStarted(true);
 				if (assignment?.timeLimit) {
 					setTimeRemaining(assignment.timeLimit * 60);
+				}
+
+				// 🔥 Shuffle questions nếu cần
+				if (assignment?.shuffleQuestions) {
+					const shuffled = shuffleArray(assignment.questions);
+					setDisplayQuestions(shuffled);
+				} else {
+					setDisplayQuestions(assignment?.questions || []);
 				}
 			} else {
 				setError(data.message || "Không thể bắt đầu bài tập");
@@ -293,6 +331,8 @@ export default function AssignmentsDetailsStudent() {
 
 			const data = await res.json();
 
+			console.log(data);
+
 			if (data.success) {
 				setCodeResults((prev) => {
 					const newResults = new Map(prev);
@@ -318,6 +358,12 @@ export default function AssignmentsDetailsStudent() {
 	};
 
 	const handleSubmit = async () => {
+		// 🔥 Kiểm tra nộp muộn
+		if (isLateSubmission && !assignment?.allowLateSubmission) {
+			alert("⚠️ Bài tập đã hết hạn nộp và không cho phép nộp muộn!");
+			return;
+		}
+
 		const unansweredQuestions = assignment?.questions.filter((q) => !answers.has(q.id));
 
 		if (unansweredQuestions && unansweredQuestions.length > 0) {
@@ -362,7 +408,12 @@ export default function AssignmentsDetailsStudent() {
 				console.log(data.data);
 				navigate(
 					`/student/courses/${sectionId}/assignments/${assignmentId}/score`,
-					{ state: data.data } // 👈 truyền data qua route
+					{
+						state: {
+							...data.data,
+							showAnswersAfterSubmit: assignment?.showAnswersAfterSubmit // 🔥 Truyền setting
+						}
+					}
 				);
 			} else {
 				throw new Error(data?.message || "Nộp bài thất bại");
@@ -777,6 +828,13 @@ export default function AssignmentsDetailsStudent() {
 
 	return (
 		<div className="w-full min-h-screen bg-gray-50 pb-28">
+			{/* 🔥 Cảnh báo nộp muộn */}
+			{isLateSubmission && assignment.allowLateSubmission && (
+				<div className="bg-red-600 text-white px-4 py-3 text-center font-medium">
+					⚠️ CẢNH BÁO: Bạn đang nộp muộn! Hạn nộp đã qua vào {dayjs(assignment.dueDate).format("DD/MM/YYYY HH:mm")}
+				</div>
+			)}
+
 			{/* Top Bar */}
 			<div className="bg-white border-b sticky top-0 z-20 shadow-sm">
 				<div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
@@ -841,7 +899,10 @@ export default function AssignmentsDetailsStudent() {
 									{assignment.dueDate && (
 										<div className="col-span-2">
 											<span className="text-xs text-gray-500">Hạn nộp</span>
-											<div className="font-medium text-sm">{dayjs(assignment.dueDate).format("DD/MM/YYYY HH:mm")}</div>
+											<div className={`font-medium text-sm ${isLateSubmission ? "text-red-600" : ""}`}>
+												{dayjs(assignment.dueDate).format("DD/MM/YYYY HH:mm")}
+												{isLateSubmission && " (Đã hết hạn)"}
+											</div>
 										</div>
 									)}
 								</div>
@@ -861,7 +922,6 @@ export default function AssignmentsDetailsStudent() {
 										{Math.round((getAnsweredCount() / assignment.questions.length) * 100)}%
 									</div>
 								</div>
-
 
 								<div className="mt-4 flex flex-col gap-2">
 									{!hasStarted ? (
@@ -904,6 +964,9 @@ export default function AssignmentsDetailsStudent() {
 									<li>Nhớ kiểm tra kỹ trước khi nộp.</li>
 									<li>Nộp bài sẽ kết thúc phiên làm (nếu có thời gian).</li>
 									<li>Nếu có mã lỗi khi test, kiểm tra chi tiết trong phần kết quả.</li>
+									{assignment.shuffleQuestions && (
+										<li className="text-blue-600">🔀 Thứ tự câu hỏi đã được xáo trộn</li>
+									)}
 								</ul>
 							</div>
 						</div>
@@ -920,7 +983,7 @@ export default function AssignmentsDetailsStudent() {
 						{/* Questions list */}
 						<div className="space-y-4">
 							{hasStarted ? (
-								assignment.questions.map((question, index) => renderQuestion(question, index))
+								displayQuestions.map((question, index) => renderQuestion(question, index))
 							) : (
 								<div className="bg-white border rounded-lg p-8 text-center shadow">
 									<div className="text-3xl mb-3">📝</div>

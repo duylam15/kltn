@@ -89,6 +89,7 @@ interface Assignment {
 	type: string;
 	maxScore: number;
 	dueDate: string | null;
+	showAnswersAfterSubmit: boolean; // 🔥 Thêm field này
 }
 
 export default function AssignmentSubmissionHistory() {
@@ -220,6 +221,9 @@ export default function AssignmentSubmissionHistory() {
 		return "bg-red-50 border-red-200";
 	};
 
+	// 🔥 Kiểm tra xem có được phép hiển thị đáp án không
+	const canShowAnswers = assignment?.showAnswersAfterSubmit !== false;
+
 	const renderAnswerResult = (answer: SubmissionAnswer, index: number) => {
 		const question = answer.question;
 		if (!question) return null;
@@ -231,258 +235,309 @@ export default function AssignmentSubmissionHistory() {
 		return (
 			<div
 				key={answer.id}
-				className={`border rounded-lg p-5 ${answer.isCorrect || (answer.score === answer.maxScore)
-					? "bg-green-50 border-green-200"
-					: "bg-red-50 border-red-200"
+				className={`border rounded-lg p-5 ${canShowAnswers
+						? answer.isCorrect || answer.score === answer.maxScore
+							? "bg-green-50 border-green-200"
+							: "bg-red-50 border-red-200"
+						: "bg-white border-gray-300"
 					}`}
 			>
 				{/* Question Header */}
 				<div className="flex items-start justify-between mb-4">
 					<div className="flex-1">
 						<div className="flex items-center gap-2 mb-2">
-							<span className={`text-white text-sm font-medium px-3 py-1 rounded ${answer.isCorrect || (answer.score === answer.maxScore)
-								? "bg-green-600"
-								: "bg-red-600"
-								}`}>
+							<span
+								className={`text-white text-sm font-medium px-3 py-1 rounded ${canShowAnswers
+										? answer.isCorrect || answer.score === answer.maxScore
+											? "bg-green-600"
+											: "bg-red-600"
+										: "bg-gray-600"
+									}`}
+							>
 								Câu {index + 1}
 							</span>
-							<span className="text-sm font-medium">
-								{answer.score} / {answer.maxScore} điểm
-							</span>
-							{question.type === "coding" && (
-								<span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded">
-									💻 Code
-								</span>
-							)}
-							{answer.isCorrect || (answer.score === answer.maxScore) ? (
-								<span className="text-green-600 font-medium">✓ Đúng</span>
-							) : (
-								<span className="text-red-600 font-medium">✗ Sai</span>
+
+							{/* 🔥 Chỉ hiển thị điểm nếu được phép */}
+							{canShowAnswers && (
+								<>
+									<span className="text-sm font-medium">
+										{answer.score} / {answer.maxScore} điểm
+									</span>
+									{question.type === "coding" && (
+										<span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded">
+											💻 Code
+										</span>
+									)}
+									{answer.isCorrect || answer.score === answer.maxScore ? (
+										<span className="text-green-600 font-medium">✓ Đúng</span>
+									) : (
+										<span className="text-red-600 font-medium">✗ Sai</span>
+									)}
+								</>
 							)}
 						</div>
 						<p className="text-gray-900 font-medium mb-2">{question.content}</p>
 					</div>
 				</div>
 
-				{/* Multiple Choice Answer */}
-				{question.type === "multiple_choice" && question.choices && (
-					<div className="space-y-2">
-						{question.choices
-							.sort((a, b) => a.order - b.order)
-							.map((choice) => {
-								const isSelected = answer.selectedChoices?.includes(choice.id);
-								const isCorrect = choice.isCorrect;
+				{/* 🔥 Nếu KHÔNG cho phép hiển thị đáp án */}
+				{!canShowAnswers && (
+					<div className="mt-3 p-3 bg-gray-50 border border-gray-200 rounded">
+						<p className="text-sm font-medium text-gray-700 mb-2">Câu trả lời của bạn:</p>
 
-								let bgColor = "bg-white";
-								let icon = "";
+						{question.type === "multiple_choice" && answer.selectedChoices && (
+							<p className="text-sm text-gray-900">
+								Đã chọn: {answer.selectedChoices.length} lựa chọn
+							</p>
+						)}
 
-								if (isCorrect) {
-									bgColor = "bg-green-100";
-									icon = "✓";
-								}
-								if (isSelected && !isCorrect) {
-									bgColor = "bg-red-100";
-									icon = "✗";
-								}
-								if (isSelected && isCorrect) {
-									icon = "✓";
-								}
+						{question.type === "true_false" && answer.selectedChoices && (
+							<p className="text-sm text-gray-900">
+								{answer.selectedChoices.includes(1) ? "Đúng" : "Sai"}
+							</p>
+						)}
 
-								return (
-									<div
-										key={choice.id}
-										className={`flex items-center gap-3 p-3 border rounded ${bgColor}`}
-									>
-										<span className="font-medium text-lg w-6">{icon}</span>
-										<span className="flex-1">{choice.content}</span>
-										{isCorrect && (
-											<span className="text-xs px-2 py-1 bg-green-200 text-green-800 rounded">
-												Đáp án đúng
-											</span>
-										)}
-									</div>
-								);
-							})}
-					</div>
-				)}
+						{question.type === "essay" && (
+							<p className="text-sm text-gray-900 whitespace-pre-wrap">
+								{answer.essayAnswer || "Không có câu trả lời"}
+							</p>
+						)}
 
-				{/* True/False Answer */}
-				{question.type === "true_false" && (
-					<div className="space-y-2">
-						{[
-							{ id: 1, content: "Đúng", value: true },
-							{ id: 2, content: "Sai", value: false },
-						].map((option) => {
-							const isSelected = answer.selectedChoices?.includes(option.id);
-							const isCorrect = question.choices?.find((c) => c.id === option.id)?.isCorrect;
-
-							let bgColor = "bg-white";
-							let icon = "";
-
-							if (isCorrect) {
-								bgColor = "bg-green-100";
-								icon = "✓";
-							}
-							if (isSelected && !isCorrect) {
-								bgColor = "bg-red-100";
-								icon = "✗";
-							}
-							if (isSelected && isCorrect) {
-								icon = "✓";
-							}
-
-							return (
-								<div
-									key={option.id}
-									className={`flex items-center gap-3 p-3 border rounded ${bgColor}`}
-								>
-									<span className="font-medium text-lg w-6">{icon}</span>
-									<span className="flex-1">{option.content}</span>
-									{isCorrect && (
-										<span className="text-xs px-2 py-1 bg-green-200 text-green-800 rounded">
-											Đáp án đúng
-										</span>
-									)}
-								</div>
-							);
-						})}
-					</div>
-				)}
-
-				{/* Essay Answer */}
-				{question.type === "essay" && (
-					<div>
-						<div className="mb-2">
-							<span className="text-sm font-medium text-gray-700">Câu trả lời của bạn:</span>
-						</div>
-						<div className="bg-white border rounded p-3 whitespace-pre-wrap">
-							{answer.essayAnswer || <span className="text-gray-400">Không có câu trả lời</span>}
-						</div>
-						{answer.feedback && (
-							<div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
-								<p className="text-sm font-medium text-blue-900 mb-1">Nhận xét:</p>
-								<p className="text-sm text-blue-800">{answer.feedback}</p>
-							</div>
+						{question.type === "coding" && codeResult && (
+							<>
+								<p className="text-sm text-gray-600 mb-1">Ngôn ngữ: {codeResult.language}</p>
+								<pre className="bg-gray-900 text-green-400 p-3 rounded overflow-x-auto text-xs font-mono">
+									{codeResult.codeAnswer}
+								</pre>
+							</>
 						)}
 					</div>
 				)}
 
-				{/* Coding Answer */}
-				{question.type === "coding" && codeResult && (
-					<div>
-						<div className="mb-2 flex items-center justify-between">
-							<span className="text-sm font-medium text-gray-700">Code của bạn:</span>
-							<span className="text-xs px-2 py-1 bg-gray-200 rounded">{codeResult.language}</span>
-						</div>
-						<pre className="bg-gray-900 text-green-400 p-4 rounded overflow-x-auto text-sm font-mono">
-							{codeResult.codeAnswer}
-						</pre>
+				{/* 🔥 Nếu CHO PHÉP hiển thị đáp án - giữ nguyên logic cũ */}
+				{canShowAnswers && (
+					<>
+						{/* Multiple Choice Answer */}
+						{question.type === "multiple_choice" && question.choices && (
+							<div className="space-y-2">
+								{question.choices
+									.sort((a, b) => a.order - b.order)
+									.map((choice) => {
+										const isSelected = answer.selectedChoices?.includes(choice.id);
+										const isCorrect = choice.isCorrect;
 
-						{/* Code Results */}
-						<div className="mt-4 p-4 bg-white rounded border">
-							<div className="flex items-center justify-between mb-3">
-								<h4 className="font-medium text-gray-900">Kết quả Test</h4>
-								<div className="flex items-center gap-2">
-									<span className={`text-lg font-bold ${getScoreColor(codeResult.score, codeResult.maxScore)}`}>
-										{codeResult.score} / {codeResult.maxScore} điểm
-									</span>
-									<span
-										className={`text-xs px-2 py-1 rounded ${codeResult.judgeStatus === "accepted"
-											? "bg-green-100 text-green-700"
-											: "bg-red-100 text-red-700"
-											}`}
-									>
-										{codeResult.judgeStatus}
-									</span>
-								</div>
+										let bgColor = "bg-white";
+										let icon = "";
+
+										if (isCorrect) {
+											bgColor = "bg-green-100";
+											icon = "✓";
+										}
+										if (isSelected && !isCorrect) {
+											bgColor = "bg-red-100";
+											icon = "✗";
+										}
+										if (isSelected && isCorrect) {
+											icon = "✓";
+										}
+
+										return (
+											<div
+												key={choice.id}
+												className={`flex items-center gap-3 p-3 border rounded ${bgColor}`}
+											>
+												<span className="font-medium text-lg w-6">{icon}</span>
+												<span className="flex-1">{choice.content}</span>
+												{isCorrect && (
+													<span className="text-xs px-2 py-1 bg-green-200 text-green-800 rounded">
+														Đáp án đúng
+													</span>
+												)}
+											</div>
+										);
+									})}
 							</div>
+						)}
 
-							{codeResult.compileLog && (
-								<div className="mb-3 p-3 bg-red-50 border border-red-200 rounded">
-									<p className="text-xs font-medium text-red-700 mb-1">Compile Error:</p>
-									<pre className="text-xs text-red-600 whitespace-pre-wrap font-mono">
-										{codeResult.compileLog}
-									</pre>
-								</div>
-							)}
+						{/* True/False Answer */}
+						{question.type === "true_false" && (
+							<div className="space-y-2">
+								{[
+									{ id: 1, content: "Đúng", value: true },
+									{ id: 2, content: "Sai", value: false },
+								].map((option) => {
+									const isSelected = answer.selectedChoices?.includes(option.id);
+									const isCorrect = question.choices?.find((c) => c.id === option.id)?.isCorrect;
 
-							{codeResult.stderrLog && (
-								<div className="mb-3 p-3 bg-red-50 border border-red-200 rounded">
-									<p className="text-xs font-medium text-red-700 mb-1">Runtime Error:</p>
-									<pre className="text-xs text-red-600 whitespace-pre-wrap font-mono">
-										{codeResult.stderrLog}
-									</pre>
-								</div>
-							)}
+									let bgColor = "bg-white";
+									let icon = "";
 
-							{codeResult.testResults && codeResult.testResults.length > 0 && (
-								<div className="space-y-2">
-									<p className="text-sm font-medium text-gray-700">Test Cases:</p>
-									{codeResult.testResults.map((test, index) => (
+									if (isCorrect) {
+										bgColor = "bg-green-100";
+										icon = "✓";
+									}
+									if (isSelected && !isCorrect) {
+										bgColor = "bg-red-100";
+										icon = "✗";
+									}
+									if (isSelected && isCorrect) {
+										icon = "✓";
+									}
+
+									return (
 										<div
-											key={test.id}
-											className={`p-3 rounded border ${test.status === "ok"
-												? "bg-green-50 border-green-200"
-												: "bg-red-50 border-red-200"
-												}`}
+											key={option.id}
+											className={`flex items-center gap-3 p-3 border rounded ${bgColor}`}
 										>
-											<div className="flex items-center justify-between mb-2">
-												<span className="text-sm font-medium">Test Case {index + 1}</span>
-												<span
-													className={`text-xs px-2 py-1 rounded ${test.status === "ok"
+											<span className="font-medium text-lg w-6">{icon}</span>
+											<span className="flex-1">{option.content}</span>
+											{isCorrect && (
+												<span className="text-xs px-2 py-1 bg-green-200 text-green-800 rounded">
+													Đáp án đúng
+												</span>
+											)}
+										</div>
+									);
+								})}
+							</div>
+						)}
+
+						{/* Essay Answer */}
+						{question.type === "essay" && (
+							<div>
+								<div className="mb-2">
+									<span className="text-sm font-medium text-gray-700">Câu trả lời của bạn:</span>
+								</div>
+								<div className="bg-white border rounded p-3 whitespace-pre-wrap">
+									{answer.essayAnswer || <span className="text-gray-400">Không có câu trả lời</span>}
+								</div>
+								{answer.feedback && (
+									<div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
+										<p className="text-sm font-medium text-blue-900 mb-1">Nhận xét:</p>
+										<p className="text-sm text-blue-800">{answer.feedback}</p>
+									</div>
+								)}
+							</div>
+						)}
+
+						{/* Coding Answer */}
+						{question.type === "coding" && codeResult && (
+							<div>
+								<div className="mb-2 flex items-center justify-between">
+									<span className="text-sm font-medium text-gray-700">Code của bạn:</span>
+									<span className="text-xs px-2 py-1 bg-gray-200 rounded">{codeResult.language}</span>
+								</div>
+								<pre className="bg-gray-900 text-green-400 p-4 rounded overflow-x-auto text-sm font-mono">
+									{codeResult.codeAnswer}
+								</pre>
+
+								{/* Code Results */}
+								<div className="mt-4 p-4 bg-white rounded border">
+									<div className="flex items-center justify-between mb-3">
+										<h4 className="font-medium text-gray-900">Kết quả Test</h4>
+										<div className="flex items-center gap-2">
+											<span className={`text-lg font-bold ${getScoreColor(codeResult.score, codeResult.maxScore)}`}>
+												{codeResult.score} / {codeResult.maxScore} điểm
+											</span>
+											<span
+												className={`text-xs px-2 py-1 rounded ${codeResult.judgeStatus === "accepted"
 														? "bg-green-100 text-green-700"
 														: "bg-red-100 text-red-700"
+													}`}
+											>
+												{codeResult.judgeStatus}
+											</span>
+										</div>
+									</div>
+
+									{codeResult.compileLog && (
+										<div className="mb-3 p-3 bg-red-50 border border-red-200 rounded">
+											<p className="text-xs font-medium text-red-700 mb-1">Compile Error:</p>
+											<pre className="text-xs text-red-600 whitespace-pre-wrap font-mono">
+												{codeResult.compileLog}
+											</pre>
+										</div>
+									)}
+
+									{codeResult.stderrLog && (
+										<div className="mb-3 p-3 bg-red-50 border border-red-200 rounded">
+											<p className="text-xs font-medium text-red-700 mb-1">Runtime Error:</p>
+											<pre className="text-xs text-red-600 whitespace-pre-wrap font-mono">
+												{codeResult.stderrLog}
+											</pre>
+										</div>
+									)}
+
+									{codeResult.testResults && codeResult.testResults.length > 0 && (
+										<div className="space-y-2">
+											<p className="text-sm font-medium text-gray-700">Test Cases:</p>
+											{codeResult.testResults.map((test, index) => (
+												<div
+													key={test.id}
+													className={`p-3 rounded border ${test.status === "ok"
+															? "bg-green-50 border-green-200"
+															: "bg-red-50 border-red-200"
 														}`}
 												>
-													{test.status === "ok" ? "✓ Passed" : "✗ Failed"}
-												</span>
-											</div>
-											<div className="grid grid-cols-3 gap-2 text-xs">
-												<div>
-													<p className="font-medium text-gray-600 mb-1">Input:</p>
-													<pre className="bg-white p-2 rounded border font-mono">
-														{test.input}
-													</pre>
+													<div className="flex items-center justify-between mb-2">
+														<span className="text-sm font-medium">Test Case {index + 1}</span>
+														<span
+															className={`text-xs px-2 py-1 rounded ${test.status === "ok"
+																	? "bg-green-100 text-green-700"
+																	: "bg-red-100 text-red-700"
+																}`}
+														>
+															{test.status === "ok" ? "✓ Passed" : "✗ Failed"}
+														</span>
+													</div>
+													<div className="grid grid-cols-3 gap-2 text-xs">
+														<div>
+															<p className="font-medium text-gray-600 mb-1">Input:</p>
+															<pre className="bg-white p-2 rounded border font-mono">
+																{test.input}
+															</pre>
+														</div>
+														<div>
+															<p className="font-medium text-gray-600 mb-1">Expected:</p>
+															<pre className="bg-white p-2 rounded border font-mono">
+																{test.expect}
+															</pre>
+														</div>
+														<div>
+															<p className="font-medium text-gray-600 mb-1">Got:</p>
+															<pre
+																className={`bg-white p-2 rounded border font-mono ${test.status === "ok" ? "text-green-600" : "text-red-600"
+																	}`}
+															>
+																{test.got}
+															</pre>
+														</div>
+													</div>
 												</div>
-												<div>
-													<p className="font-medium text-gray-600 mb-1">Expected:</p>
-													<pre className="bg-white p-2 rounded border font-mono">
-														{test.expect}
-													</pre>
-												</div>
-												<div>
-													<p className="font-medium text-gray-600 mb-1">Got:</p>
-													<pre
-														className={`bg-white p-2 rounded border font-mono ${test.status === "ok" ? "text-green-600" : "text-red-600"
-															}`}
-													>
-														{test.got}
-													</pre>
-												</div>
-											</div>
+											))}
 										</div>
-									))}
-								</div>
-							)}
+									)}
 
-							{codeResult.stdoutLog && (
-								<div className="mt-3 p-3 bg-gray-100 rounded">
-									<p className="text-xs font-medium text-gray-700 mb-1">Output:</p>
-									<pre className="text-xs text-gray-600 whitespace-pre-wrap font-mono">
-										{codeResult.stdoutLog}
-									</pre>
+									{codeResult.stdoutLog && (
+										<div className="mt-3 p-3 bg-gray-100 rounded">
+											<p className="text-xs font-medium text-gray-700 mb-1">Output:</p>
+											<pre className="text-xs text-gray-600 whitespace-pre-wrap font-mono">
+												{codeResult.stdoutLog}
+											</pre>
+										</div>
+									)}
 								</div>
-							)}
-						</div>
-					</div>
-				)}
+							</div>
+						)}
 
-				{/* Explanation */}
-				{question.explanation && (
-					<div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
-						<p className="text-sm font-medium text-blue-900 mb-1">💡 Giải thích:</p>
-						<p className="text-sm text-blue-800 whitespace-pre-wrap">{question.explanation}</p>
-					</div>
+						{/* Explanation */}
+						{question.explanation && (
+							<div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
+								<p className="text-sm font-medium text-blue-900 mb-1">💡 Giải thích:</p>
+								<p className="text-sm text-blue-800 whitespace-pre-wrap">{question.explanation}</p>
+							</div>
+						)}
+					</>
 				)}
 			</div>
 		);
@@ -517,6 +572,15 @@ export default function AssignmentSubmissionHistory() {
 
 	return (
 		<div className="w-full min-h-screen bg-gray-50">
+			{/* 🔥 Cảnh báo nếu không hiển thị đáp án */}
+			{!canShowAnswers && (
+				<div className="bg-yellow-50 border-b border-yellow-300 px-4 py-3 text-center">
+					<p className="text-yellow-800 font-medium">
+						ℹ️ Giảng viên đã tắt chế độ hiển thị đáp án. Bạn chỉ có thể xem câu trả lời của mình.
+					</p>
+				</div>
+			)}
+
 			{/* Header */}
 			<div className="bg-white border-b sticky top-0 z-20 shadow-sm">
 				<div className="max-w-7xl mx-auto px-4 py-4">
@@ -556,13 +620,13 @@ export default function AssignmentSubmissionHistory() {
 											key={submission.id}
 											onClick={() => fetchSubmissionDetails(submission.id)}
 											className={`w-full text-left p-3 rounded border transition-colors ${selectedSubmission?.id === submission.id
-												? "bg-indigo-50 border-indigo-300"
-												: "bg-white hover:bg-gray-50"
+													? "bg-indigo-50 border-indigo-300"
+													: "bg-white hover:bg-gray-50"
 												}`}
 										>
 											<div className="flex items-center justify-between mb-1">
 												<span className="text-sm font-medium">Lần {submissions.length - index}</span>
-												{submission.score !== null && (
+												{submission.score !== null && canShowAnswers && (
 													<span className={`text-sm font-bold ${getScoreColor(submission.score, submission.maxScore)}`}>
 														{submission.score}/{submission.maxScore}
 													</span>
@@ -585,7 +649,7 @@ export default function AssignmentSubmissionHistory() {
 							{selectedSubmission ? (
 								<div className="space-y-6">
 									{/* Submission Summary */}
-									<div className={`border rounded-lg p-6 ${getScoreBgColor(selectedSubmission.score || 0, selectedSubmission.maxScore)}`}>
+									<div className={`border rounded-lg p-6 ${canShowAnswers ? getScoreBgColor(selectedSubmission.score || 0, selectedSubmission.maxScore) : "bg-white border-gray-300"}`}>
 										<div className="flex items-start justify-between mb-4">
 											<div>
 												<h2 className="text-2xl font-bold mb-2">
@@ -593,24 +657,27 @@ export default function AssignmentSubmissionHistory() {
 												</h2>
 												<div className="flex items-center gap-4 text-sm text-gray-600">
 													<span>Nộp lúc: {dayjs(selectedSubmission.submittedAt).format("DD/MM/YYYY HH:mm")}</span>
-													{selectedSubmission.gradedAt && (
+													{selectedSubmission.gradedAt && canShowAnswers && (
 														<span>Chấm lúc: {dayjs(selectedSubmission.gradedAt).format("DD/MM/YYYY HH:mm")}</span>
 													)}
 												</div>
 											</div>
-											<div className="text-right">
-												<div className={`text-4xl font-bold ${getScoreColor(selectedSubmission.score || 0, selectedSubmission.maxScore)}`}>
-													{selectedSubmission.score || 0} / {selectedSubmission.maxScore}
+
+											{canShowAnswers && (
+												<div className="text-right">
+													<div className={`text-4xl font-bold ${getScoreColor(selectedSubmission.score || 0, selectedSubmission.maxScore)}`}>
+														{selectedSubmission.score || 0} / {selectedSubmission.maxScore}
+													</div>
+													<div className="text-sm text-gray-600 mt-1">
+														{selectedSubmission.score !== null
+															? `${Math.round((selectedSubmission.score / selectedSubmission.maxScore) * 100)}%`
+															: "Chưa chấm"}
+													</div>
 												</div>
-												<div className="text-sm text-gray-600 mt-1">
-													{selectedSubmission.score !== null
-														? `${Math.round((selectedSubmission.score / selectedSubmission.maxScore) * 100)}%`
-														: "Chưa chấm"}
-												</div>
-											</div>
+											)}
 										</div>
 
-										{selectedSubmission.feedback && (
+										{selectedSubmission.feedback && canShowAnswers && (
 											<div className="mt-4 p-4 bg-white rounded border">
 												<p className="text-sm font-medium text-gray-700 mb-2">Nhận xét chung:</p>
 												<p className="text-sm text-gray-900">{selectedSubmission.feedback}</p>

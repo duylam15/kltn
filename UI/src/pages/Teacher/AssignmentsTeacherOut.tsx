@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Table,
   Button,
@@ -20,7 +20,7 @@ import {
   Card,
   Statistic,
   InputNumber,
-  Switch, 
+  Switch,
 } from "antd";
 import {
   ReloadOutlined,
@@ -33,12 +33,10 @@ import {
   FilterOutlined,
   ClearOutlined,
   ThunderboltOutlined,
-  GlobalOutlined,      
-  LockOutlined,        
-  ShareAltOutlined,    
-  CopyOutlined,        
-  CloudUploadOutlined, 
-  FolderOpenOutlined,  
+  GlobalOutlined,
+  LockOutlined,
+  ShareAltOutlined,
+  FolderOpenOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -68,7 +66,7 @@ type Assignment = {
   shuffleQuestions?: boolean;
   showAnswersAfterSubmit?: boolean;
   allowLateSubmission?: boolean;
-  isPublic?: boolean;  // ← THÊM DÒNG NÀY
+  isPublic?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -77,14 +75,15 @@ type Section = {
   id: number;
   sectionCode: string;
   sectionName: string;
-  subject: {  // ← THÊM DÒNG NÀY
+  subject: {
     subjectCode: string;
     subjectName: string;
   };
-  term: {  // ← THÊM DÒNG NÀY
+  term: {
     name: string;
   };
 };
+
 type Question = {
   id: number;
   content: string;
@@ -119,15 +118,7 @@ type Chapter = {
 };
 
 
-// 🆕 Type cho auto generate
-type ChapterRule = {
-  chapterId: number;
-  easy: { count: number; pointPerQuestion: number };
-  medium: { count: number; pointPerQuestion: number };
-  hard: { count: number; pointPerQuestion: number };
-};
-
-export default function AssignmentsTeacher2() {
+export default function AssignmentsTeacherOut() {
   const [loading, setLoading] = useState(true);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
@@ -144,13 +135,11 @@ export default function AssignmentsTeacher2() {
   const [tempSelectedSectionIds, setTempSelectedSectionIds] = useState<number[]>([]);
   const [savingAssignment, setSavingAssignment] = useState(false);
 
-  // State cho câu hỏi
   const [assignedQuestionIds, setAssignedQuestionIds] = useState<number[]>([]);
   const [tempSelectedQuestionIds, setTempSelectedQuestionIds] = useState<number[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [questionKeyword, setQuestionKeyword] = useState("");
 
-  // 🆕 State cho filter câu hỏi
   const [questionSubjects, setQuestionSubjects] = useState<QuestionSubject[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | undefined>();
@@ -158,20 +147,12 @@ export default function AssignmentsTeacher2() {
   const [selectedDifficulty, setSelectedDifficulty] = useState<string | undefined>();
   const [selectedType, setSelectedType] = useState<string | undefined>();
 
-  // 🆕 State cho auto generate modal
   const [autoGenModalOpen, setAutoGenModalOpen] = useState(false);
   const [autoGenForm] = Form.useForm<any>();
   const [generatingQuestions, setGeneratingQuestions] = useState(false);
 
-  const [filterPublic, setFilterPublic] = useState<boolean | null>(null);  // ← THÊM
-  const [filterType, setFilterType] = useState<string | null>(null);       // ← THÊM
-
-  // State cho thư viện
-  const [libraryModalOpen, setLibraryModalOpen] = useState(false);         // ← THÊM
-  const [allAssignments, setAllAssignments] = useState<Assignment[]>([]);  // ← THÊM
-  const [loadingLibrary, setLoadingLibrary] = useState(false);             // ← THÊM
-  const [selectedAssignmentIds, setSelectedAssignmentIds] = useState<number[]>([]); // ← THÊM
-  const [libraryKeyword, setLibraryKeyword] = useState("");                // ← THÊM
+  const [filterPublic, setFilterPublic] = useState<boolean | null>(null);
+  const [filterType, setFilterType] = useState<string | null>(null);
 
   const { user } = useAuth();
   const teacherId = user?.teacher?.id;
@@ -182,12 +163,10 @@ export default function AssignmentsTeacher2() {
     fetchQuestionSubjects();
   }, []);
 
-  // 🆕 Fetch câu hỏi với filter
   useEffect(() => {
     fetchQuestions();
   }, [selectedSubjectId, selectedChapterId, selectedDifficulty, selectedType]);
 
-  // 🆕 Load chapters khi chọn subject
   useEffect(() => {
     if (selectedSubjectId) {
       fetchChaptersBySubject(selectedSubjectId);
@@ -201,7 +180,7 @@ export default function AssignmentsTeacher2() {
     try {
       setLoading(true);
       const res = await axios.get<{ success: boolean; data: Assignment[] }>(
-        `${API_BASE}/assignments?createdBy=${teacherId}`  // ← SỬA DÒNG NÀY
+        `${API_BASE}/assignments/teacher/${teacherId}`
       );
       if (res.data.success) {
         setAssignments(res.data.data || []);
@@ -216,59 +195,13 @@ export default function AssignmentsTeacher2() {
   async function fetchSections() {
     try {
       const res = await axios.get<{ success: boolean; data: any[] }>(
-        `${API_BASE}/sections-instructors?teacher_id=${teacherId}`  // ← SỬA DÒNG NÀY
+        `${API_BASE}/sections-instructors?teacher_id=${teacherId}`
       );
       if (res.data.success) {
-        setSections(res.data.data.map((item: any) => item.section) || []);  // ← SỬA DÒNG NÀY
+        setSections(res.data.data.map((item: any) => item.section) || []);
       }
     } catch {
       toast.error("Không tải được danh sách lớp");
-    }
-  }
-  async function fetchAllAssignments() {
-    try {
-      setLoadingLibrary(true);
-
-      const [allRes, myRes] = await Promise.all([
-        axios.get(`${API_BASE}/assignments?isPublic=true`),
-        axios.get(`${API_BASE}/assignments?createdBy=${teacherId}`)
-      ]);
-
-      if (allRes.data.success && myRes.data.success) {
-        const allAssigns = allRes.data.data;
-        const myAssigns = myRes.data.data;
-
-        const myOriginalAssignmentIds = new Set(
-          myAssigns
-            .filter((a: Assignment) => a.originalAssignmentId)
-            .map((a: Assignment) => a.originalAssignmentId)
-        );
-
-        const otherAssignments = allAssigns.filter((a: Assignment) => {
-          return !(a.createdBy === teacherId && !a.originalAssignmentId);
-        });
-
-        const assignmentsByRootId = new Map<string, Assignment>();
-        otherAssignments.forEach((a: Assignment) => {
-          const rootId = a.originalAssignmentId || a.id.toString();
-          if (!assignmentsByRootId.has(rootId) || !a.originalAssignmentId) {
-            assignmentsByRootId.set(rootId, a);
-          }
-        });
-
-        const availableAssignments = Array.from(assignmentsByRootId.values())
-          .filter(assignment => {
-            const rootId = assignment.originalAssignmentId || assignment.id.toString();
-            return !myOriginalAssignmentIds.has(rootId);
-          });
-
-        setAllAssignments(availableAssignments);
-      }
-    } catch (err) {
-      console.error("Lỗi fetch assignments:", err);
-      toast.error("Không tải được danh sách bài tập");
-    } finally {
-      setLoadingLibrary(false);
     }
   }
 
@@ -277,7 +210,7 @@ export default function AssignmentsTeacher2() {
       const res = await axios.put(`${API_BASE}/assignments/${assignmentId}`, {
         isPublic,
       });
-      console.log(res); 
+      console.log(res);
       if (res.data.success) {
         toast.success(`Đã ${isPublic ? "chia sẻ" : "hủy chia sẻ"} bài tập`);
         setAssignments((prev) =>
@@ -290,7 +223,6 @@ export default function AssignmentsTeacher2() {
     }
   };
 
-  // 🆕 Fetch question subjects
   async function fetchQuestionSubjects() {
     try {
       const res = await axios.get<{
@@ -308,7 +240,6 @@ export default function AssignmentsTeacher2() {
     }
   }
 
-  // 🆕 Fetch chapters by subject
   async function fetchChaptersBySubject(subjectId: number) {
     try {
       const res = await axios.get<{ success: boolean; data: Chapter[] }>(
@@ -323,7 +254,6 @@ export default function AssignmentsTeacher2() {
     }
   }
 
-  // 🆕 Fetch questions với filter
   async function fetchQuestions() {
     try {
       setLoadingQuestions(true);
@@ -340,7 +270,6 @@ export default function AssignmentsTeacher2() {
       }>(`${API_BASE}/questions`, { params });
 
       if (res.data.success) {
-        // Handle cả 2 format response
         const items = Array.isArray(res.data.data)
           ? res.data.data
           : (res.data.data as any).items || [];
@@ -382,9 +311,12 @@ export default function AssignmentsTeacher2() {
         shuffleQuestions: values.shuffleQuestions || false,
         showAnswersAfterSubmit: values.showAnswersAfterSubmit || false,
         allowLateSubmission: values.allowLateSubmission || false,
-        isPublic: values.isPublic || false,  // ← THÊM DÒNG NÀY
+        isPublic: values.isPublic || false,
         createdBy: teacherId,
-        originalAssignmentId: uniqueCode
+        originalAssignmentId: uniqueCode,
+        ...(values.sectionId ? { sectionId: Number(values.sectionId) } : {}),
+        subjectId: values.subjectId,
+        chapterId: values.chapterId,
       };
 
       let assignmentId: number;
@@ -416,48 +348,6 @@ export default function AssignmentsTeacher2() {
       toast.error(
         err?.response?.data?.message || "Không thể lưu thông tin bài tập"
       );
-    }
-  };
-
-  const handleCopyAssignments = async () => {
-    if (selectedAssignmentIds.length === 0) {
-      toast.error("Vui lòng chọn ít nhất 1 bài tập");
-      return;
-    }
-
-    try {
-      const selectedAssignments = allAssignments.filter((a) =>
-        selectedAssignmentIds.includes(a.id)
-      );
-
-      const createPromises = selectedAssignments.map(async (assignment) => {
-        return axios.post(`${API_BASE}/assignments`, {
-          title: assignment.title,
-          description: assignment.description,
-          type: assignment.type,
-          maxScore: assignment.maxScore,
-          passingScore: assignment.passingScore,
-          timeLimit: assignment.timeLimit,
-          maxAttempts: assignment.maxAttempts,
-          shuffleQuestions: assignment.shuffleQuestions,
-          showAnswersAfterSubmit: assignment.showAnswersAfterSubmit,
-          allowLateSubmission: assignment.allowLateSubmission,
-          createdBy: teacherId,
-          originalAssignmentId: assignment.originalAssignmentId || assignment.id.toString(),
-          isPublic: false,
-        });
-      });
-
-      await Promise.all(createPromises);
-
-      toast.success(`Đã sao chép ${selectedAssignmentIds.length} bài tập`);
-      setLibraryModalOpen(false);
-      setSelectedAssignmentIds([]);
-      setLibraryKeyword("");
-      fetchAssignments();
-    } catch (err: any) {
-      console.error("Lỗi copy:", err);
-      toast.error(err.response?.data?.message || "Không thể sao chép bài tập");
     }
   };
 
@@ -582,7 +472,6 @@ export default function AssignmentsTeacher2() {
     setModalOpen(true);
   };
 
-  // 🆕 Mở modal auto generate
   const openAutoGenModal = (assignment?: Assignment) => {
     if (assignment) {
       setEditing(assignment);
@@ -594,12 +483,10 @@ export default function AssignmentsTeacher2() {
     setAutoGenModalOpen(true);
   };
 
-  // 🆕 Handle auto generate
   const handleAutoGenerate = async () => {
     try {
       const values = await autoGenForm.validateFields();
 
-      // Validate assignment exists
       if (!editing) {
         toast.error("Vui lòng tạo bài tập trước khi tự động tạo câu hỏi");
         return;
@@ -607,7 +494,6 @@ export default function AssignmentsTeacher2() {
 
       setGeneratingQuestions(true);
 
-      // Gọi API auto generate
       const res = await axios.post(`${API_BASE}/assignment-generator/generate`, {
         assignmentId: editing.id,
         subjectId: values.subjectId,
@@ -619,7 +505,6 @@ export default function AssignmentsTeacher2() {
         toast.success(`Đã tự động tạo ${res.data.data.totalQuestionsAdded} câu hỏi!`);
         setAutoGenModalOpen(false);
         autoGenForm.resetFields();
-        // Refresh assignment
         fetchAssignments();
       }
     } catch (err: any) {
@@ -632,9 +517,9 @@ export default function AssignmentsTeacher2() {
 
   const toggleTempSelection = (sectionId: number, checked: boolean) => {
     if (checked) {
-      setTempSelectedSectionIds((prev) => [...prev, sectionId]);
+      setTempSelectedSectionIds((prev: number[]) => [...prev, sectionId]);
     } else {
-      setTempSelectedSectionIds((prev) => prev.filter((id) => id !== sectionId));
+      setTempSelectedSectionIds((prev: number[]) => prev.filter((id: number) => id !== sectionId));
     }
   };
 
@@ -684,7 +569,6 @@ export default function AssignmentsTeacher2() {
     }
   };
 
-  // 🆕 Reset filters
   const resetFilters = () => {
     setSelectedSubjectId(undefined);
     setSelectedChapterId(undefined);
@@ -693,7 +577,6 @@ export default function AssignmentsTeacher2() {
     setQuestionKeyword("");
   };
 
-  // 🎨 Render difficulty tag
   const renderDifficultyTag = (difficulty?: string) => {
     const config: Record<string, { color: string; text: string }> = {
       easy: { color: "green", text: "Dễ" },
@@ -705,7 +588,6 @@ export default function AssignmentsTeacher2() {
     return <Tag color={diff.color}>{diff.text}</Tag>;
   };
 
-  // 🎨 Render type tag
   const renderTypeTag = (type: string) => {
     const config: Record<string, { color: string; text: string }> = {
       multiple_choice: { color: "blue", text: "Trắc nghiệm" },
@@ -722,7 +604,7 @@ export default function AssignmentsTeacher2() {
       title: "Tiêu đề",
       dataIndex: "title",
       key: "title",
-      render: (text: string, record: Assignment) => (  // ← SỬA
+      render: (text: string, record: Assignment) => (
         <div>
           <div style={{ fontWeight: 600, color: "#1890ff" }}>
             {text}
@@ -748,23 +630,6 @@ export default function AssignmentsTeacher2() {
         };
         return <Tag color={colors[type]}>{type.toUpperCase()}</Tag>;
       },
-    },
-    {  // ← THÊM COLUMN MỚI (thêm sau column "Điểm tối đa")
-      title: "Trạng thái",
-      key: "status",
-      width: 150,
-      align: "center" as const,
-      render: (_: any, record: Assignment) => (
-        <Switch
-          checkedChildren={<><GlobalOutlined /> Công khai</>}
-          unCheckedChildren={<><LockOutlined /> Riêng tư</>}
-          checked={record.isPublic}
-          onChange={(checked) => {
-            console.log(checked);
-            handleTogglePublic(record.id, checked)
-          }}
-        />
-      ),
     },
     {
       title: "Điểm tối đa",
@@ -865,7 +730,6 @@ export default function AssignmentsTeacher2() {
             <FileQuestion /> Quản lý Bài tập
           </div>
         </Title>
-        {/* Statistics */}
         <Row gutter={16} style={{ marginBottom: 16 }}>
           <Col span={6}>
             <Card>
@@ -939,15 +803,6 @@ export default function AssignmentsTeacher2() {
             onChange={(e) => setKeyword(e.target.value)}
             style={{ width: 400 }}
           />
-          <Button
-            icon={<CopyOutlined />}
-            onClick={() => {
-              setLibraryModalOpen(true);
-              fetchAllAssignments();
-            }}
-          >
-            Lấy từ thư viện
-          </Button>
           <Button icon={<ReloadOutlined />} onClick={fetchAssignments}>
             Làm mới
           </Button>
@@ -976,7 +831,7 @@ export default function AssignmentsTeacher2() {
         />
       )}
 
-      {/* Modal thêm/sửa - với filter câu hỏi */}
+      {/* Modal thêm/sửa */}
       <Modal
         title={editing ? "Sửa thông tin bài tập" : "Thêm bài tập mới"}
         open={modalOpen}
@@ -999,7 +854,6 @@ export default function AssignmentsTeacher2() {
         }}
       >
         <Row gutter={24}>
-          {/* Cột trái: Thông tin bài tập */}
           <Col span={10}>
             <Title level={5} style={{ marginBottom: 12 }}>Thông tin bài tập</Title>
 
@@ -1020,6 +874,47 @@ export default function AssignmentsTeacher2() {
               <Form.Item label="Mô tả" name="description" className="mb-3">
                 <Input.TextArea rows={3} placeholder="Mô tả chi tiết bài tập" className="!p-2" />
               </Form.Item>
+
+              <Form.Item
+                label="Môn học"
+                name="subjectId"
+                rules={[{ required: true, message: "Vui lòng chọn môn học" }]}
+                className="mb-3"
+              >
+                <Select
+                  placeholder="Chọn môn học"
+                  onChange={(value) => {
+                    setSelectedSubjectId(value);
+                    form.setFieldsValue({ chapterId: undefined }); // reset chương khi đổi môn
+                    fetchChaptersBySubject(value);
+                  }}
+                >
+                  {questionSubjects.map((s) => (
+                    <Option key={s.id} value={s.id}>
+                      {s.subjectCode} - {s.subjectName}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+
+              <Form.Item
+                label="Chương"
+                name="chapterId"
+                className="mb-3"
+                rules={[{ required: true, message: "Vui lòng chọn chương" }]}
+              >
+                <Select
+                  placeholder="Chọn chương"
+                  disabled={!selectedSubjectId}
+                >
+                  {chapters.map((c) => (
+                    <Option key={c.id} value={c.id}>
+                      {c.chapterCode} - {c.chapterName}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+
 
               <Form.Item
                 label="Loại bài tập"
@@ -1087,20 +982,10 @@ export default function AssignmentsTeacher2() {
             </Form>
           </Col>
 
-          {/* Cột phải: Danh sách câu hỏi với filter */}
           <Col span={14}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <Title level={5} style={{ margin: 0 }}>Câu hỏi</Title>
               <Space>
-                <Button
-                  icon={<ThunderboltOutlined />}
-                  size="small"
-                  type="primary"
-                  onClick={() => openAutoGenModal(editing || undefined)}
-                  disabled={!editing}
-                >
-                  Tự động tạo
-                </Button>
                 <Button
                   icon={<ClearOutlined />}
                   size="small"
@@ -1111,11 +996,10 @@ export default function AssignmentsTeacher2() {
               </Space>
             </div>
 
-            {/* 🆕 Bộ lọc */}
             <Card size="small" style={{ marginBottom: 12, backgroundColor: "#fafafa" }}>
               <Space direction="vertical" style={{ width: "100%" }} size="small">
                 <Row gutter={8}>
-                  <Col span={12}>
+                  {/* <Col span={12}>
                     <Text type="secondary" style={{ fontSize: 12 }}>Môn học:</Text>
                     <Select
                       allowClear
@@ -1149,7 +1033,7 @@ export default function AssignmentsTeacher2() {
                         </Option>
                       ))}
                     </Select>
-                  </Col>
+                  </Col> */}
                 </Row>
                 <Row gutter={8}>
                   <Col span={12}>
@@ -1187,7 +1071,6 @@ export default function AssignmentsTeacher2() {
               </Space>
             </Card>
 
-            {/* Search */}
             <Input
               allowClear
               prefix={<SearchOutlined />}
@@ -1198,7 +1081,6 @@ export default function AssignmentsTeacher2() {
               size="small"
             />
 
-            {/* Thống kê */}
             <Card size="small" style={{ marginBottom: 12 }}>
               <Row gutter={16}>
                 <Col span={12}>
@@ -1218,7 +1100,6 @@ export default function AssignmentsTeacher2() {
               </Row>
             </Card>
 
-            {/* Danh sách câu hỏi */}
             <div
               style={{
                 maxHeight: 400,
@@ -1301,7 +1182,7 @@ export default function AssignmentsTeacher2() {
         </Row>
       </Modal>
 
-      {/* 🆕 Modal tự động tạo câu hỏi */}
+      {/* Modal tự động tạo câu hỏi */}
       <Modal
         title={
           <Space>
@@ -1489,110 +1370,6 @@ export default function AssignmentsTeacher2() {
             })
           )}
         </div>
-      </Modal>
-      {/* Modal thư viện */}
-      <Modal
-        title={
-          <div className="flex items-center gap-2">
-            <CopyOutlined /> Lấy bài tập từ thư viện chung
-          </div>
-        }
-        open={libraryModalOpen}
-        onCancel={() => {
-          setLibraryModalOpen(false);
-          setSelectedAssignmentIds([]);
-          setLibraryKeyword("");
-        }}
-        onOk={handleCopyAssignments}
-        okText={`Sao chép (${selectedAssignmentIds.length})`}
-        cancelText="Hủy"
-        width={900}
-        centered
-      >
-        <div style={{ marginBottom: 16 }}>
-          <Input
-            allowClear
-            prefix={<SearchOutlined />}
-            placeholder="Tìm bài tập..."
-            value={libraryKeyword}
-            onChange={(e) => setLibraryKeyword(e.target.value)}
-          />
-        </div>
-
-        {loadingLibrary ? (
-          <div style={{ textAlign: "center", padding: 40 }}>
-            <Spin tip="Đang tải..." />
-          </div>
-        ) : (
-          <Table<Assignment>
-            dataSource={allAssignments.filter(
-              (a) =>
-                !libraryKeyword ||
-                a.title
-                  .toLowerCase()
-                  .includes(libraryKeyword.toLowerCase()) ||
-                a.description
-                  ?.toLowerCase()
-                  .includes(libraryKeyword.toLowerCase())
-            )}
-            columns={[
-              {
-                title: "Tiêu đề",
-                dataIndex: "title",
-                key: "title",
-                render: (text: string, record: Assignment) => (
-                  <div>
-                    <div style={{ fontWeight: 500 }}>{text}</div>
-                    {record.description && (
-                      <div style={{ fontSize: 12, color: "#666" }}>
-                        {record.description}
-                      </div>
-                    )}
-                  </div>
-                ),
-              },
-              {
-                title: "Loại",
-                dataIndex: "type",
-                key: "type",
-                width: 100,
-                render: (type: string) => {
-                  const colors: any = {
-                    exercise: "blue",
-                    quiz: "purple",
-                    project: "orange",
-                    exam: "red",
-                  };
-                  return <Tag color={colors[type]}>{type.toUpperCase()}</Tag>;
-                },
-              },
-              {
-                title: "Điểm",
-                dataIndex: "maxScore",
-                key: "maxScore",
-                width: 80,
-                align: "center" as const,
-                render: (score: number) => <Tag color="green">{score}</Tag>,
-              },
-              {
-                title: "Ngày tạo",
-                dataIndex: "createdAt",
-                key: "createdAt",
-                width: 120,
-                render: (date: string) => dayjs(date).format("DD/MM/YYYY"),
-              },
-            ]}
-            rowKey="id"
-            rowSelection={{
-              selectedRowKeys: selectedAssignmentIds,
-              onChange: (keys) =>
-                setSelectedAssignmentIds(keys as number[]),
-            }}
-            pagination={{ pageSize: 5 }}
-            size="small"
-            locale={{ emptyText: "Không có bài tập nào" }}
-          />
-        )}
       </Modal>
     </div>
   );

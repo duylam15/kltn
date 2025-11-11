@@ -91,6 +91,70 @@ export async function submitProjectAnswer(data: {
     return { submission, answer };
 }
 
+export async function getPublicAssignments() {
+    return prisma.assignment.findMany({
+        where: {
+            isPublic: true,
+        },
+        include: {
+            questions: {
+                select: {
+                    question: {
+                        select: {
+                            id: true,
+                            type: true,
+                            content: true,
+                            points: true,
+                        },
+                    },
+                },
+            },
+
+            subject: {
+                select: {
+                    id: true,
+                    subjectName: true,
+                    subjectCode: true,
+                },
+            },
+            chapter: {
+                select: {
+                    id: true,
+                    chapterName: true,
+                },
+            },
+        },
+        orderBy: [{ createdAt: "desc" }],
+    });
+}
+
+export async function getSubmissionsByStudentAndAssignment(
+    studentId: number,
+    assignmentId: number
+) {
+    return prisma.submission.findMany({
+        where: {
+            studentId,
+            assignmentId,
+        },
+        include: {
+            answers: {
+                select: {
+                    id: true,
+                    questionId: true,
+                    score: true,
+                    maxScore: true,
+                    judgeStatus: true,
+                },
+            },
+        },
+        orderBy: {
+            attempt: "asc", // từ lần đầu tiên đến mới nhất
+        },
+    });
+}
+
+
 
 export async function getAnswerStatus(answerId: number) {
     return prisma.submissionAnswer.findUnique({
@@ -124,6 +188,84 @@ export async function getAssignmentsBySection(sectionId: number) {
     });
 }
 
+export async function getAssignmentWithBestSubmissions(
+    assignmentId: number,
+    sectionId?: number
+) {
+    // 1. Lấy assignment
+    const assignment = await prisma.assignment.findUnique({
+        where: { id: assignmentId },
+        include: {
+            questions: true,
+            sectionLinks: sectionId ? { where: { sectionId } } : true,
+        },
+    });
+
+    if (!assignment) {
+        throw new Error("Không tìm thấy bài tập");
+    }
+
+    // 2. Lấy tất cả submissions
+    const allSubmissions = await prisma.submission.findMany({
+        where: { assignmentId },
+        include: {
+            student: {
+                select: {
+                    id: true,
+                    studentCode: true,
+                    className: true,
+                    user: {
+                        select: {
+                            id: true,
+                            fullName: true,
+                            email: true,
+                        },
+                    },
+                },
+            },
+            answers: {
+                select: {
+                    id: true,
+                    questionId: true,
+                    score: true,
+                    maxScore: true,
+                    judgeStatus: true,
+                },
+            },
+        },
+    });
+
+    // 3. Nhóm theo studentId và lấy điểm cao nhất
+    const bestSubmissionsMap = new Map<number, any>();
+
+    allSubmissions.forEach((submission) => {
+        const studentId = submission.studentId;
+        const current = bestSubmissionsMap.get(studentId);
+
+        if (!current) {
+            bestSubmissionsMap.set(studentId, submission);
+        } else {
+            const currentScore = current.score ?? -1;
+            const newScore = submission.score ?? -1;
+
+            // Ưu tiên điểm cao hơn, nếu bằng nhau thì lấy mới hơn
+            if (
+                newScore > currentScore ||
+                (newScore === currentScore &&
+                    new Date(submission.submittedAt) >
+                        new Date(current.submittedAt))
+            ) {
+                bestSubmissionsMap.set(studentId, submission);
+            }
+        }
+    });
+
+    return {
+        ...assignment,
+        submissions: Array.from(bestSubmissionsMap.values()),
+    };
+}
+
 export async function createAssignment(data: {
     title: string;
     description?: string;
@@ -138,6 +280,8 @@ export async function createAssignment(data: {
     allowLateSubmission?: boolean;
     createdBy: number;
     originalAssignmentId?: string | null;
+    subjectId?: number | null;
+    chapterId?: number | null;
 }) {
     return prisma.assignment.create({
         data: {
@@ -145,7 +289,7 @@ export async function createAssignment(data: {
             description: data.description,
             type: data.type,
             dueDate: data.dueDate ? new Date(data.dueDate) : null,
-            maxScore: 0,
+            maxScore: data.maxScore ?? 100,
             passingScore: data.passingScore ?? null,
             timeLimit: data.timeLimit ?? null,
             maxAttempts: data.maxAttempts ?? 1,
@@ -153,10 +297,20 @@ export async function createAssignment(data: {
             showAnswersAfterSubmit: data.showAnswersAfterSubmit ?? false,
             allowLateSubmission: data.allowLateSubmission ?? false,
             createdBy: data.createdBy,
-            originalAssignmentId: data.originalAssignmentId ?? uuidv4(), // 👈 luôn đảm bảo có string
+            originalAssignmentId: data.originalAssignmentId ?? uuidv4(),
+
+            // ✅ Gán trực tiếp ID thay vì connect
+            subjectId: data.subjectId ?? null,
+            chapterId: data.chapterId ?? null,
+        },
+        include: {
+            subject: true,
+            chapter: true,
         },
     });
 }
+
+
 
 export async function getAssignmentsBySectionForStudent(
     sectionId: number,
@@ -353,16 +507,93 @@ export async function getAllAssignments(filter: any) {
             ...(filter.dueBefore
                 ? { dueDate: { lte: new Date(filter.dueBefore) } }
                 : {}),
+            ...(filter.subjectId
+                ? { subjectId: Number(filter.subjectId) }
+                : {}),
+            ...(filter.chapterId
+                ? { chapterId: Number(filter.chapterId) }
+                : {}),
         },
         include: {
-            sectionLinks: {
-                include: { section: true }, // lấy thông tin section liên kết
+            // 🧩 Lấy thông tin môn học và chương
+            subject: {
+                select: {
+                    id: true,
+                    subjectCode: true,
+                    subjectName: true,
+                },
             },
-            questions: true, // lấy chi tiết câu hỏi
-            submissions: true,
+            chapter: {
+                select: {
+                    id: true,
+                    chapterCode: true,
+                    chapterName: true,
+                },
+            },
+
+            // 🧱 Lấy danh sách lớp liên kết
+            sectionLinks: {
+                include: {
+                    section: {
+                        include: {
+                            subject: {
+                                select: {
+                                    id: true,
+                                    subjectCode: true,
+                                    subjectName: true,
+                                },
+                            },
+                            term: true,
+                        },
+                    },
+                },
+            },
+
+            // 🧮 Lấy danh sách câu hỏi
+            questions: {
+                include: {
+                    question: {
+                        select: {
+                            id: true,
+                            content: true,
+                            type: true,
+                            difficulty: true,
+                            points: true,
+                            subject: {
+                                select: {
+                                    id: true,
+                                    subjectCode: true,
+                                    subjectName: true,
+                                },
+                            },
+                            chapter: {
+                                select: {
+                                    id: true,
+                                    chapterCode: true,
+                                    chapterName: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+
+            // 🧾 Lấy danh sách nộp bài
+            submissions: {
+                select: {
+                    id: true,
+                    studentId: true,
+                    score: true,
+                    submittedAt: true,
+                },
+            },
+        },
+        orderBy: {
+            createdAt: "desc",
         },
     });
 }
+
 
 export async function getAssignmentById(id: number) {
     return prisma.assignment.findUnique({
