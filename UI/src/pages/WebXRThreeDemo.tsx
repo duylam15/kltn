@@ -1,6 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
+// VR Gallery Tour (Street View style)
+// - Show 360 panorama images
+// - Hotspots to move between rooms
+// - Tooltip + Mini-map
+
 interface HotspotConfig {
 	x: number;
 	y: number;
@@ -11,7 +16,6 @@ interface HotspotConfig {
 
 interface RoomConfig {
 	id: string;
-	name: string;
 	image: string;
 	hotspots: HotspotConfig[];
 }
@@ -19,27 +23,16 @@ interface RoomConfig {
 const rooms: RoomConfig[] = [
 	{
 		id: "room1",
-		name: "Phòng khách",
-		image: "/gallery/treetop_balcony.jpg",
+		image: "/gallery/room2.jpg",
 		hotspots: [
-			{ x: 40, y: 0, z: -30, target: "room2", label: "🚪 Đi tới phòng ngủ" },
-			{ x: -40, y: 0, z: 30, target: "room3", label: "🚪 Đi ra ngoài trời" },
+			{ x: 5, y: 0, z: -2, target: "room2", label: "Go to Room 2" },
 		],
 	},
 	{
 		id: "room2",
-		name: "Phòng ngủ",
 		image: "/gallery/room2.jpg",
 		hotspots: [
-			{ x: -50, y: 0, z: 0, target: "room1", label: "🔙 Quay về phòng khách" },
-		],
-	},
-	{
-		id: "room3",
-		name: "Ngoài trời",
-		image: "/gallery/room1.jpg",
-		hotspots: [
-			{ x: 50, y: 0, z: 0, target: "room1", label: "🔙 Quay về phòng khách" },
+			{ x: -5, y: 0, z: 2, target: "room1", label: "Back to Room 1" },
 		],
 	},
 ];
@@ -48,44 +41,35 @@ export default function VRGalleryTour() {
 	const mountRef = useRef<HTMLDivElement | null>(null);
 	const [currentRoom, setCurrentRoom] = useState("room1");
 	const [tooltip, setTooltip] = useState<string | null>(null);
-	const [loading, setLoading] = useState(true);
-	const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-
-	// ✅ FIX: Dùng ref để tránh re-render lag
-	const isInteractingRef = useRef(false);
-	const mouseRef = useRef({ x: 0, y: 0 });
 
 	useEffect(() => {
 		const mount = mountRef.current!;
-		if (!mount) return;
-
+		// --- scene/camera ---
 		const scene = new THREE.Scene();
 		const camera = new THREE.PerspectiveCamera(
-			75,
+			70,
 			mount.clientWidth / mount.clientHeight,
 			0.1,
 			1000
 		);
-		camera.position.set(0, 0, 0.1);
+		camera.position.set(0, 0, 0);
 
-		const renderer = new THREE.WebGLRenderer({
-			antialias: false, // ✅ TẮT antialias để tăng FPS
-			alpha: false,
-			powerPreference: "high-performance", // ✅ GPU performance
-		});
+		// --- renderer ---
+		const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
 		renderer.setSize(mount.clientWidth, mount.clientHeight);
-		renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // ✅ Giảm từ 2 → 1.5
-		(renderer as any).outputColorSpace = THREE.SRGBColorSpace;
+		renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // cap DPR
+		(renderer as any).outputColorSpace = THREE.SRGBColorSpace as any; // three r155+
 		mount.appendChild(renderer.domElement);
 
-		// ✅ Giảm segments: 128 → 60
-		const RADIUS = 500;
-		const geometry = new THREE.SphereGeometry(RADIUS, 60, 60);
-		geometry.scale(-1, 1, 1);
-		const material = new THREE.MeshBasicMaterial();
-		const sphere = new THREE.Mesh(geometry, material);
+		// --- sphere pano ---
+		const R = 100; // radius nhỏ hơn là đủ, tránh “cảm giác mờ” do scale quá lớn
+		const sphere = new THREE.Mesh(
+			new THREE.SphereGeometry(R, 128, 128), // tăng segments
+			new THREE.MeshBasicMaterial({ side: THREE.BackSide })
+		);
 		scene.add(sphere);
 
+		// --- picking ---
 		const raycaster = new THREE.Raycaster();
 		const mouse = new THREE.Vector2();
 		const hotspotMeshes: THREE.Mesh[] = [];
@@ -93,59 +77,33 @@ export default function VRGalleryTour() {
 		function loadRoom(id: string) {
 			const room = rooms.find((r) => r.id === id);
 			if (!room) return;
-
 			setCurrentRoom(id);
-			setLoading(true);
 
-			const loader = new THREE.TextureLoader();
-			loader.load(
-				room.image,
-				(texture) => {
-					(texture as any).colorSpace = THREE.SRGBColorSpace;
-					texture.minFilter = THREE.LinearFilter;
-					texture.magFilter = THREE.LinearFilter;
-					texture.anisotropy = 4; // ✅ Giảm từ max → 4
+			new THREE.TextureLoader().load(room.image, (tex) => {
+				// chất lượng texture
+				(tex as any).colorSpace = THREE.SRGBColorSpace;  // r155+
+				tex.minFilter = THREE.LinearFilter;
+				tex.magFilter = THREE.LinearFilter;
+				tex.generateMipmaps = false;
+				tex.anisotropy = renderer.capabilities.getMaxAnisotropy(); // quan trọng
 
-					material.map = texture;
-					material.needsUpdate = true;
-					setLoading(false);
-				},
-				undefined,
-				(error) => {
-					console.error("Error loading texture:", error);
-					setLoading(false);
-				}
-			);
-
-			hotspotMeshes.forEach((m) => {
-				scene.remove(m);
-				m.geometry.dispose();
-				(m.material as THREE.Material).dispose();
+				const mat = sphere.material as THREE.MeshBasicMaterial;
+				mat.map = tex;
+				mat.needsUpdate = true;
 			});
+
+			// reset hotspots
+			hotspotMeshes.forEach((m) => scene.remove(m));
 			hotspotMeshes.length = 0;
 
+			// add hotspots
 			room.hotspots.forEach((h) => {
-				const hotspotGeom = new THREE.SphereGeometry(3, 12, 12); // ✅ 16 → 12
-				const hotspotMat = new THREE.MeshBasicMaterial({
-					color: 0xff3b30,
-					transparent: true,
-					opacity: 0.8,
-				});
-				const hotspot = new THREE.Mesh(hotspotGeom, hotspotMat);
-				hotspot.position.set(h.x, h.y, h.z);
+				const hotspot = new THREE.Mesh(
+					new THREE.SphereGeometry(1.5, 16, 16),
+					new THREE.MeshBasicMaterial({ color: 0xff3b30 })
+				);
+				hotspot.position.set(h.x, h.y, h.z); // nhớ cấu hình theo bán kính R
 				hotspot.userData = { target: h.target, label: h.label };
-
-				const ringGeom = new THREE.RingGeometry(4, 5, 24); // ✅ 32 → 24
-				const ringMat = new THREE.MeshBasicMaterial({
-					color: 0xffffff,
-					side: THREE.DoubleSide,
-					transparent: true,
-					opacity: 0.6,
-				});
-				const ring = new THREE.Mesh(ringGeom, ringMat);
-				ring.lookAt(camera.position);
-				hotspot.add(ring);
-
 				scene.add(hotspot);
 				hotspotMeshes.push(hotspot);
 			});
@@ -153,206 +111,113 @@ export default function VRGalleryTour() {
 
 		loadRoom(currentRoom);
 
+		// --- simple look controls (drag to look) ---
+		let isUserInteracting = false;
 		let lon = 0, lat = 0;
-		let onPointerDownLon = 0, onPointerDownLat = 0;
-		let onPointerDownMouseX = 0, onPointerDownMouseY = 0;
+		let phi = 0, theta = 0;
+		let onDownX = 0, onDownY = 0, onDownLon = 0, onDownLat = 0;
 
-		function onPointerDown(event: MouseEvent) {
-			isInteractingRef.current = true;
-			onPointerDownMouseX = event.clientX;
-			onPointerDownMouseY = event.clientY;
-			onPointerDownLon = lon;
-			onPointerDownLat = lat;
+		function onPointerDown(e: MouseEvent) {
+			isUserInteracting = true;
+			onDownX = e.clientX;
+			onDownY = e.clientY;
+			onDownLon = lon;
+			onDownLat = lat;
 		}
-
-		// ✅ THROTTLE mousemove để giảm tải
-		let lastMoveTime = 0;
-		function onPointerMove(event: MouseEvent) {
-			const now = Date.now();
-
-			if (isInteractingRef.current) {
-				lon = (onPointerDownMouseX - event.clientX) * 0.1 + onPointerDownLon;
-				lat = (event.clientY - onPointerDownMouseY) * 0.1 + onPointerDownLat;
+		function onPointerMove(e: MouseEvent) {
+			if (isUserInteracting) {
+				lon = (onDownX - e.clientX) * 0.1 + onDownLon;
+				lat = (e.clientY - onDownY) * 0.1 + onDownLat;
 			}
 
-			// ✅ Chỉ update raycasting mỗi 50ms
-			if (now - lastMoveTime < 50) return;
-			lastMoveTime = now;
-
+			// mouse NDC theo bounding rect (để raycaster chính xác khi canvas bị CSS scale)
 			const rect = renderer.domElement.getBoundingClientRect();
-			mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-			mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-			mouseRef.current = { x: event.clientX, y: event.clientY };
-			setMousePosition({ x: event.clientX, y: event.clientY });
+			mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+			mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
 			raycaster.setFromCamera(mouse, camera);
-			const intersects = raycaster.intersectObjects(hotspotMeshes);
-
-			if (intersects.length > 0) {
-				renderer.domElement.style.cursor = "pointer";
-				setTooltip(intersects[0].object.userData.label);
-			} else {
-				renderer.domElement.style.cursor = isInteractingRef.current ? "grabbing" : "grab";
-				setTooltip(null);
-			}
+			const hit = raycaster.intersectObjects(hotspotMeshes);
+			if (hit.length > 0) setTooltip(hit[0].object.userData.label ?? null);
+			else setTooltip(null);
 		}
-
 		function onPointerUp() {
-			isInteractingRef.current = false;
+			isUserInteracting = false;
 		}
-
 		function onClick() {
 			raycaster.setFromCamera(mouse, camera);
-			const intersects = raycaster.intersectObjects(hotspotMeshes);
-
-			if (intersects.length > 0) {
-				const target = intersects[0].object.userData.target;
-				if (target) {
-					loadRoom(target);
-				}
+			const hit = raycaster.intersectObjects(hotspotMeshes);
+			if (hit.length > 0) {
+				const target = hit[0].object.userData.target as string | undefined;
+				if (target) loadRoom(target);
 			}
 		}
 
-		renderer.domElement.addEventListener("mousedown", onPointerDown);
-		renderer.domElement.addEventListener("mousemove", onPointerMove);
-		renderer.domElement.addEventListener("mouseup", onPointerUp);
-		renderer.domElement.addEventListener("click", onClick);
-		renderer.domElement.style.cursor = "grab";
+		renderer.domElement.addEventListener('mousedown', onPointerDown);
+		renderer.domElement.addEventListener('mousemove', onPointerMove);
+		renderer.domElement.addEventListener('mouseup', onPointerUp);
+		renderer.domElement.addEventListener('click', onClick);
 
-		// ✅ Tối ưu animation loop
-		let animationFrameId: number;
-		const clock = new THREE.Clock();
-
+		// --- render loop ---
+		const target = new THREE.Vector3();
 		function animate() {
-			animationFrameId = requestAnimationFrame(animate);
-
+			requestAnimationFrame(animate);
 			lat = Math.max(-85, Math.min(85, lat));
-
-			const phi = THREE.MathUtils.degToRad(90 - lat);
-			const theta = THREE.MathUtils.degToRad(lon);
-
-			const x = 500 * Math.sin(phi) * Math.cos(theta);
-			const y = 500 * Math.cos(phi);
-			const z = 500 * Math.sin(phi) * Math.sin(theta);
-
-			camera.lookAt(x, y, z);
-
-			// ✅ Tối ưu: chỉ animate hotspot khi có
-			if (hotspotMeshes.length > 0) {
-				const time = clock.getElapsedTime();
-				const scale = 1 + Math.sin(time * 3) * 0.1; // Dùng clock thay Date.now()
-				hotspotMeshes.forEach((hotspot) => {
-					hotspot.scale.setScalar(scale);
-				});
-			}
-
+			phi = THREE.MathUtils.degToRad(90 - lat);
+			theta = THREE.MathUtils.degToRad(lon);
+			target.set(
+				R * Math.sin(phi) * Math.cos(theta),
+				R * Math.cos(phi),
+				R * Math.sin(phi) * Math.sin(theta)
+			);
+			camera.lookAt(target);
 			renderer.render(scene, camera);
 		}
 		animate();
 
-		function onWindowResize() {
+		// --- resize ---
+		const onResize = () => {
 			camera.aspect = mount.clientWidth / mount.clientHeight;
 			camera.updateProjectionMatrix();
 			renderer.setSize(mount.clientWidth, mount.clientHeight);
-		}
-		window.addEventListener("resize", onWindowResize);
+		};
+		window.addEventListener('resize', onResize);
 
 		return () => {
-			cancelAnimationFrame(animationFrameId);
-			window.removeEventListener("resize", onWindowResize);
-			renderer.domElement.removeEventListener("mousedown", onPointerDown);
-			renderer.domElement.removeEventListener("mousemove", onPointerMove);
-			renderer.domElement.removeEventListener("mouseup", onPointerUp);
-			renderer.domElement.removeEventListener("click", onClick);
-
-			// ✅ Cleanup đúng cách
-			hotspotMeshes.forEach((m) => {
-				scene.remove(m);
-				m.geometry.dispose();
-				(m.material as THREE.Material).dispose();
-			});
-
-			if (mount.contains(renderer.domElement)) {
-				mount.removeChild(renderer.domElement);
-			}
-
-			geometry.dispose();
-			material.dispose();
-			if (material.map) material.map.dispose();
-			renderer.dispose();
+			window.removeEventListener('resize', onResize);
+			renderer.setAnimationLoop(null as any);
+			renderer.domElement.removeEventListener('mousedown', onPointerDown);
+			renderer.domElement.removeEventListener('mousemove', onPointerMove);
+			renderer.domElement.removeEventListener('mouseup', onPointerUp);
+			renderer.domElement.removeEventListener('click', onClick);
+			mount.removeChild(renderer.domElement);
 		};
 	}, []);
 
-	const currentRoomData = rooms.find((r) => r.id === currentRoom);
 
 	return (
-		<div className="relative w-full h-screen bg-black">
+		<div className="relative w-full h-screen">
 			<div ref={mountRef} className="w-full h-full" />
 
-			{loading && (
-				<div className="absolute inset-0 flex items-center justify-center bg-black/70 z-50">
-					<div className="text-white text-xl">
-						<div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-white mx-auto mb-4"></div>
-						Đang tải...
-					</div>
-				</div>
-			)}
-
+			{/* Tooltip */}
 			{tooltip && (
-				<div
-					className="absolute pointer-events-none bg-black/90 text-white px-4 py-2 rounded-lg text-sm shadow-lg z-40"
-					style={{
-						left: `${mousePosition.x + 15}px`,
-						top: `${mousePosition.y + 15}px`,
-					}}
-				>
+				<div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-lg text-sm">
 					{tooltip}
 				</div>
 			)}
 
-			<div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/70 to-transparent p-4 z-30">
-				<h1 className="text-white text-2xl font-bold">
-					📍 {currentRoomData?.name}
-				</h1>
-				<p className="text-white/70 text-sm mt-1">
-					Kéo để xoay • Click vào điểm đỏ để di chuyển
-				</p>
-			</div>
-
-			<div className="absolute top-20 right-4 bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl p-4 z-30 max-w-xs">
-				<p className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-					🗺️ Sơ đồ phòng
-				</p>
-				<div className="space-y-2">
-					{rooms.map((room) => (
-						<button
-							key={room.id}
-							onClick={() => setCurrentRoom(room.id)}
-							className={`w-full text-left px-4 py-2 rounded-lg transition-all duration-200 ${currentRoom === room.id
-									? "bg-blue-500 text-white shadow-lg scale-105"
-									: "bg-gray-100 text-gray-700 hover:bg-gray-200"
-								}`}
-						>
-							<div className="font-medium">{room.name}</div>
-							<div className="text-xs opacity-75 mt-1">
-								{room.hotspots.length} điểm di chuyển
-							</div>
-						</button>
-					))}
-				</div>
-			</div>
-
-			<div className="absolute bottom-4 left-4 bg-black/70 text-white px-4 py-3 rounded-lg text-sm z-30 backdrop-blur-sm">
-				<div className="flex items-center gap-3">
-					<span>🖱️ Kéo chuột: Xoay</span>
-					<span className="text-gray-400">|</span>
-					<span>🔴 Click điểm đỏ: Di chuyển</span>
-				</div>
-			</div>
-
-			<div className="absolute bottom-4 right-4 w-16 h-16 bg-white/90 rounded-full shadow-lg flex items-center justify-center z-30">
-				<div className="text-2xl">🧭</div>
+			{/* Mini-map */}
+			<div className="absolute top-4 right-4 bg-white/80 border rounded-lg p-2 text-xs shadow">
+				<p className="font-bold mb-1">Mini-map</p>
+				{rooms.map((r) => (
+					<div
+						key={r.id}
+						className={`cursor-pointer mb-1 px-2 py-1 rounded ${currentRoom === r.id ? "bg-blue-500 text-white" : "bg-gray-200"
+							}`}
+						onClick={() => setCurrentRoom(r.id)}
+					>
+						{r.id}
+					</div>
+				))}
 			</div>
 		</div>
 	);

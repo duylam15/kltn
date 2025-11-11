@@ -6,11 +6,7 @@ import {
     updateSectionInstructorSchema,
 } from "./sectionInstructor.validation";
 import * as controller from "./sectionInstructor.controller";
-<<<<<<< HEAD:myapp/src/modules/CourseSectionManagement/sectionInstructor/sectionInstructor.route.ts
 import validate from "@/middlewares/validate";
-=======
-import {requireAuth} from "../../middlewares/requireAuth";
->>>>>>> locdev:myapp/src/modules/sectionInstructor/sectionInstructor.route.ts
 
 const router = Router();
 
@@ -31,8 +27,5 @@ router.delete(
     validate(sectionInstructorParamSchema),
     controller.remove
 );
-
-router.get("/section/:sectionId/teacher", requireAuth, controller.getTeacherBySection);
-
 
 export default router;

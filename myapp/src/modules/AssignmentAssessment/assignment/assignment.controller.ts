@@ -7,39 +7,6 @@ import FormData from "form-data";
 import fs from "fs";
 import { fi } from "zod/v4/locales";
 
-export async function getBestSubmissions(req: Request, res: Response) {
-    try {
-        const assignmentId = Number(req.params.id);
-        const sectionId = req.query.sectionId
-            ? Number(req.query.sectionId)
-            : undefined;
-
-        if (!assignmentId || isNaN(assignmentId)) {
-            return res.status(400).json({
-                success: false,
-                message: "assignmentId không hợp lệ",
-            });
-        }
-
-        const result = await service.getAssignmentWithBestSubmissions(
-            assignmentId,
-            sectionId
-        );
-
-        res.json({
-            success: true,
-            data: jsonSafe(result),
-        });
-    } catch (error: any) {
-        console.error("Error getting best submissions:", error);
-        res.status(500).json({
-            success: false,
-            message: error.message || "Lỗi khi lấy điểm cao nhất",
-        });
-    }
-}
-
-
 export async function submit(req: Request, res: Response) {
     try {
         // Lấy studentId từ body hoặc user đã đăng nhập

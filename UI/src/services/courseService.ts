@@ -26,23 +26,4 @@ export const courseService = {
     const response = await api.get(`/course-sections/search?q=${query}`);
     return response.data;
   },
-
 };
-
-export type TeacherUser = { id: number; fullName: string; email: string; avatar?: string };
-export type SectionInstructor = {
-  sectionId: number;
-  teacherId: number;
-  role: "owner" | "co" | "ta";
-  teacher: { id: number; user: TeacherUser };
-};
-
-
-
-// lấy teacher chính (role = owner) theo sectionId
-export async function getOwnerTeacher(sectionId: number) {
-  const res = await api.get<{ success: boolean; data: SectionInstructor | null }>(
-    `/sections-instructors/section/${sectionId}/teacher`
-  );
-  return res.data.data; // SectionInstructor | null
-}

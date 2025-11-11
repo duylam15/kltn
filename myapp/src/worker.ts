@@ -158,7 +158,7 @@ if (function_exists("factorial")) {
             else if (answer.language === "html") {
                 const filePath = path.join(workspace, "index.html");
                 fs.writeFileSync(filePath, answer.codeAnswer || "");
-                console.log("🔍 HTML user code:", answer.codeAnswer);
+console.log("🔍 HTML user code:", answer.codeAnswer);
 
                 // dùng Playwright để load trang HTML và check test case
                 const { chromium } = await import("playwright");
@@ -276,24 +276,12 @@ if (typeof factorial === "function") {
                     maxScore,
                     testResults: results,
                 },
-                select: { submissionId: true }, // ✅ chỉ lấy submissionId
+                include: { submission: true },
             });
-
-            // ✅ Tính lại tổng điểm submission
-            if (updatedAnswer?.submissionId) {
-                await recalcSubmissionScore(updatedAnswer.submissionId);
-            }
-
-            console.log(
-                `✅ answerId=${answerId} done, score=${score}/${maxScore}`
-            );
 
             // Recalculate tổng điểm của submission
             await recalcSubmissionScore(updatedAnswer.submissionId);
 
-            console.log(
-                `✅ submissionId=${updatedAnswer.submissionId} done`
-            );
             console.log(
                 `✅ answerId=${answerId} done, score=${score}/${maxScore}`
             );

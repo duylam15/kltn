@@ -13,15 +13,6 @@ import Register from "../pages/Auth/Register";
 
 // Student pages
 import Dashboard from "../pages/Teacher/Dashboard";
-<<<<<<< HEAD
-=======
-import StudentDashboard from "../pages/Student/StudentDashboard";
-import Courses from "../pages/Student/Courses";
-import ClassList from "../pages/Student/ClassList";
-import MaterialsStudent from "../pages/Student/MaterialsStudent";
-import AttendanceStudent from "../pages/Student/AttendanceStudent";
-import CourseDetail from "../pages/Student/CourseDetail";
->>>>>>> locdev
 
 // Teacher pages
 import Overview from "../pages/Teacher/Overview";
@@ -36,13 +27,10 @@ import AssignmentsTeacher from "../pages/Teacher/AssignmentsTeacher";
 import Notifications from "../pages/Admin/Notifications";
 import Reports from "../pages/Admin/Reports";
 import Roles from "../pages/Admin/Roles";
-<<<<<<< HEAD
 import CoursesAdmin from "../pages/Admin/CoursesAdmin";
 import AdminStats from "../pages/Admin/AdminStats";
 
 
-=======
->>>>>>> locdev
 
 // Route guards
 import PublicRoute from "./PublicRoute";
@@ -55,7 +43,6 @@ import Students from "../pages/Admin/Students";
 import Teachers from "../pages/Admin/Teachers";
 import MaterialsTeacher from "../pages/Teacher/MaterialsTeacher";
 import CourseLayoutStudent from "../layouts/CourseLayoutStudent";
-<<<<<<< HEAD
 import OverviewAdmin from "../pages/Admin/OverviewAdmin";
 import Instructors from "../pages/Admin/Instructors";
 import Assignments from "../pages/Admin/Assignments";
@@ -73,12 +60,10 @@ import GradesStudent from "../pages/Student/GradesStudent";
 import OverviewStudent from "../pages/Student/OverviewStudent";
 import DashboardStudent from "../pages/Student/DashboardStudent";
 import AssignmentsDetailsStudent from "../pages/Student/AssignmentsDetailsStudent";
-import AssignmentsTeacherOut from "../pages/Teacher/AssignmentsTeacherOut";
+import AssignmentsTeacher2 from "../pages/Teacher/AssignmentsTeacher2";
 import VRPage from "../pages/VRPage";
 import AssignmentSubmissionHistory from "../pages/Student/AssignmentSubmissionHistory";
 import AssignmentsScore from "../pages/Student/AssignmentsScore";
-=======
->>>>>>> locdev
 
 export const router = createBrowserRouter([
   // ========== Root check auth ==========
@@ -141,18 +126,12 @@ export const router = createBrowserRouter([
     ),
     errorElement: <Error />,
     children: [
-<<<<<<< HEAD
       { index: true, element: <DashboardStudent /> },
-=======
-      { index: true, element: <StudentDashboard /> },
-      { path: "courses", element: <Courses /> },
->>>>>>> locdev
       {
         path: "courses/:courseId",
         element: <CourseLayoutStudent />,
         children: [
           { index: true, loader: () => redirect("overview") },
-<<<<<<< HEAD
           { path: "overview", element: <OverviewStudent /> },
           { path: "groups", element: <Group /> },
           { path: "materials", element: <MaterialStudent /> },
@@ -163,12 +142,6 @@ export const router = createBrowserRouter([
           { path: "assignments/:assignmentId/score", element: <AssignmentsScore /> },
           { path: "chat", element: <Chat /> },
           { path: "grades", element: <GradesStudent /> },
-=======
-          { path: "overview", element: <Overview /> },
-          { path: "friend", element: <ClassList /> },
-          { path: "materials", element: <MaterialsStudent /> },
-          { path: "roll-call", element: < AttendanceStudent />},
->>>>>>> locdev
         ],
       },
     ],
@@ -184,12 +157,7 @@ export const router = createBrowserRouter([
     ),
     errorElement: <Error />,
     children: [
-<<<<<<< HEAD
       { index: true, element: <Dashboard /> },
-=======
-      { index: true, element: <DashboardStudent /> },
-      { path: "courses", element: <Courses /> },
->>>>>>> locdev
       {
         path: "courses/:courseId",
         element: <CourseLayout />,
@@ -211,7 +179,7 @@ export const router = createBrowserRouter([
       },
       {
         path: "assignments",
-        element: <AssignmentsTeacherOut />,
+        element: <AssignmentsTeacher2 />,
       },
     ],
   },
@@ -230,7 +198,6 @@ export const router = createBrowserRouter([
       { path: "notifications", element: <Notifications /> },
       { path: "reports", element: <Reports /> },
       { path: "roles", element: <Roles /> },
-<<<<<<< HEAD
       { path: "instructors", element: <Instructors /> },
       { path: "assignments", element: <Assignments /> },
       { path: "questions", element: <Questions /> },
@@ -269,15 +236,6 @@ export const router = createBrowserRouter([
             ),
           };
         },
-=======
-      {
-        path: "students",
-        element: (
-          <RequirePermission permission="user:view">
-            <Students />
-          </RequirePermission>
-        )
->>>>>>> locdev
       },
 
 

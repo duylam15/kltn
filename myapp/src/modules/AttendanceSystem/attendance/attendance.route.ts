@@ -20,7 +20,6 @@ router.get("/sessions/:id", attendanceController.getSession);
 // Xóa session
 router.delete("/sessions/:id", attendanceController.deleteSession);
 
-<<<<<<< HEAD:myapp/src/modules/AttendanceSystem/attendance/attendance.route.ts
 // 🔥 GV chỉnh điểm danh
 router.put(
     "/attendances/:attendanceId/adjust",
@@ -31,9 +30,4 @@ router.get(
     "/sessions/:sessionId/warnings",
     attendanceController.getWarningAttendances
 );
-=======
-// Danh sách điểm danh của 1 session
-router.get("/section/:sectionId/student/:studentId", attendanceController.listBySection);
-
->>>>>>> locdev:myapp/src/modules/attendance/attendance.route.ts
 export default router;

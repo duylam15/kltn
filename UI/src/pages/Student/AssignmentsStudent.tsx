@@ -213,7 +213,7 @@ export default function AssignmentsStudent() {
       {/* Header */}
       <div className="bg-white border-b">
         <div className="px-4 py-4">
-          <h1 className="text-xl font-normal text-gray-800">Bài tậpxx</h1>
+          <h1 className="text-xl font-normal text-gray-800">Bài tập</h1>
         </div>
       </div>
 
@@ -283,10 +283,8 @@ export default function AssignmentsStudent() {
               <div
                 key={assignment.id}
                 className="bg-white rounded-lg border hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => {
-                  if (assignment.isOverdue && !assignment.allowLateSubmission) return; // ❌ chặn vào nếu quá hạn và không cho nộp trễ
-                  navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`);
-                }}
+                onClick={() => navigate(`/student/courses/${sectionId}/assignments/` + assignment.id)}
+
               >
                 <div className="p-4">
                   {/* Header */}
@@ -354,24 +352,17 @@ export default function AssignmentsStudent() {
                     )}
 
                     {/* Action Button */}
-                    {assignment.canSubmit && !assignment.submission?.completedAt ? (
-                      !assignment.isOverdue || assignment.allowLateSubmission ? (
-                        <button
-                          className="w-full mt-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`);
-                          }}
-                        >
-                          {assignment.submission?.startedAt ? "Tiếp tục làm" : "Bắt đầu"}
-                        </button>
-                      ) : (
-                        <div className="w-full mt-3 py-2 bg-gray-300 text-gray-500 rounded text-xs font-medium text-center cursor-not-allowed">
-                          Quá hạn - không thể làm bài
-                        </div>
-                      )
-                    ) : null}
-
+                    {assignment.canSubmit && !assignment.submission?.completedAt && (
+                      <button
+                        className="w-full mt-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`);
+                        }}
+                      >
+                        {assignment.submission?.startedAt ? "Tiếp tục làm" : "Bắt đầu"}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
