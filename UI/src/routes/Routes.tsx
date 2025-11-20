@@ -64,6 +64,7 @@ import AssignmentsTeacher2 from "../pages/Teacher/AssignmentsTeacher2";
 import VRPage from "../pages/VRPage";
 import AssignmentSubmissionHistory from "../pages/Student/AssignmentSubmissionHistory";
 import AssignmentsScore from "../pages/Student/AssignmentsScore";
+import ProfilePage from "../pages/Profile/ProfilePage";
 
 export const router = createBrowserRouter([
   // ========== Root check auth ==========
@@ -144,6 +145,7 @@ export const router = createBrowserRouter([
           { path: "grades", element: <GradesStudent /> },
         ],
       },
+      {path: "profile", element: <ProfilePage />},
     ],
   },
 
@@ -181,6 +183,7 @@ export const router = createBrowserRouter([
         path: "assignments",
         element: <AssignmentsTeacher2 />,
       },
+      {path: "profile", element: <ProfilePage />},
     ],
   },
 

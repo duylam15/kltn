@@ -31,7 +31,7 @@ import testCaseRoute from "@/modules/AssignmentAssessment/testCase/testCase.rout
 import submissionAnswerRoutes from "@/modules/AssignmentAssessment/submissionAnswer/submissionAnswer.route";
 import codeSubmissionResultRoutes from "@/modules/AssignmentAssessment/codeSubmissionResult/codeSubmissionResult.route";
 import submissionRoutes from "@/modules/AssignmentAssessment/submission/submission.route";
-
+import profileRoutes from "../modules/Profile/profile.routes";
 
 const router = Router();
 
@@ -65,7 +65,7 @@ router.use("/subject-instructors", subjectInstructorRoute);
 router.use("/stats", statsRoute);
 router.use("/catalog", catalogRoute);
 router.use("/test-cases", testCaseRoute);
-
+router.use("/profile", profileRoutes);
 router.use("/submission-answers", submissionAnswerRoutes);
 router.use("/submissions", submissionRoutes);
 

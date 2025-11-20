@@ -49,6 +49,9 @@ export default function LayoutDefault() {
   const [section, setSection] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
+  const getInitial = () =>
+  user?.fullName ? user.fullName.charAt(0).toUpperCase() : "U";
+
   useEffect(() => {
     let mounted = true;
 
@@ -143,11 +146,23 @@ export default function LayoutDefault() {
             </button>
 
             {/* User Profile */}
-            <button className="ml-2 p-1 rounded-full hover:bg-gray-100 transition-colors">
-              <div className="h-8 w-8 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 text-white text-sm font-medium flex items-center justify-center">
-                U
-              </div>
-            </button>
+<button
+  className="ml-2 p-1 rounded-full hover:bg-gray-100 transition-colors"
+  onClick={() => navigate("/student/profile")}
+  title="Hồ sơ cá nhân"
+>
+  {user?.avatarUrl ? (
+    <img
+      src={user.avatarUrl}
+      alt="avatar"
+      className="h-8 w-8 rounded-full object-cover"
+    />
+  ) : (
+    <div className="h-8 w-8 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 text-white text-sm font-medium flex items-center justify-center">
+      {getInitial()}
+    </div>
+  )}
+</button>
 
             {/* Logout Button */}
             <button

@@ -39,6 +39,9 @@ export default function LayoutTeacher() {
   const { user, logout } = useAuth();
 
 
+  const getInitial = () =>
+  user?.fullName ? user.fullName.charAt(0).toUpperCase() : "U";
+
   const handleLogout = async () => {
     await logout();
     navigate("/login");
@@ -142,11 +145,23 @@ export default function LayoutTeacher() {
             </button>
 
             {/* User Profile */}
-            <button className="ml-2 p-1 rounded-full hover:bg-gray-100 transition-colors">
-              <div className="h-8 w-8 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 text-white text-sm font-medium flex items-center justify-center">
-                U
-              </div>
-            </button>
+            <button
+  className="ml-2 p-1 rounded-full hover:bg-gray-100 transition-colors"
+  onClick={() => navigate("/teacher/profile")}
+  title="Hồ sơ cá nhân"
+>
+  {user?.avatarUrl ? (
+    <img
+      src={user.avatarUrl}
+      alt="avatar"
+      className="h-8 w-8 rounded-full object-cover"
+    />
+  ) : (
+    <div className="h-8 w-8 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 text-white text-sm font-medium flex items-center justify-center">
+      {getInitial()}
+    </div>
+  )}
+</button>
 
             {/* Logout Button */}
             <button

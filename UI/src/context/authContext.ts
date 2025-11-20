@@ -33,6 +33,7 @@ export interface User {
     fullName: string;
     studentCode?: string;
     role: Role;
+    avatarUrl?: string;
     teacher?: Teacher | null;
     student?: Student | null;
 }
