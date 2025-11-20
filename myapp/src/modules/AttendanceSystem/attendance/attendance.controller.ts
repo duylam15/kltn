@@ -1,54 +1,73 @@
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import * as attendanceService from "./attendance.service";
 import QRCode from "qrcode";
 import path from "path";
 import fs from "fs";
 import { prisma } from "@/prisma/client";
+import { listStudentAttendance } from "./attendance.service";
+import catchAsync from "@/utils/catchAsync";
+import ApiError from "@/utils/ApiError";
+import { sendResponse } from "@/utils/response";
 
 // Tạo session + QR code
 export async function createSession(req: Request, res: Response) {
-  try {
-    const { sectionId, name, expiresAt, latitude, longitude, radius, requireDeviceCheck, maxCheckInsPerIP } = req.body;
-    const sectionIdNum = Number(sectionId);
+    try {
+        const {
+            sectionId,
+            name,
+            expiresAt,
+            latitude,
+            longitude,
+            radius,
+            requireDeviceCheck,
+            maxCheckInsPerIP,
+        } = req.body;
+        const sectionIdNum = Number(sectionId);
 
-    if (!sectionIdNum || Number.isNaN(sectionIdNum)) {
-      return res.status(400).json({ success: false, message: "sectionId required" });
+        if (!sectionIdNum || Number.isNaN(sectionIdNum)) {
+            return res
+                .status(400)
+                .json({ success: false, message: "sectionId required" });
+        }
+
+        const sessionCode = Math.random()
+            .toString(36)
+            .substring(2, 10)
+            .toUpperCase();
+
+        const session = await prisma.attendanceSession.create({
+            data: {
+                sectionId: sectionIdNum,
+                sessionCode,
+                name: name || null,
+                latitude: latitude || null,
+                longitude: longitude || null,
+                radius: radius || 50,
+                requireDeviceCheck: requireDeviceCheck ?? true,
+                maxCheckInsPerIP: maxCheckInsPerIP || 3,
+                expiresAt: expiresAt ? new Date(expiresAt) : null,
+            },
+        });
+
+        const checkInUrl = `http://localhost:5173/diemdanh?sessionId=${session.id}`;
+
+        const uploadsDir = path.join(__dirname, "../../../uploads");
+        if (!fs.existsSync(uploadsDir))
+            fs.mkdirSync(uploadsDir, { recursive: true });
+
+        const qrPath = path.join(uploadsDir, `${session.id}.png`);
+        await QRCode.toFile(qrPath, checkInUrl);
+
+        const updatedSession = await prisma.attendanceSession.update({
+            where: { id: session.id },
+            data: { qrCodeUrl: `/uploads/${session.id}.png` },
+        });
+
+        res.json({ success: true, data: updatedSession, link: checkInUrl });
+    } catch (err: any) {
+        console.error(err);
+        res.status(500).json({ success: false, message: err.message });
     }
-
-    const sessionCode = Math.random().toString(36).substring(2, 10).toUpperCase();
-
-    const session = await prisma.attendanceSession.create({
-      data: {
-        sectionId: sectionIdNum,
-        sessionCode,
-        name: name || null,
-        latitude: latitude || null,
-        longitude: longitude || null,
-        radius: radius || 50,
-        requireDeviceCheck: requireDeviceCheck ?? true,
-        maxCheckInsPerIP: maxCheckInsPerIP || 3,
-        expiresAt: expiresAt ? new Date(expiresAt) : null,
-      },
-    });
-
-    const checkInUrl = `http://localhost:5173/diemdanh?sessionId=${session.id}`;
-
-    const uploadsDir = path.join(__dirname, "../../../uploads");
-    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-    const qrPath = path.join(uploadsDir, `${session.id}.png`);
-    await QRCode.toFile(qrPath, checkInUrl);
-
-    const updatedSession = await prisma.attendanceSession.update({
-      where: { id: session.id },
-      data: { qrCodeUrl: `/uploads/${session.id}.png` },
-    });
-
-    res.json({ success: true, data: updatedSession, link: checkInUrl });
-  } catch (err: any) {
-    console.error(err);
-    res.status(500).json({ success: false, message: err.message });
-  }
 }
 
 // 🔥 Sinh viên check-in với chống gian lận
@@ -69,7 +88,8 @@ export async function checkIn(req: Request, res: Response) {
             req.socket.remoteAddress ||
             "unknown";
         const userAgent = req.headers["user-agent"] || "unknown";
-        const deviceInfo = extractDeviceInfo(userAgent);[]
+        const deviceInfo = extractDeviceInfo(userAgent);
+        [];
 
         // 2️⃣ Tìm session
         const session = await prisma.attendanceSession.findUnique({
@@ -144,18 +164,17 @@ export async function checkIn(req: Request, res: Response) {
         let distance: number | null = null;
         let isValid = true;
 
-       if (
-           latitude === null ||
-           latitude === undefined ||
-           longitude === null ||
-           longitude === undefined
-       ) {
-           return res.status(400).json({
-               success: false,
-               message: "Vị trí GPS là bắt buộc để điểm danh",
-           });
-       }
-
+        if (
+            latitude === null ||
+            latitude === undefined ||
+            longitude === null ||
+            longitude === undefined
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Vị trí GPS là bắt buộc để điểm danh",
+            });
+        }
 
         if (session.latitude && session.longitude && session.radius) {
             distance = getDistanceFromLatLonInM(
@@ -294,94 +313,101 @@ export async function checkIn(req: Request, res: Response) {
 
 // 🔥 GV chỉnh điểm danh
 export async function adjustAttendance(req: Request, res: Response) {
-  try {
-    const { attendanceId } = req.params;
-    const { status, score, note, adjustedBy } = req.body;
+    try {
+        const { attendanceId } = req.params;
+        const { status, score, note, adjustedBy } = req.body;
 
-    // Kiểm tra quyền (adjustedBy phải là giảng viên)
-    // TODO: Implement role check
+        // Kiểm tra quyền (adjustedBy phải là giảng viên)
+        // TODO: Implement role check
 
-    const attendance = await prisma.attendance.findUnique({
-      where: { id: Number(attendanceId) },
-    });
+        const attendance = await prisma.attendance.findUnique({
+            where: { id: Number(attendanceId) },
+        });
 
-    if (!attendance) {
-      return res.status(404).json({ success: false, message: "Attendance not found" });
+        if (!attendance) {
+            return res
+                .status(404)
+                .json({ success: false, message: "Attendance not found" });
+        }
+
+        const updated = await prisma.attendance.update({
+            where: { id: Number(attendanceId) },
+            data: {
+                status: status || attendance.status,
+                score: score ?? attendance.score,
+                adjustedBy: adjustedBy || null,
+                adjustedAt: new Date(),
+                isValid: true, // GV xác nhận là hợp lệ
+            },
+            include: {
+                student: { include: { user: true } },
+            },
+        });
+
+        res.json({
+            success: true,
+            message: "Đã cập nhật điểm danh",
+            data: updated,
+        });
+    } catch (err: any) {
+        console.error(err);
+        res.status(500).json({ success: false, message: err.message });
     }
-
-    const updated = await prisma.attendance.update({
-      where: { id: Number(attendanceId) },
-      data: {
-        status: status || attendance.status,
-        score: score ?? attendance.score,
-        adjustedBy: adjustedBy || null,
-        adjustedAt: new Date(),
-        isValid: true, // GV xác nhận là hợp lệ
-      },
-      include: {
-        student: { include: { user: true } },
-      },
-    });
-
-    res.json({
-      success: true,
-      message: "Đã cập nhật điểm danh",
-      data: updated,
-    });
-  } catch (err: any) {
-    console.error(err);
-    res.status(500).json({ success: false, message: err.message });
-  }
 }
 
 // 🔥 Lấy danh sách điểm danh có cảnh báo
 export async function getWarningAttendances(req: Request, res: Response) {
-  try {
-    const { sessionId } = req.params;
+    try {
+        const { sessionId } = req.params;
 
-    const warnings = await prisma.attendance.findMany({
-      where: {
-        sessionId: Number(sessionId),
-        OR: [
-          { isValid: false },
-          { status: "warning" },
-        ],
-      },
-      include: {
-        student: { include: { user: true } },
-      },
-      orderBy: { checkedInAt: "desc" },
-    });
+        const warnings = await prisma.attendance.findMany({
+            where: {
+                sessionId: Number(sessionId),
+                OR: [{ isValid: false }, { status: "warning" }],
+            },
+            include: {
+                student: { include: { user: true } },
+            },
+            orderBy: { checkedInAt: "desc" },
+        });
 
-    res.json({ success: true, data: warnings });
-  } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message });
-  }
+        res.json({ success: true, data: warnings });
+    } catch (err: any) {
+        res.status(500).json({ success: false, message: err.message });
+    }
 }
 
 // Utility: Extract device info từ User-Agent
 function extractDeviceInfo(userAgent: string): string {
-  // Simple extraction, có thể dùng thư viện như `ua-parser-js`
-  if (userAgent.includes("iPhone")) return "iPhone";
-  if (userAgent.includes("Android")) return "Android";
-  if (userAgent.includes("Windows")) return "Windows";
-  if (userAgent.includes("Mac")) return "Mac";
-  return "Unknown";
+    // Simple extraction, có thể dùng thư viện như `ua-parser-js`
+    if (userAgent.includes("iPhone")) return "iPhone";
+    if (userAgent.includes("Android")) return "Android";
+    if (userAgent.includes("Windows")) return "Windows";
+    if (userAgent.includes("Mac")) return "Mac";
+    return "Unknown";
 }
 
 // Utility: tính khoảng cách Haversine
-function getDistanceFromLatLonInM(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371e3;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
+function getDistanceFromLatLonInM(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number
+) {
+    const R = 6371e3;
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
 
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) *
+            Math.cos(toRad(lat2)) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2);
 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
 }
 
 // Lấy tất cả session điểm danh
@@ -416,44 +442,45 @@ export async function listAllSessions(req: Request, res: Response) {
 
 // Controller
 export async function listSessions(req: Request, res: Response) {
-  try {
-    const sectionId = parseInt(req.params.sectionId);
-    const sessions = await attendanceService.getAttendanceSessions(sectionId);
+    try {
+        const sectionId = parseInt(req.params.sectionId);
+        const sessions = await attendanceService.getAttendanceSessions(
+            sectionId
+        );
 
-    // Map lại để tính status "warning" nếu ngoài bán kính
-    const updated = sessions.map((session: any) => {
-      if (!session.latitude || !session.longitude) return session;
+        // Map lại để tính status "warning" nếu ngoài bán kính
+        const updated = sessions.map((session: any) => {
+            if (!session.latitude || !session.longitude) return session;
 
-      const radius = session.radius || 50;
-      const attendances = session.attendances.map((a: any) => {
-        let status = a.status;
-        let distance: number | null = null;
+            const radius = session.radius || 50;
+            const attendances = session.attendances.map((a: any) => {
+                let status = a.status;
+                let distance: number | null = null;
 
-        if (a.latitude && a.longitude) {
-          distance = getDistanceFromLatLonInM(
-            session.latitude,
-            session.longitude,
-            a.latitude,
-            a.longitude
-          );
+                if (a.latitude && a.longitude) {
+                    distance = getDistanceFromLatLonInM(
+                        session.latitude,
+                        session.longitude,
+                        a.latitude,
+                        a.longitude
+                    );
 
-          if (distance > radius) {
-            status = "warning";
-          }
-        }
+                    if (distance > radius) {
+                        status = "warning";
+                    }
+                }
 
-        return { ...a, distance, status };
-      });
+                return { ...a, distance, status };
+            });
 
-      return { ...session, attendances };
-    });
+            return { ...session, attendances };
+        });
 
-    res.json({ success: true, data: updated });
-  } catch (err: any) {
-    res.status(400).json({ success: false, message: err.message });
-  }
+        res.json({ success: true, data: updated });
+    } catch (err: any) {
+        res.status(400).json({ success: false, message: err.message });
+    }
 }
-
 
 export async function getSession(req: Request, res: Response) {
     try {
@@ -467,31 +494,33 @@ export async function getSession(req: Request, res: Response) {
 
 // Sửa QR Session
 export async function updateSession(req: Request, res: Response) {
-  try {
-    const { id } = req.params;
-    const { name, expiresAt } = req.body;
+    try {
+        const { id } = req.params;
+        const { name, expiresAt } = req.body;
 
-    // check tồn tại
-    const session = await prisma.attendanceSession.findUnique({
-      where: { id: Number(id) },
-    });
-    if (!session) {
-      return res.status(404).json({ success: false, message: "Session not found" });
+        // check tồn tại
+        const session = await prisma.attendanceSession.findUnique({
+            where: { id: Number(id) },
+        });
+        if (!session) {
+            return res
+                .status(404)
+                .json({ success: false, message: "Session not found" });
+        }
+
+        const updated = await prisma.attendanceSession.update({
+            where: { id: Number(id) },
+            data: {
+                name,
+                expiresAt: expiresAt ? new Date(expiresAt) : undefined,
+            },
+        });
+
+        res.json({ success: true, data: updated });
+    } catch (err: any) {
+        console.error(err);
+        res.status(500).json({ success: false, message: err.message });
     }
-
-    const updated = await prisma.attendanceSession.update({
-      where: { id: Number(id) },
-      data: {
-        name,
-        expiresAt: expiresAt ? new Date(expiresAt) : undefined,
-      },
-    });
-
-    res.json({ success: true, data: updated });
-  } catch (err: any) {
-    console.error(err);
-    res.status(500).json({ success: false, message: err.message });
-  }
 }
 
 export async function deleteSession(req: Request, res: Response) {
@@ -503,3 +532,22 @@ export async function deleteSession(req: Request, res: Response) {
         res.status(400).json({ success: false, message: err.message });
     }
 }
+
+// Danh sách điểm danh của 1 sinh viên trong 1 lớp học phần
+export const listBySection = catchAsync(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const sectionId = Number(req.params.sectionId);
+        const studentId = Number(req.params.studentId);
+
+        if (isNaN(sectionId) || isNaN(studentId)) {
+            return next(new ApiError(400, "Invalid params"));
+        }
+
+        const items = await listStudentAttendance(sectionId, studentId);
+
+        return sendResponse(res, {
+            success: true,
+            data: items,
+        });
+    }
+);

@@ -7,6 +7,7 @@ import {
 } from "./sectionInstructor.validation";
 import * as controller from "./sectionInstructor.controller";
 import validate from "@/middlewares/validate";
+import { requireAuth } from "@/middlewares/requireAuth";
 
 const router = Router();
 
@@ -26,6 +27,12 @@ router.delete(
     "/:sectionId/:teacherId",
     validate(sectionInstructorParamSchema),
     controller.remove
+);
+
+router.get(
+    "/section/:sectionId/teacher",
+    requireAuth,
+    controller.getTeacherBySection
 );
 
 export default router;

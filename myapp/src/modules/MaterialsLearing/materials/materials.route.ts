@@ -7,7 +7,6 @@ const router = Router();
 // Upload file thật (tạo mới material, chưa gắn lớp)
 router.post("/upload", upload.single("file"), controller.uploadMaterial);
 
-
 // Gán tài liệu vào lớp
 router.post("/assign", controller.assignMaterialToClass);
 
@@ -20,6 +19,8 @@ router.get("/teacher/:teacherId", controller.getMaterialsByTeacher);
 // Lấy danh sách tài liệu công khai(share gv#)
 router.get("/public", controller.listPublicMaterialsGrouped);
 router.post("/copy", controller.copyMaterial);
+// chỉ lấy tài liệu mở cho SV theo section
+router.get("/class/:sectionId/open", controller.listOpenBySection);
 
 // CRUD tài liệu
 router.get("/", controller.getMaterials);

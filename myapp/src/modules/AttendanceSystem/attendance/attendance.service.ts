@@ -117,3 +117,33 @@ export async function getAttendanceSessionById(id: number) {
 export async function deleteAttendanceSession(id: number) {
     return prisma.attendanceSession.delete({ where: { id } });
 }
+
+//Danh sách điểm danh của 1 sinh viên trong 1 lớp học phần
+export async function listStudentAttendance(
+    sectionId: number,
+    studentId: number
+) {
+    const records = await prisma.attendance.findMany({
+        where: { studentId, session: { sectionId } },
+        include: {
+            session: {
+                select: {
+                    id: true,
+                    name: true,
+                    createdAt: true,
+                    expiresAt: true,
+                },
+            },
+        },
+        orderBy: { sessionId: "asc" },
+    });
+
+    return records.map((a) => ({
+        attendanceId: a.id,
+        sessionId: a.sessionId,
+        sessionName: a.session?.name ?? `Session #${a.sessionId}`,
+        createdAt: a.session?.createdAt,
+        expiresAt: a.session?.expiresAt,
+        status: a.status,
+    }));
+}

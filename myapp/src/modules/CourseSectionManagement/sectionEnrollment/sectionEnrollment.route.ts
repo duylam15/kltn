@@ -51,4 +51,8 @@ router.get("/section/:sectionId/groups", controller.getGroupsWithMembers);
 // Tất cả section mà 1 student tham gia (có group nếu có)
 router.get("/student/:studentId/sections", controller.getSectionsByStudent);
 
+// Lấy tất cả lớp mà sinh viên (đang đăng nhập)
+router.get("/by-user/:userId", controller.listCoursesByUserId);
+
+
 export default router;
