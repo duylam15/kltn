@@ -174,18 +174,6 @@ enum EnrollmentStatus {
 }
 
 model Subject {
-<<<<<<< HEAD
-  id          Int    @id @default(autoincrement())
-  subjectCode String @unique @db.VarChar(30)
-  subjectName String @db.VarChar(200)
-  credits     Int    @default(3)
-  description String?        @db.Text
-  courseSections CourseSection[]
-  subjectInstructors  SubjectInstructor[]  // Thêm relation này
-  chapters  Chapter[]
-  questions Question[]
-
-=======
   id                 Int                 @id @default(autoincrement())
   subjectCode        String              @unique @db.VarChar(30)
   subjectName        String              @db.VarChar(200)
@@ -195,8 +183,7 @@ model Subject {
   subjectInstructors SubjectInstructor[] // Thêm relation này
   chapters           Chapter[]
   questions          Question[]
-  assignments        Assignment[]      // 🆕 Thêm relation ngược về Assignment
->>>>>>> b2ef9cbc086dcaac2afeb9b6640798a2204faff4
+
   @@index([subjectCode])
 }
 
@@ -393,7 +380,6 @@ enum ProgrammingLanguage {
   css
 }
 
-
 model Assignment {
   id          Int            @id @default(autoincrement())
   title       String         @db.VarChar(200)
@@ -404,7 +390,7 @@ model Assignment {
   maxScore               Float     @default(100)
   passingScore           Float?
   timeLimit              Int?
-  isPublic           Boolean          @default(false)
+  isPublic               Boolean   @default(false)
   maxAttempts            Int?      @default(1)
   shuffleQuestions       Boolean   @default(false)
   showAnswersAfterSubmit Boolean   @default(false)
@@ -422,6 +408,7 @@ model Assignment {
   ChatRoom      ChatRoom[]
   gradeColumns  GradeColumnAssignment[]
 }
+
 model SectionAssignment {
   id           Int      @id @default(autoincrement())
   sectionId    Int
@@ -494,24 +481,18 @@ enum DifficultyLevel {
 
 // Model quản lý chương
 model Chapter {
-  id          Int     @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   subjectId   Int
-  chapterCode String  @db.VarChar(30)
-  chapterName String  @db.VarChar(200)
-  description String? @db.Text
-  order       Int     @default(0)
+  chapterCode String   @db.VarChar(30)
+  chapterName String   @db.VarChar(200)
+  description String?  @db.Text
+  order       Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-<<<<<<< HEAD
-  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  questions Question[]
-
-=======
   subject   Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   questions Question[]
-  assignments Assignment[]   // 🆕 thêm quan hệ ngược với Assignment
->>>>>>> b2ef9cbc086dcaac2afeb9b6640798a2204faff4
+
   @@unique([subjectId, chapterCode])
   @@index([subjectId])
   @@index([chapterCode])
@@ -618,6 +599,11 @@ model AttendanceSession {
   maxCheckInsPerIP   Int     @default(3)
   allowedDevices     Json?
 
+  // === TOTP dynamic QR ===
+  totpSecretBase32 String? // bí mật, chỉ trả về cho GV
+  totpPeriod       Int?    @default(10) // 10s/step
+  totpDigits       Int?    @default(6) // 6 chữ số
+
   section        CourseSection                  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   attendances    Attendance[]
   gradeColumns   GradeColumnAttendanceSession[]
@@ -647,10 +633,6 @@ model Attendance {
 
   session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   student Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
-
-  totpSecretBase32 String? // bí mật, chỉ trả về cho GV
-  totpPeriod       Int?    @default(10) // 10s/step
-  totpDigits       Int?    @default(6) // 6 chữ số
 
   @@unique([sessionId, studentId], map: "uniq_attendance")
 }

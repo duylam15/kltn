@@ -1,21 +1,23 @@
+// src/pages/Student/RollCallStudent.tsx
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../../context/authContext";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/vi";
+import toast from "react-hot-toast";
 
 dayjs.extend(relativeTime);
 dayjs.locale("vi");
 
+/* ========================
+ *  Types
+ * ======================== */
 type AttendanceStatus = "present" | "late" | "absent" | "warning";
 
 type Student = {
   id: number;
   studentCode: string;
-  user: {
-    fullName: string;
-    email: string;
-  };
+  user: { fullName: string; email: string };
 };
 
 type Attendance = {
@@ -44,31 +46,117 @@ type AttendanceSession = {
   attendances: Attendance[];
 };
 
-const getDeviceFingerprint = () => {
+/* ========================
+ *  CONFIG
+ * ======================== */
+const API_BASE = "http://localhost:4000/api/v1";
+
+// Khuyến nghị & ngưỡng chặn accuracy (đồng bộ với backend)
+const RECOMMENDED_ACCURACY = 80;   // cảnh báo
+const MAX_ALLOWED_ACCURACY = 100;  // chặn
+
+/* ========================
+ *  Fingerprint & DeviceId
+ * ======================== */
+const toHex = (buf: ArrayBuffer) =>
+  Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+async function sha256Hex(input: string) {
+  const enc = new TextEncoder();
+  const data = enc.encode(input);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return toHex(digest);
+}
+
+/** Thu thập các trường fingerprint “ổn định”, không lộ UA vào deviceId */
+function getDeviceFingerprintFields() {
   const ua = navigator.userAgent;
   const platform = navigator.platform;
   const language = navigator.language;
-  const screenWidth = window.screen.width;
-  const screenHeight = window.screen.height;
+  const sw = window.screen.width;
+  const sh = window.screen.height;
   const colorDepth = window.screen.colorDepth;
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-  const fingerprint = `${platform}_${screenWidth}x${screenHeight}_${colorDepth}bit_${timezone}`;
+  const deviceMemory = (navigator as any).deviceMemory ?? "unknown";
+  const hardwareConcurrency = navigator.hardwareConcurrency ?? "unknown";
+  const touchSupport = "ontouchstart" in window;
 
   return {
     userAgent: ua,
     platform,
     language,
-    screen: `${screenWidth}x${screenHeight}`,
+    screen: `${sw}x${sh}`,
     colorDepth,
     timezone,
-    fingerprint,
-    deviceMemory: (navigator as any).deviceMemory || "unknown",
-    hardwareConcurrency: navigator.hardwareConcurrency || "unknown",
-    touchSupport: "ontouchstart" in window,
+    deviceMemory,
+    hardwareConcurrency,
+    touchSupport,
   };
+}
+
+/** Tạo deviceId = SHA256(platform|screen|colorDepth|timezone|language|deviceMemory|HW|touch) */
+async function buildDeviceId() {
+  const f = getDeviceFingerprintFields();
+  const raw = [
+    f.platform,
+    f.screen,
+    f.colorDepth,
+    f.timezone,
+    f.language,
+    String(f.deviceMemory),
+    String(f.hardwareConcurrency),
+    String(f.touchSupport),
+  ].join("|");
+  const deviceId = await sha256Hex(raw);
+  return { deviceId, userAgent: f.userAgent, fields: f };
+}
+
+/* ========================
+ *  Nonce & HMAC helpers
+ * ======================== */
+async function getNonce(sessionId: number) {
+  const res = await fetch(`${API_BASE}/attendance/session/${sessionId}/nonce`, {
+    credentials: "include",
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.message || "Không xin được nonce");
+  return data.nonce as string;
+}
+
+async function getSignature(base: string) {
+  const res = await fetch(`${API_BASE}/attendance/sign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ base }),
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.message || "Không ký được payload");
+  return data.signature as string;
+}
+
+/* ========================
+ *  UI helpers
+ * ======================== */
+const statusText = (s: AttendanceStatus) =>
+  ({ present: "Có mặt", late: "Muộn", warning: "Cảnh báo", absent: "Vắng" }[s]);
+const statusColor = (s: AttendanceStatus) =>
+  ({ present: "text-green-700", late: "text-yellow-700", warning: "text-orange-700", absent: "text-red-700" }[s]);
+
+const fmtWhen = (s: string) => {
+  const d = dayjs(s);
+  const now = dayjs();
+  const diffDays = now.diff(d, "day");
+  if (diffDays === 0) return `Hôm nay ${d.format("HH:mm")}`;
+  if (diffDays === 1) return `Hôm qua ${d.format("HH:mm")}`;
+  return d.format("DD/MM/YYYY HH:mm");
 };
 
+/* ========================
+ *  Component
+ * ======================== */
 export default function RollCallStudent() {
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,151 +170,139 @@ export default function RollCallStudent() {
   const path = window.location.pathname;
   const sectionId = Number(path.split("/")[3]);
 
-  const fetchSessions = async () => {
+  async function fetchSessions() {
     setLoading(true);
+    setError("");
     try {
       const res = await fetch(
-        `http://localhost:4000/api/v1/attendance/sections/${sectionId}/sessions`,
-        {
-          credentials: "include",
-        }
+        `${API_BASE}/attendance/sections/${sectionId}/sessions`,
+        { credentials: "include" }
       );
       const data = await res.json();
-
-      if (data.success) {
-        setSessions(data.data);
-      } else {
-        setError("Không thể tải danh sách điểm danh");
-      }
-    } catch (err) {
+      if (data.success) setSessions(data.data);
+      else setError(data.message || "Không thể tải danh sách điểm danh");
+    } catch {
       setError("Lỗi kết nối server");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   useEffect(() => {
-    if (sectionId) {
-      fetchSessions();
-      const interval = setInterval(fetchSessions, 30000);
-      return () => clearInterval(interval);
-    }
+    if (!sectionId) return;
+    fetchSessions();
+    const t = setInterval(fetchSessions, 30_000);
+    return () => clearInterval(t);
   }, [sectionId]);
 
+  /* =========================================================
+   * CHECK-IN: GPS → Nonce → HMAC → POST check-in
+   * ========================================================= */
   const handleCheckIn = async (sessionId: number) => {
     if (!studentCode) {
       setError("Không tìm thấy mã sinh viên");
+      return;
+    }
+    if (!navigator.geolocation) {
+      setError("Trình duyệt không hỗ trợ định vị GPS");
       return;
     }
 
     setCheckingIn(sessionId);
     setError("");
 
-    if (!navigator.geolocation) {
-      setError("Trình duyệt không hỗ trợ định vị GPS");
-      setCheckingIn(null);
-      return;
-    }
-
+    // B1: Lấy GPS (ưu tiên độ chính xác)
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
-
-        if (accuracy > 50) {
-          const confirm = window.confirm(
-            `Độ chính xác GPS thấp (${accuracy.toFixed(0)}m).\nBạn có muốn tiếp tục?`
-          );
-          if (!confirm) {
-            setCheckingIn(null);
-            return;
-          }
-        }
-
+      async (pos) => {
         try {
-          const deviceInfo = getDeviceFingerprint();
+          const { latitude, longitude, accuracy } = pos.coords;
 
-          const res = await fetch(
-            "http://localhost:4000/api/v1/attendance/check-in",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "X-Device-Fingerprint": deviceInfo.fingerprint,
-              },
-              credentials: "include",
-              body: JSON.stringify({
-                sessionId,
-                studentCode,
-                latitude,
-                longitude,
-              }),
-            }
-          );
+          // chặn nếu độ chính xác của GV quá kém
+      const MAX_ALLOWED_ACCURACY_FOR_TEACHER = 100; // mét
+      if (accuracy == null || accuracy > MAX_ALLOWED_ACCURACY_FOR_TEACHER) {
+        toast.error(
+          `Không thể lấy vị trí chính xác. Bật Wi-Fi/High Accuracy và thử lại.`
+        );
+        return;
+      }
+
+          // B2: Device fingerprint → deviceId + UA
+          const { deviceId, userAgent, fields } = await buildDeviceId();
+
+          // B3: Xin nonce theo session
+          const nonce = await getNonce(sessionId);
+
+          // B4: Base string & xin chữ ký HMAC từ server
+          // ⚠️ PHẢI KHỚP verify() backend:
+          // `${sessionId}|${lat}|${lng}|${accuracy}|${nonce}`
+          const base = [
+            sessionId,
+            latitude,
+            longitude,
+            Math.round(accuracy), // rút gọn vẫn an toàn
+            nonce,
+          ].join("|");
+          const payloadSig = await getSignature(base);
+
+          // B5: Gửi check-in (body đầy đủ)
+          const res = await fetch(`${API_BASE}/attendance/check-in`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              // truyền thêm thông tin mô tả device (optional, chỉ để log)
+              "X-Device-Screen": fields.screen,
+              "X-Device-TZ": fields.timezone,
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              sessionId: Number(sessionId),
+              studentCode,
+              latitude,
+              longitude,
+              accuracy: Math.round(accuracy),
+              deviceId,
+              nonce,
+              payloadSig,
+            }),
+          });
 
           const data = await res.json();
-
           if (data.success) {
-            alert(`✅ ${data.message}\n\nĐiểm: ${data.scoreInfo?.score || "N/A"}/10`);
+            toast.success(
+              `${data.message}` +
+                (data.warning ? `\n⚠️ ${data.warning}` : "") +
+                (data.scoreInfo?.score != null
+                  ? `\nĐiểm: ${data.scoreInfo.score}/10`
+                  : "")
+            );
             fetchSessions();
           } else {
             setError(data.message || "Điểm danh thất bại");
           }
-        } catch (err) {
-          setError("Lỗi kết nối khi điểm danh");
+        } catch (e: any) {
+          setError(e?.message || "Lỗi khi điểm danh");
         } finally {
           setCheckingIn(null);
         }
       },
-      (error) => {
-        let errorMessage = "Không thể lấy vị trí GPS";
-        if (error.code === error.PERMISSION_DENIED) {
-          errorMessage = "Vui lòng cho phép truy cập vị trí";
+      (err) => {
+        let msg = "Không thể lấy vị trí GPS";
+        if (err.code === err.PERMISSION_DENIED) {
+          msg = "Vui lòng cho phép truy cập vị trí";
+        } else if (err.code === err.POSITION_UNAVAILABLE) {
+          msg = "Không xác định được vị trí (POSITION_UNAVAILABLE)";
+        } else if (err.code === err.TIMEOUT) {
+          msg = "Lấy vị trí quá thời gian (TIMEOUT)";
         }
-        alert(errorMessage);
-        setError(errorMessage);
+        setError(msg);
         setCheckingIn(null);
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      }
+      { enableHighAccuracy: true, timeout: 20_000, maximumAge: 0 }
     );
   };
 
-  const getMyAttendance = (session: AttendanceSession) => {
-    return session.attendances.find((a) => a.studentId === studentId);
-  };
-
-  const getStatusText = (status: AttendanceStatus) => {
-    const statusMap = {
-      present: "Có mặt",
-      late: "Muộn",
-      warning: "Cảnh báo",
-      absent: "Vắng",
-    };
-    return statusMap[status];
-  };
-
-  const getStatusColor = (status: AttendanceStatus) => {
-    const colorMap = {
-      present: "text-green-700",
-      late: "text-yellow-700",
-      warning: "text-orange-700",
-      absent: "text-red-700",
-    };
-    return colorMap[status];
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = dayjs(dateString);
-    const now = dayjs();
-    const diffDays = now.diff(date, "day");
-
-    if (diffDays === 0) return `Hôm nay ${date.format("HH:mm")}`;
-    if (diffDays === 1) return `Hôm qua ${date.format("HH:mm")}`;
-    return date.format("DD/MM/YYYY HH:mm");
-  };
+  const myAttendanceIn = (s: AttendanceSession) =>
+    s.attendances.find((a) => a.studentId === studentId);
 
   if (loading) {
     return (
@@ -238,7 +314,6 @@ export default function RollCallStudent() {
 
   return (
     <div className="w-full min-h-screen bg-gray-50">
-      {/* Content */}
       <div className="px-4 py-6">
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
@@ -253,9 +328,11 @@ export default function RollCallStudent() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {sessions.map((session) => {
-              const myAttendance = getMyAttendance(session);
-              const isExpired = session.expiresAt && new Date(session.expiresAt) <= new Date();
-              const canCheckIn = !isExpired && !myAttendance;
+              const att = myAttendanceIn(session);
+              const isExpired =
+                !!session.expiresAt &&
+                new Date(session.expiresAt) <= new Date();
+              const canCheckIn = !isExpired && !att;
 
               return (
                 <div
@@ -263,7 +340,7 @@ export default function RollCallStudent() {
                   className="bg-white rounded-lg border border-blue-200 hover:shadow-md transition-shadow"
                 >
                   <div className="p-4">
-                    {/* Header with Icon and Title */}
+                    {/* Header */}
                     <div className="flex items-start gap-3 mb-3">
                       <div className="flex-shrink-0 w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white text-xl">
                         📝
@@ -273,7 +350,7 @@ export default function RollCallStudent() {
                           {session.name || "Điểm danh"}
                         </h3>
                         <p className="text-xs text-gray-600 mt-0.5">
-                          {formatDate(session.createdAt)}
+                          {fmtWhen(session.createdAt)}
                         </p>
                       </div>
                     </div>
@@ -283,24 +360,26 @@ export default function RollCallStudent() {
                       <p className="truncate">Mã: {session.sessionCode}</p>
                       <p>{session.attendances.length} sinh viên</p>
                       {session.expiresAt && (
-                        <p className="truncate">
-                          Hết: {formatDate(session.expiresAt)}
-                        </p>
+                        <p className="truncate">Hết: {fmtWhen(session.expiresAt)}</p>
                       )}
                     </div>
 
-                    {/* Status or Action */}
-                    {myAttendance ? (
+                    {/* Status / Action */}
+                    {att ? (
                       <div className="space-y-2">
-                        <div className={`text-xs font-medium ${getStatusColor(myAttendance.status)} text-center py-2 bg-gray-50 rounded`}>
-                          ✓ {getStatusText(myAttendance.status)}
+                        <div
+                          className={`text-xs font-medium ${statusColor(
+                            att.status
+                          )} text-center py-2 bg-gray-50 rounded`}
+                        >
+                          ✓ {statusText(att.status)}
                         </div>
                         <p className="text-xs text-gray-600 text-center">
-                          {dayjs(myAttendance.checkedInAt).format("HH:mm:ss")}
+                          {dayjs(att.checkedInAt).format("HH:mm:ss")}
                         </p>
-                        {myAttendance.distance !== null && (
+                        {att.distance !== null && (
                           <p className="text-xs text-gray-500 text-center">
-                            {myAttendance.distance.toFixed(0)}m
+                            {att.distance.toFixed(0)}m
                           </p>
                         )}
                       </div>

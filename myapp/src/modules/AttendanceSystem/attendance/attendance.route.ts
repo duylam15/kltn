@@ -9,6 +9,9 @@ router.post("/sessions", attendanceController.createSession);
 // Điểm danh
 router.post("/check-in", attendanceController.checkIn);
 
+// Lấy cấu hình TOTP của session (chỉ GV dùng)
+router.get("/sessions/:id/totp", attendanceController.getSessionTotpConfig);
+
 // Danh sách session của section
 router.get("/sections/:sectionId/sessions", attendanceController.listSessions);
 router.get("/sessions", attendanceController.listAllSessions);
@@ -31,8 +34,18 @@ router.get(
     attendanceController.getWarningAttendances
 );
 
-// Danh sách điểm danh của 1 session
-router.get("/section/:sectionId/student/:studentId", attendanceController.listBySection);
+// ký payload (HMAC)
+router.post("/sign", attendanceController.signPayload);
+
+// Cấp nonce cho client để ký payload
+router.get("/session/:sessionId/nonce", attendanceController.issueNonce);
+
+
+// 🔥 GV điểm danh thủ công
+router.post("/manual-check-in", attendanceController.manualCheckIn);
+
+// 🔥 Hủy điểm danh
+router.post("/cancel", attendanceController.cancelAttendance);
 
 
 export default router;

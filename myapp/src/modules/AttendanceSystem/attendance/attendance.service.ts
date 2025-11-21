@@ -1,3 +1,4 @@
+
 import QRCode from "qrcode";
 import path from "path";
 import crypto from "crypto";
@@ -114,36 +115,37 @@ export async function getAttendanceSessionById(id: number) {
     });
 }
 
+
+
 export async function deleteAttendanceSession(id: number) {
-    return prisma.attendanceSession.delete({ where: { id } });
+  // kiểm tra tồn tại trước
+  const exists = await prisma.attendanceSession.findUnique({ where: { id } });
+  if (!exists) {
+    const err: any = new Error("Session not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // 1) Xoá các bản ghi phụ thuộc
+    await tx.attendanceLog.deleteMany({ where: { sessionId: id } });
+    await tx.attendanceNonce.deleteMany({ where: { sessionId: id } });
+    await tx.attendance.deleteMany({ where: { sessionId: id } });
+
+    // 2) Xoá session
+    await tx.attendanceSession.delete({ where: { id } });
+  });
+
+  // 3) (không bắt buộc) dọn file QR nếu có
+  try {
+    if (exists.qrCodeUrl) {
+      const uploadsDir = path.join(__dirname, "../../../uploads");
+      const filename = path.basename(exists.qrCodeUrl);
+      const filePath = path.join(uploadsDir, filename);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+  } catch { /* ignore file errors */ }
+
+  return true;
 }
 
-//Danh sách điểm danh của 1 sinh viên trong 1 lớp học phần
-export async function listStudentAttendance(
-    sectionId: number,
-    studentId: number
-) {
-    const records = await prisma.attendance.findMany({
-        where: { studentId, session: { sectionId } },
-        include: {
-            session: {
-                select: {
-                    id: true,
-                    name: true,
-                    createdAt: true,
-                    expiresAt: true,
-                },
-            },
-        },
-        orderBy: { sessionId: "asc" },
-    });
-
-    return records.map((a) => ({
-        attendanceId: a.id,
-        sessionId: a.sessionId,
-        sessionName: a.session?.name ?? `Session #${a.sessionId}`,
-        createdAt: a.session?.createdAt,
-        expiresAt: a.session?.expiresAt,
-        status: a.status,
-    }));
-}
