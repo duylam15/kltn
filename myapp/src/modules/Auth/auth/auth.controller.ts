@@ -241,4 +241,84 @@ export async function me(req: AuthRequest, res: Response) {
     }
 }
 
+// Thêm hàm này vào auth.controller.ts
+export async function refreshFromCookie(req: Request, res: Response) {
+    try {
+        const refreshToken = req.cookies["refresh_token"];
+        
+        console.log("🔄 Refresh token request received");
+        
+        if (!refreshToken) {
+            console.log("❌ No refresh token in cookie");
+            return res.status(401).json({ 
+                success: false, 
+                message: "No refresh token",
+                code: "NO_REFRESH_TOKEN"
+            });
+        }
 
+        const rotated = await rotateRefreshToken(refreshToken);
+        
+        if (!rotated) {
+            console.log("❌ Refresh token invalid or expired");
+            return res.status(401).json({ 
+                success: false, 
+                message: "Invalid or expired refresh token",
+                code: "INVALID_REFRESH_TOKEN"
+            });
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { id: rotated.userId },
+        });
+        
+        if (!user || !user.studentCode) {
+            console.log("❌ User not found");
+            return res.status(401).json({ 
+                success: false, 
+                message: "User not found",
+                code: "USER_NOT_FOUND"
+            });
+        }
+
+        const accessToken = signAccessToken({
+            id: user.id,
+            roleId: user.roleId,
+            studentCode: user.studentCode,
+        });
+
+        // Cập nhật cookie với access token mới
+        res.cookie("access_token", accessToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 1 * 60 * 1000, // 1 phút (test)
+        });
+
+        // Cập nhật cookie với refresh token mới
+        res.cookie("refresh_token", rotated.refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 ngày
+        });
+
+        console.log("✅ Tokens refreshed successfully for user:", user.id);
+
+        return res.json({
+            success: true,
+            message: "Token refreshed",
+            data: { 
+                userId: user.id,
+                studentCode: user.studentCode
+            }
+        });
+    } catch (error) {
+        console.error("💥 Refresh token error:", error);
+        return res.status(500).json({ 
+            success: false, 
+            message: "Refresh failed",
+            code: "REFRESH_ERROR"
+        });
+    }
+}

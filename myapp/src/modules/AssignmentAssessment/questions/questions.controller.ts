@@ -89,3 +89,68 @@ export const getChapters = catchAsync(
     }
 );
 
+// 🆕 Controller: Lấy câu hỏi của giảng viên theo userId
+export const getQuestionsByUserId = catchAsync(
+    async (req: Request, res: Response) => {
+        const { params, query } = (req as any).validated;
+        const userId = Number(params.userId);
+
+        console.log("📊 Get Questions by UserId:", {
+            userId,
+            page: query.page,
+            limit: query.limit,
+            subjectId: query.subjectId,
+            chapterId: query.chapterId,
+            difficulty: query.difficulty,
+            type: query.type,
+            search: query.search || query.q,
+        });
+
+        const result = await service.getQuestionsByUserId(userId, query);
+
+        sendResponse(res, {
+            success: true,
+            data: result.items,
+            meta: {
+                page: result.page,
+                limit: result.limit,
+                total: result.total,
+                totalPages: result.totalPages,
+            },
+        });
+    }
+);
+
+// 🆕 Controller: Lấy môn học có câu hỏi của user
+export const getUserSubjects = catchAsync(
+    async (req: Request, res: Response) => {
+        const { params } = (req as any).validated;
+        const userId = Number(params.userId);
+
+        const subjects = await service.getUserSubjects(userId);
+
+        sendResponse(res, {
+            success: true,
+            data: subjects,
+        });
+    }
+);
+
+// 🆕 Controller: Lấy chương theo môn học của user
+export const getUserChaptersBySubject = catchAsync(
+    async (req: Request, res: Response) => {
+        const { params } = (req as any).validated;
+        const userId = Number(params.userId);
+        const subjectId = Number(params.subjectId);
+
+        const chapters = await service.getUserChaptersBySubject(
+            userId,
+            subjectId
+        );
+
+        sendResponse(res, {
+            success: true,
+            data: chapters,
+        });
+    }
+);

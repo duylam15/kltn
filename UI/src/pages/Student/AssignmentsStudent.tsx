@@ -213,7 +213,7 @@ export default function AssignmentsStudent() {
       {/* Header */}
       <div className="bg-white border-b">
         <div className="px-4 py-4">
-          <h1 className="text-xl font-normal text-gray-800">Bài tậpxx</h1>
+          <h1 className="text-xl font-normal text-gray-800">Bài tập</h1>
         </div>
       </div>
 

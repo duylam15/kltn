@@ -34,6 +34,7 @@ export default function LayoutTeacher() {
     { to: "/teacher", label: "Màn hình chính", icon: Home, end: true },
     { to: "/teacher/materials", label: "Tài liệu", icon: BookOpen },
     { to: "/teacher/assignments", label: "Bài tập", icon: BookOpen },
+    { to: "/teacher/questions", label: "Câu hỏi", icon: BookOpen },
   ];
 
   const { user, logout } = useAuth();

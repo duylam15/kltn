@@ -1,5 +1,7 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/authContext";
+import { getRoleRoute } from "../constants/roles";
+import LoadingScreen from "../components/LoadingScreen";
 
 interface PublicRouteProps {
 	children: React.ReactNode;
@@ -8,17 +10,16 @@ interface PublicRouteProps {
 const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
 	const { user, loading } = useAuth();
 
-	if (loading) return <p>Đang kiểm tra đăng nhập...</p>;
-
-	// Nếu đã đăng nhập thì không cho vào public routes nữa
-	if (user) {
-		const roleId = user.role?.id;
-		if (roleId === 100) return <Navigate to="/student" replace />;
-		if (roleId === 101) return <Navigate to="/teacher" replace />;
-		if (roleId === 102) return <Navigate to="/admin" replace />;
+	if (loading) {
+		return <LoadingScreen message="⏳ Đang tải..." />;
 	}
 
-	// Nếu chưa đăng nhập thì cho vào public route (login, register)
+	// Nếu đã đăng nhập, redirect về dashboard của role
+	if (user) {
+		const redirectPath = getRoleRoute(user.role?.name);
+		return <Navigate to={redirectPath} replace />;
+	}
+
 	return <>{children}</>;
 };
 

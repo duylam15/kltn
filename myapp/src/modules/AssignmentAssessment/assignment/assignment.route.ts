@@ -112,6 +112,7 @@ router.post(
 );
 
 router.get("/suggest/cluster", controller.clusterStudents);
+router.get("/answers/:answerId/result", controller.getAnswerResult);
 
 export default router;
 

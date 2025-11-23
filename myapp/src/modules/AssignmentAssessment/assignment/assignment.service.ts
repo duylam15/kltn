@@ -289,7 +289,7 @@ export async function createAssignment(data: {
             description: data.description,
             type: data.type,
             dueDate: data.dueDate ? new Date(data.dueDate) : null,
-            maxScore: data.maxScore ?? 100,
+            maxScore: data.maxScore ?? 10,
             passingScore: data.passingScore ?? null,
             timeLimit: data.timeLimit ?? null,
             maxAttempts: data.maxAttempts ?? 1,

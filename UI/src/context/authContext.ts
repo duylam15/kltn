@@ -58,7 +58,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     useEffect(() => {
         axios
             .get("http://localhost:4000/api/v1/auths/me", {
-                withCredentials: true,
+                withCredentials: true,  
             })
             .then((res) => setUser(res.data.user))
             .catch(() => setUser(null))
@@ -71,10 +71,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             { studentCode, password },
             { withCredentials: true }
         );
+        console.log("aaaaaaaaa");
         const res = await axios.get("http://localhost:4000/api/v1/auths/me", {
             withCredentials: true,
         });
+        console.log("res", res.data.user);
+
         setUser(res.data.user);
+        console.log(user);
     };
 
     const logout = async () => {

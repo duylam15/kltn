@@ -27,7 +27,7 @@ export const createAssignmentSchema = z.object({
         type: z.enum(["exercise", "quiz", "homework"]).default("exercise"),
 
         dueDate: z.string().datetime().nullable().optional(),
-        maxScore: z.number().default(100),
+        maxScore: z.number().default(10),
         passingScore: z.number().nullable().optional(),
         timeLimit: z.number().nullable().optional(),
         maxAttempts: z.number().default(1),

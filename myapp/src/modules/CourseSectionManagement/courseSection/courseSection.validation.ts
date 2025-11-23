@@ -6,7 +6,7 @@ export const createCourseSectionSchema = z.object({
         term_id: z.number().int().positive(),
         section_code: z.string().min(1).max(40),
         schedule: z.any().optional(),
-        max_students: z.number().int().positive().optional(),
+        max_students: z.any().optional(),
         status: z
             .enum(["planned", "ongoing", "completed", "cancelled"])
             .optional(),

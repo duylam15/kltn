@@ -1,71 +1,119 @@
 import axios from "axios";
-import { Mutex } from "async-mutex";
 
-const mutex = new Mutex();
 const baseUrl = "http://localhost:4000/api/v1";
 
 const instance = axios.create({
     baseURL: baseUrl,
-    withCredentials: true,
+    withCredentials: true, // ✅ Quan trọng: gửi cookie tự động
 });
 
-// Luôn gắn token mới nhất vào request
-instance.interceptors.request.use((config) => {
-    const token = localStorage.getItem("access_token");
-    if (token && config.headers) {
-        config.headers["Authorization"] = `Bearer ${token}`;
-    }
-    return config;
-});
+let isRefreshing = false;
+let failedQueue: Array<{
+    resolve: (value?: any) => void;
+    reject: (reason?: any) => void;
+}> = [];
 
-export const handleRefreshToken = async () => {
-    return await mutex.runExclusive(async () => {
-        try {
-            const res = await instance.post("/auth/refresh_token");
-            if (res?.data?.accessToken) {
-                console.log("Token làm mới thành công:", res.data.accessToken);
-                localStorage.setItem("access_token", res.data.accessToken);
-                return res.data.accessToken;
-            }
-            return null;
-        } catch (err) {
-            return null;
+const processQueue = (error: any = null) => {
+    failedQueue.forEach((prom) => {
+        if (error) {
+            prom.reject(error);
+        } else {
+            prom.resolve();
         }
     });
+    failedQueue = [];
 };
 
-const NO_RETRY_HEADER = "x-no-retry";
-
+// Response interceptor
 instance.interceptors.response.use(
     (response) => response.data ?? response,
     async (error) => {
         const originalRequest = error.config;
 
-        // Nếu access token hết hạn
-        if (
-            error.response &&
-            error.response.status === 401 &&
-            !originalRequest.headers[NO_RETRY_HEADER]
-        ) {
-            originalRequest.headers[NO_RETRY_HEADER] = "true";
+        console.log("🔴 API Error:", {
+            url: originalRequest?.url,
+            status: error.response?.status,
+            code: error.response?.data?.code,
+            message: error.response?.data?.message,
+        });
 
-            const newAccessToken = await handleRefreshToken();
-            if (newAccessToken) {
-                originalRequest.headers[
-                    "Authorization"
-                ] = `Bearer ${newAccessToken}`;
-                return instance.request(originalRequest);
-            } else {
-                // Refresh fail -> logout
-                await instance.post("/auth/logout").catch(() => {});
-                localStorage.removeItem("access_token");
-                window.location.href = "/login";
+        // Kiểm tra nếu là lỗi 401 và token hết hạn
+        if (
+            error.response?.status === 401 &&
+            error.response?.data?.code === "TOKEN_EXPIRED" &&
+            !originalRequest._retry
+        ) {
+            // Tránh refresh lại chính endpoint refresh
+            if (originalRequest.url === "/auths/refresh_token") {
+                console.log("❌ Refresh token cũng hết hạn, logout...");
+                await handleLogout();
                 return Promise.reject(error);
+            }
+
+            originalRequest._retry = true;
+
+            // Nếu đang refresh, thêm vào queue
+            if (isRefreshing) {
+                console.log("⏳ Đang refresh, thêm request vào queue...");
+                return new Promise((resolve, reject) => {
+                    failedQueue.push({ resolve, reject });
+                })
+                    .then(() => {
+                        return instance(originalRequest);
+                    })
+                    .catch((err) => {
+                        return Promise.reject(err);
+                    });
+            }
+
+            isRefreshing = true;
+            console.log("🔄 Bắt đầu refresh token...");
+
+            try {
+                const response = await instance.post("/auths/refresh_token");
+
+                if (response?.success) {
+                    console.log("✅ Refresh token thành công!");
+                    isRefreshing = false;
+                    processQueue(null);
+
+                    // Retry request ban đầu
+                    return instance(originalRequest);
+                } else {
+                    throw new Error("Refresh failed");
+                }
+            } catch (refreshError: any) {
+                console.error("❌ Refresh token thất bại:", refreshError);
+                isRefreshing = false;
+                processQueue(refreshError);
+
+                // Logout nếu refresh thất bại
+                await handleLogout();
+                return Promise.reject(refreshError);
             }
         }
 
+        // Các lỗi khác (403, 404, 500...)
         return Promise.reject(error);
     }
 );
+
+async function handleLogout() {
+    try {
+        await instance.post("/auths/logout");
+    } catch (logoutError) {
+        console.error("Logout error:", logoutError);
+    }
+
+    // Clear storage
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // Redirect về login
+    console.log("tro ve dang nhap");
+    if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+    }
+}
 
 export default instance;

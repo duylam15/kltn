@@ -63,6 +63,7 @@ export async function createQuestion(data: any) {
             starterCode: data.starterCode,
             timeLimit: data.timeLimit,
             memoryLimit: data.memoryLimit,
+            createdBy: data.createdBy,
 
             choices: data.choices ? { create: data.choices } : undefined,
             testCases: data.testCases ? { create: data.testCases } : undefined,
@@ -277,3 +278,230 @@ export async function getAllQuestions(filter: any) {
     }
 }
 
+
+// 🆕 Service: Lấy câu hỏi của user theo userId
+export async function getQuestionsByUserId(userId: number, filter: any) {
+    const page = Number(filter.page || 1);
+    const limit = Number(filter.limit || 20);
+
+    // Kiểm tra user có tồn tại không
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+            role: true,
+            teacher: true,
+        },
+    });
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    // Build where clause
+    const where: any = {
+        // ✅ Chỉ lấy câu hỏi do user này tạo
+        createdBy: userId,
+    };
+
+    // 🔍 Filter theo loại câu hỏi
+    if (filter.type) {
+        where.type = filter.type;
+    }
+
+    // 🔍 Filter theo môn học
+    if (filter.subjectId) {
+        where.subjectId = Number(filter.subjectId);
+    }
+
+    // 🔍 Filter theo chương
+    if (filter.chapterId) {
+        where.chapterId = Number(filter.chapterId);
+    }
+
+    // 🔍 Filter theo độ khó
+    if (filter.difficulty) {
+        where.difficulty = filter.difficulty;
+    }
+
+    // 🔍 Search theo nội dung
+    const searchKeyword = filter.search || filter.q;
+    if (searchKeyword) {
+        where.content = {
+            contains: searchKeyword,
+            mode: "insensitive",
+        };
+    }
+
+    console.log(
+        "🔍 Questions by UserId where clause:",
+        JSON.stringify(where, null, 2)
+    );
+
+    try {
+        const [items, total] = await Promise.all([
+            prisma.question.findMany({
+                where,
+                skip: (page - 1) * limit,
+                take: limit,
+                orderBy: { createdAt: "desc" },
+                include: {
+                    choices: {
+                        orderBy: { order: "asc" },
+                    },
+                    testCases: {
+                        orderBy: { order: "asc" },
+                    },
+                    subject: {
+                        select: {
+                            id: true,
+                            subjectCode: true,
+                            subjectName: true,
+                        },
+                    },
+                    chapter: {
+                        select: {
+                            id: true,
+                            chapterCode: true,
+                            chapterName: true,
+                        },
+                    },
+                    createdByUser: {
+                        select: {
+                            id: true,
+                            fullName: true,
+                            email: true,
+                            avatarUrl: true,
+                            role: {
+                                select: {
+                                    id: true,
+                                },
+                            },
+                        },
+                    },
+                    _count: {
+                        select: {
+                            assignments: true,
+                        },
+                    },
+                },
+            }),
+            prisma.question.count({ where }),
+        ]);
+
+        console.log(
+            `✅ Found ${items.length} questions of userId ${userId} out of ${total} total`
+        );
+
+        return {
+            items,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+        };
+    } catch (error) {
+        console.error("❌ Error in getQuestionsByUserId:", error);
+        throw error;
+    }
+}
+
+// 🆕 Service: Lấy môn học có câu hỏi của user
+export async function getUserSubjects(userId: number) {
+    // Kiểm tra user
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+            role: true,
+            teacher: true,
+        },
+    });
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    // Lấy các môn học có câu hỏi do user này tạo
+    const subjects = await prisma.subject.findMany({
+        where: {
+            questions: {
+                some: {
+                    createdBy: userId,
+                },
+            },
+        },
+        select: {
+            id: true,
+            subjectCode: true,
+            subjectName: true,
+            _count: {
+                select: {
+                    questions: {
+                        where: {
+                            createdBy: userId,
+                        },
+                    },
+                    chapters: true,
+                },
+            },
+        },
+        orderBy: {
+            subjectCode: "asc",
+        },
+    });
+
+    return subjects;
+}
+
+// 🆕 Service: Lấy chương theo môn học (có câu hỏi của user)
+export async function getUserChaptersBySubject(
+    userId: number,
+    subjectId: number
+) {
+    // Kiểm tra user
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+            role: true,
+            teacher: true,
+        },
+    });
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    // Kiểm tra môn học tồn tại
+    const subject = await prisma.subject.findUnique({
+        where: { id: subjectId },
+    });
+
+    if (!subject) {
+        throw new ApiError(404, "Subject not found");
+    }
+
+    // Lấy các chương có câu hỏi do user này tạo
+    const chapters = await prisma.chapter.findMany({
+        where: {
+            subjectId: subjectId,
+            questions: {
+                some: {
+                    createdBy: userId,
+                },
+            },
+        },
+        orderBy: { order: "asc" },
+        include: {
+            _count: {
+                select: {
+                    questions: {
+                        where: {
+                            createdBy: userId,
+                        },
+                    },
+                },
+            },
+        },
+    });
+
+    return chapters;
+}

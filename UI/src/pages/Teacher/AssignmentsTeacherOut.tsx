@@ -37,6 +37,8 @@ import {
   LockOutlined,
   ShareAltOutlined,
   FolderOpenOutlined,
+  CheckCircleOutlined,
+  WarningOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -48,7 +50,6 @@ import { v4 as uuidv4 } from "uuid";
 const { Title, Text } = Typography;
 const { Option } = Select;
 const API_BASE = "http://localhost:4000/api/v1";
-
 
 type Assignment = {
   id: number;
@@ -117,7 +118,6 @@ type Chapter = {
   chapterName: string;
 };
 
-
 export default function AssignmentsTeacherOut() {
   const [loading, setLoading] = useState(true);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -156,6 +156,9 @@ export default function AssignmentsTeacherOut() {
 
   const { user } = useAuth();
   const teacherId = user?.teacher?.id;
+  const userId = user?.id;
+
+  console.log(user, userId);
 
   useEffect(() => {
     fetchAssignments();
@@ -176,11 +179,27 @@ export default function AssignmentsTeacherOut() {
     }
   }, [selectedSubjectId]);
 
+  // Hàm tính tổng điểm các câu hỏi đã chọn
+  const calculateTotalPoints = () => {
+    return tempSelectedQuestionIds.reduce((total, questionId) => {
+      const question = questions.find(q => q.id === questionId);
+      return total + (question?.points || 0);
+    }, 0);
+  };
+
+  // Thêm sau hàm calculateTotalPoints()
+  const isPointsValid = () => {
+    const totalPoints = calculateTotalPoints();
+    const maxScore = Number(form.getFieldValue('maxScore') || 10);
+    // Nếu đã chọn câu hỏi thì phải khớp điểm
+    return totalPoints === maxScore;
+  };
+
   async function fetchAssignments() {
     try {
       setLoading(true);
       const res = await axios.get<{ success: boolean; data: Assignment[] }>(
-        `${API_BASE}/assignments/teacher/${teacherId}`
+        `${API_BASE}/assignments/teacher/${userId}`
       );
       if (res.data.success) {
         setAssignments(res.data.data || []);
@@ -229,9 +248,7 @@ export default function AssignmentsTeacherOut() {
         success: boolean;
         data: QuestionSubject[];
         meta: any;
-      }>(
-        `${API_BASE}/subjects?limit=100`
-      );
+      }>(`${API_BASE}/subjects?limit=100`);
       if (res.data.success) {
         setQuestionSubjects(res.data.data || []);
       }
@@ -296,6 +313,26 @@ export default function AssignmentsTeacherOut() {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
+
+      // Kiểm tra tổng điểm câu hỏi
+      const totalPoints = calculateTotalPoints();
+      const maxScore = Number(values.maxScore || 10);
+
+      if (tempSelectedQuestionIds.length > 0 && totalPoints !== maxScore) {
+        Modal.error({
+          title: 'Không thể lưu bài tập',
+          content: (
+            <div>
+              <p>Tổng điểm các câu hỏi đã chọn phải bằng điểm tối đa của bài tập!</p>
+              <p><strong>Điểm tối đa:</strong> {maxScore}</p>
+              <p><strong>Tổng điểm câu hỏi:</strong> {totalPoints}</p>
+              <p><strong>Chênh lệch:</strong> {Math.abs(maxScore - totalPoints)}</p>
+            </div>
+          ),
+        });
+        return;
+      }
+
       const uniqueCode = uuidv4();
 
       const payload = {
@@ -304,7 +341,7 @@ export default function AssignmentsTeacherOut() {
         description: values.description?.trim(),
         type: values.type,
         dueDate: values.dueDate ? values.dueDate.toISOString() : null,
-        maxScore: Number(values.maxScore || 100),
+        maxScore: Number(values.maxScore || 10),
         passingScore: values.passingScore ? Number(values.passingScore) : null,
         timeLimit: values.timeLimit ? Number(values.timeLimit) : null,
         maxAttempts: values.maxAttempts ? Number(values.maxAttempts) : 1,
@@ -312,9 +349,8 @@ export default function AssignmentsTeacherOut() {
         showAnswersAfterSubmit: values.showAnswersAfterSubmit || false,
         allowLateSubmission: values.allowLateSubmission || false,
         isPublic: values.isPublic || false,
-        createdBy: teacherId,
+        createdBy: userId,
         originalAssignmentId: uniqueCode,
-        ...(values.sectionId ? { sectionId: Number(values.sectionId) } : {}),
         subjectId: values.subjectId,
         chapterId: values.chapterId,
       };
@@ -730,48 +766,7 @@ export default function AssignmentsTeacherOut() {
             <FileQuestion /> Quản lý Bài tập
           </div>
         </Title>
-        <Row gutter={16} style={{ marginBottom: 16 }}>
-          <Col span={6}>
-            <Card>
-              <Statistic
-                title="Tổng bài tập"
-                value={stats.totalAssignments}
-                prefix={<FolderOpenOutlined />}
-                valueStyle={{ color: "#1890ff" }}
-              />
-            </Card>
-          </Col>
-          <Col span={6}>
-            <Card>
-              <Statistic
-                title="Công khai"
-                value={stats.publicAssignments}
-                prefix={<GlobalOutlined />}
-                valueStyle={{ color: "#52c41a" }}
-              />
-            </Card>
-          </Col>
-          <Col span={6}>
-            <Card>
-              <Statistic
-                title="Riêng tư"
-                value={stats.privateAssignments}
-                prefix={<LockOutlined />}
-                valueStyle={{ color: "#faad14" }}
-              />
-            </Card>
-          </Col>
-          <Col span={6}>
-            <Card>
-              <Statistic
-                title="Bài kiểm tra"
-                value={stats.assignmentsByType.quiz + stats.assignmentsByType.exam}
-                prefix={<BookOutlined />}
-                valueStyle={{ color: "#722ed1" }}
-              />
-            </Card>
-          </Col>
-        </Row>
+     
         <div style={{ display: "flex", gap: 8 }}>
           <Select
             allowClear
@@ -844,6 +839,9 @@ export default function AssignmentsTeacherOut() {
         }}
         onOk={handleSubmit}
         okText={editing ? "Lưu" : "Tạo mới"}
+        okButtonProps={{
+          disabled: !isPointsValid()
+        }}
         cancelText="Hủy"
         width={1400}
         centered
@@ -885,7 +883,7 @@ export default function AssignmentsTeacherOut() {
                   placeholder="Chọn môn học"
                   onChange={(value) => {
                     setSelectedSubjectId(value);
-                    form.setFieldsValue({ chapterId: undefined }); // reset chương khi đổi môn
+                    form.setFieldsValue({ chapterId: undefined });
                     fetchChaptersBySubject(value);
                   }}
                 >
@@ -914,7 +912,6 @@ export default function AssignmentsTeacherOut() {
                   ))}
                 </Select>
               </Form.Item>
-
 
               <Form.Item
                 label="Loại bài tập"
@@ -999,43 +996,6 @@ export default function AssignmentsTeacherOut() {
             <Card size="small" style={{ marginBottom: 12, backgroundColor: "#fafafa" }}>
               <Space direction="vertical" style={{ width: "100%" }} size="small">
                 <Row gutter={8}>
-                  {/* <Col span={12}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>Môn học:</Text>
-                    <Select
-                      allowClear
-                      placeholder="Chọn môn học"
-                      value={selectedSubjectId}
-                      onChange={setSelectedSubjectId}
-                      style={{ width: "100%" }}
-                      size="small"
-                    >
-                      {questionSubjects.map((s) => (
-                        <Option key={s.id} value={s.id}>
-                          {s.subjectCode} - {s.subjectName}
-                        </Option>
-                      ))}
-                    </Select>
-                  </Col>
-                  <Col span={12}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>Chương:</Text>
-                    <Select
-                      allowClear
-                      placeholder="Chọn chương"
-                      value={selectedChapterId}
-                      onChange={setSelectedChapterId}
-                      disabled={!selectedSubjectId}
-                      style={{ width: "100%" }}
-                      size="small"
-                    >
-                      {chapters.map((c) => (
-                        <Option key={c.id} value={c.id}>
-                          {c.chapterCode} - {c.chapterName}
-                        </Option>
-                      ))}
-                    </Select>
-                  </Col> */}
-                </Row>
-                <Row gutter={8}>
                   <Col span={12}>
                     <Text type="secondary" style={{ fontSize: 12 }}>Độ khó:</Text>
                     <Select
@@ -1083,23 +1043,35 @@ export default function AssignmentsTeacherOut() {
 
             <Card size="small" style={{ marginBottom: 12 }}>
               <Row gutter={16}>
-                <Col span={12}>
+                <Col span={8}>
                   <Statistic
                     title="Tổng số câu"
                     value={questions.length}
                     valueStyle={{ fontSize: 20 }}
                   />
                 </Col>
-                <Col span={12}>
+                <Col span={8}>
                   <Statistic
                     title="Đã chọn"
                     value={tempSelectedQuestionIds.length}
                     valueStyle={{ fontSize: 20, color: "#1890ff" }}
                   />
                 </Col>
+                <Col span={8}>
+                  <Statistic
+                    title="Tổng điểm"
+                    value={calculateTotalPoints()}
+                    valueStyle={{
+                      fontSize: 20,
+                      color: calculateTotalPoints() === Number(form.getFieldValue('maxScore') || 10)
+                        ? "#52c41a"
+                        : "#ff4d4f"
+                    }}
+                    suffix={`/ ${form.getFieldValue('maxScore') || 10}`}
+                  />
+                </Col>
               </Row>
             </Card>
-
             <div
               style={{
                 maxHeight: 400,

@@ -285,6 +285,41 @@ export default function AssignmentTeacher() {
     }
   };
 
+  // 🔥 Thêm hàm toggle showAnswersAfterSubmit
+  const handleToggleShowAnswers = async (assignmentId: number) => {
+    try {
+      // Lấy trạng thái hiện tại
+      const assignment = assignments.find(a => a.id === assignmentId);
+      if (!assignment) return;
+
+      const newStatus = !assignment.showAnswersAfterSubmit;
+
+      // Gọi API update
+      const res = await axios.put(
+        `${API_BASE}/assignments/${assignmentId}`,
+        { showAnswersAfterSubmit: newStatus }
+      );
+
+      if (res.data.success) {
+        toast.success(`Đã ${newStatus ? "bật" : "tắt"} chế độ công bố điểm`);
+
+        // Cập nhật state local
+        setAssignments((prev) =>
+          prev.map((a) =>
+            a.id === assignmentId
+              ? { ...a, showAnswersAfterSubmit: newStatus }
+              : a
+          )
+        );
+      } else {
+        toast.error(res.data.message || "Không thể cập nhật trạng thái");
+      }
+    } catch (err: any) {
+      console.error("Lỗi toggle show answers:", err);
+      toast.error("Lỗi server khi cập nhật trạng thái");
+    }
+  };
+
   // 🔥 Hàm chọn submission làm điểm cuối cùng
   const handleSetFinalScore = async (submissionId: number) => {
     try {
@@ -464,7 +499,7 @@ export default function AssignmentTeacher() {
         description: values.description?.trim(),
         type: values.type,
         dueDate: values.dueDate ? values.dueDate.toISOString() : null,
-        maxScore: Number(values.maxScore || 100),
+        maxScore: Number(values.maxScore || 10),
         passingScore: values.passingScore ? Number(values.passingScore) : null,
         timeLimit: values.timeLimit ? Number(values.timeLimit) : null,
         maxAttempts: values.maxAttempts ? Number(values.maxAttempts) : 1,
@@ -927,8 +962,9 @@ export default function AssignmentTeacher() {
       title: "Hành động",
       key: "actions",
       align: "center" as const,
+      width: 220,
       render: (_: any, record: Assignment) => (
-        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+        <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
           <Tooltip title="Xem điểm">
             <Button
               size="small"
@@ -936,6 +972,30 @@ export default function AssignmentTeacher() {
               onClick={() => fetchAssignmentWithSubmissions(record.id)}
             />
           </Tooltip>
+
+          {/* 🔥 NÚT CÔNG BỐ ĐIỂM */}
+          <Tooltip
+            title={
+              record.showAnswersAfterSubmit
+                ? "Đã công bố điểm - Click để tắt"
+                : "Chưa công bố điểm - Click để bật"
+            }
+          >
+            <Button
+              size="small"
+              icon={<CheckCircleOutlined />}
+              onClick={() => handleToggleShowAnswers(record.id)}
+              style={{
+                backgroundColor: record.showAnswersAfterSubmit ? '#52c41a' : '#d9d9d9',
+                color: record.showAnswersAfterSubmit ? '#fff' : '#666',
+                borderColor: record.showAnswersAfterSubmit ? '#52c41a' : '#d9d9d9',
+                fontWeight: record.showAnswersAfterSubmit ? 'bold' : 'normal',
+              }}
+            >
+              {record.showAnswersAfterSubmit ? '✓' : ''}
+            </Button>
+          </Tooltip>
+
           <Tooltip title="Sửa">
             <Button
               size="small"
@@ -943,6 +1003,7 @@ export default function AssignmentTeacher() {
               onClick={() => openCreateEditModal(record)}
             />
           </Tooltip>
+
           <Tooltip title="Xóa">
             <Popconfirm
               title="Xóa bài tập"

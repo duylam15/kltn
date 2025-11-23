@@ -100,6 +100,9 @@ model User {
   chatParticipants  ChatParticipant[]
   overriddenGrades  StudentGrade[]    @relation("GradeOverriddenBy")
 
+  createdQuestions  Question[]        @relation("QuestionCreator")
+  createdAssignments Assignment[]     @relation("AssignmentCreator")
+
   @@index([roleId])
   @@index([isActive])
   @@index([lastLogin])
@@ -396,6 +399,8 @@ model Assignment {
   showAnswersAfterSubmit Boolean   @default(false)
   allowLateSubmission    Boolean   @default(false)
   createdBy              Int
+    createdByUser     User    @relation("AssignmentCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+
   originalAssignmentId   String    @db.VarChar(100)
 
   // 🆕 Phân loại theo môn học
@@ -419,6 +424,7 @@ model Assignment {
   @@index([subjectId])
   @@index([chapterId])
 }
+
 model SectionAssignment {
   id           Int      @id @default(autoincrement())
   sectionId    Int
@@ -443,12 +449,16 @@ model Question {
   subjectId   Int?
   chapterId   Int?
   difficulty  DifficultyLevel @default(medium)
-  tags        String?         @db.VarChar(500) // Lưu dạng JSON hoặc comma-separated
+  tags        String?         @db.VarChar(500)
 
   language    ProgrammingLanguage?
   starterCode String?              @db.Text
   timeLimit   Int?
   memoryLimit Int?
+
+  // ✅ Lưu với User thay vì Teacher
+  createdBy   Int?
+  createdByUser User? @relation("QuestionCreator", fields: [createdBy], references: [id], onDelete: SetNull)
 
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
@@ -458,6 +468,10 @@ model Question {
   choices     QuestionChoice[]
   testCases   TestCase[]
   answers     SubmissionAnswer[]
+
+  @@index([createdBy])
+  @@index([subjectId])
+  @@index([chapterId])
 }
 
 model AssignmentQuestion {

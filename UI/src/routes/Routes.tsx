@@ -33,16 +33,9 @@ import AdminStats from "../pages/Admin/AdminStats";
 
 
 // Route guards
-import PublicRoute from "./PublicRoute";
-import StudentRoute from "./StudentRoute";
-import TeacherRoute from "./TeacherRoute";
-import AdminRoute from "./AdminRoute";
-import Error from "./Error";
-import RequirePermission from "./RequirePermission";
 import Students from "../pages/Admin/Students";
 import Teachers from "../pages/Admin/Teachers";
 import MaterialsTeacher from "../pages/Teacher/MaterialsTeacher";
-import CourseLayoutStudent from "../layouts/CourseLayoutStudent";
 import OverviewAdmin from "../pages/Admin/OverviewAdmin";
 import Instructors from "../pages/Admin/Instructors";
 import Assignments from "../pages/Admin/Assignments";
@@ -65,42 +58,49 @@ import VRPage from "../pages/VRPage";
 import AssignmentSubmissionHistory from "../pages/Student/AssignmentSubmissionHistory";
 import AssignmentsScore from "../pages/Student/AssignmentsScore";
 
+import {  getRoleRoute, ROLE_ROUTES } from "../constants/roles";
+
+
+// Import các components khác...
+import PublicRoute from "./PublicRoute";
+import { StudentRoute, TeacherRoute, AdminRoute } from "./RoleRoutes";
+import Error from "./Error";
+import RequirePermission from "./RequirePermission";
+import CourseLayoutStudent from "../layouts/CourseLayoutStudent";
+import TestRefreshToken from "../pages/Admin/TestRefreshToken";
+import QuestionsTeacher from "../pages/Teacher/QuestionsTeacher";
+
+// Helper function để check auth và redirect
+const checkAuthAndRedirect = async () => {
+  try {
+    const res = await axios.get("http://localhost:4000/api/v1/auths/me", {
+      withCredentials: true,
+    });
+
+    const roleName = res.data.user?.role?.name;
+    const redirectPath = getRoleRoute(roleName);
+
+    return redirect(redirectPath);
+  } catch {
+    return redirect("/login");
+  }
+};
+
+
 export const router = createBrowserRouter([
   // ========== Root check auth ==========
   {
     path: "/",
-    loader: async () => {
-      try {
-        const res = await axios.get("http://localhost:4000/api/v1/auths/me", {
-          withCredentials: true,
-        });
-
-        const roleId: number = res.data.user?.roleId;
-
-        if (roleId === 100) return redirect("/student");
-        if (roleId === 101) return redirect("/teacher");
-        if (roleId === 102) return redirect("/admin");
-
-        return redirect("/login");
-      } catch {
-        return redirect("/login");
-      }
-    },
+    loader: checkAuthAndRedirect,
   },
 
-  // ========== Public ==========
+  // ========== Public Routes ==========
   {
     path: "/login",
     element: (
       <PublicRoute>
         <Login />
       </PublicRoute>
-    ),
-  },
-   {
-    path: "/qr",
-    element: (
-      <VRPage />
     ),
   },
   {
@@ -112,11 +112,15 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: "/qr",
+    element: <VRPage />,
+  },
+  {
     path: "/diemdanh",
     element: <RollCallCheckIn />,
   },
 
-  // ========== Student ==========
+  // ========== Student Routes ==========
   {
     path: "/student",
     element: (
@@ -147,7 +151,7 @@ export const router = createBrowserRouter([
     ],
   },
 
-  // ========== Teacher ==========
+  // ========== Teacher Routes ==========
   {
     path: "/teacher",
     element: (
@@ -173,18 +177,14 @@ export const router = createBrowserRouter([
           { path: "grades", element: <GradesTeacher /> },
         ],
       },
-      {
-        path: "materials",
-        element: <MaterialsTeacher />,
-      },
-      {
-        path: "assignments",
-        element: <AssignmentsTeacherOut />,
-      },
+      { path: "materials", element: <MaterialsTeacher /> },
+      { path: "assignments", element: <AssignmentsTeacherOut /> },
+      { path: "questions", element: <QuestionsTeacher /> },
+
     ],
   },
 
-  // ========== Admin ==========
+  // ========== Admin Routes ==========
   {
     path: "/admin",
     element: (
@@ -203,14 +203,11 @@ export const router = createBrowserRouter([
       { path: "questions", element: <Questions /> },
       { path: "materials", element: <MaterialsAdmin /> },
       { path: "subjects", element: <Subjects /> },
-      // Admin courses
-      {
-        path: "courses",
-        element: <CoursesAdmin />, // Trang danh sách courses
-      },
+      { path: "courses", element: <CoursesAdmin /> },
+      { path: "TestRefreshToken", element: <TestRefreshToken /> },
       {
         path: "courses/:courseId",
-        element: <CourseLayout />, // Layout chi tiết 1 course
+        element: <CourseLayout />,
         children: [
           { index: true, loader: () => redirect("overview") },
           { path: "overview", element: <Overview /> },
@@ -230,20 +227,17 @@ export const router = createBrowserRouter([
           const { default: RequirePermission } = await import("./RequirePermission");
           return {
             element: (
-              <RequirePermission permission="*">
+              <RequirePermission permission="user.read">
                 <Students />
               </RequirePermission>
             ),
           };
         },
       },
-
-
-
       { path: "teachers", element: <Teachers /> },
     ],
   },
 
-  // Fallback
+  // ========== Fallback ==========
   { path: "*", element: <Error /> },
-]);
+]);;
