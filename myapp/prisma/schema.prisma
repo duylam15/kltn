@@ -584,16 +584,17 @@ enum AttendanceStatus {
 }
 
 model AttendanceSession {
-  id          Int       @id @default(autoincrement())
-  sectionId   Int
-  name        String?
-  sessionCode String    @unique
-  qrCodeUrl   String?
-  latitude    Float?
-  longitude   Float?
-  radius      Float?    @default(50)
-  createdAt   DateTime  @default(now())
-  expiresAt   DateTime?
+  id           Int       @id @default(autoincrement())
+  sectionId    Int
+  name         String?
+  sessionCode  String    @unique
+  qrCodeUrl    String?
+  latitude     Float?
+  longitude    Float?
+  radius       Float?    @default(50)
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime?
+  sessionScore Float?    @default(10)
 
   requireDeviceCheck Boolean @default(true)
   maxCheckInsPerIP   Int     @default(3)

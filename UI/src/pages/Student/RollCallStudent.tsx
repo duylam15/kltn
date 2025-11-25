@@ -221,7 +221,7 @@ export default function RollCallStudent() {
       const MAX_ALLOWED_ACCURACY_FOR_TEACHER = 100; // mét
       if (accuracy == null || accuracy > MAX_ALLOWED_ACCURACY_FOR_TEACHER) {
         toast.error(
-          `Không thể lấy vị trí chính xác. Bật Wi-Fi/High Accuracy và thử lại.`
+          `Không thể lấy vị trí chính xác. Vui lòng tắt->bật lại Wi-Fi THỬ.`
         );
         return;
       }

@@ -1,71 +1,73 @@
-import React, { useState, useEffect } from "react";
-import { totp } from "otplib";
+// src/pages/Teacher/DynamicQr.tsx
+import React, { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 
+const API_BASE = "http://localhost:4000/api/v1";
+
 interface DynamicQrProps {
-  secretBase32: string;
-  period?: number;
-  digits?: number;
+  sessionId: number;
   size?: number;
 }
 
+const DEFAULT_PERIOD = 10; // 10 giây
+
 export const DynamicQr: React.FC<DynamicQrProps> = ({
-  secretBase32,
-  period = 10,
-  digits = 6,
-  size = 256,
+  sessionId,
+  size = 260,
 }) => {
-  const [token, setToken] = useState("");
-  const [secondsLeft, setSecondsLeft] = useState(period);
+  const [token, setToken] = useState<string>("Đang tải...");
+  const [secondsLeft, setSecondsLeft] = useState<number>(DEFAULT_PERIOD);
+  const [period, setPeriod] = useState<number>(DEFAULT_PERIOD);
 
   useEffect(() => {
-    if (!secretBase32 || secretBase32.length < 16) {
-      setToken("ERROR: No secret");
-      return;
+    let countdownTimer: number;
+    let fetchTimer: number;
+
+    async function fetchToken() {
+      try {
+        const res = await fetch(
+          `${API_BASE}/attendance/sessions/${sessionId}/totp-current`
+        );
+        const data = await res.json();
+
+        if (data.success) {
+          setToken(data.token);
+          const p = data.period || DEFAULT_PERIOD;
+          setPeriod(p);
+          setSecondsLeft(data.remaining ?? p);
+        } else {
+          setToken("TOTP Error");
+        }
+      } catch (err) {
+        console.error("fetch TOTP error:", err);
+        setToken("TOTP Error");
+      }
     }
 
-    try {
-      totp.options = { digits, step: period };
-      const updateToken = () => {
-        const newToken = totp.generate(secretBase32);
-        setToken(newToken);
-      };
-      updateToken();
-      const interval = setInterval(updateToken, period * 1000);
-      return () => clearInterval(interval);
-    } catch (err) {
-      console.error("TOTP error:", err);
-      setToken("TOTP Error");
-    }
-  }, [secretBase32, period, digits]);
+    // gọi ngay lần đầu
+    fetchToken();
 
-  useEffect(() => {
-    const start = Date.now();
-    const timer = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - start) / 1000);
-      setSecondsLeft(period - (elapsed % period));
-    }, 100);
-    return () => clearInterval(timer);
-  }, [period]);
+    // đếm ngược mỗi 1s
+    countdownTimer = window.setInterval(() => {
+      setSecondsLeft((prev) => (prev <= 1 ? period : prev - 1));
+    }, 1000);
 
-  if (!secretBase32) {
-    return (
-      <div style={{ textAlign: "center", color: "red" }}>
-        <p>Không có TOTP secret</p>
-        <p>Vui lòng tạo lại phiên điểm danh</p>
-      </div>
-    );
-  }
+    // gọi lại backend mỗi `period` giây
+    fetchTimer = window.setInterval(fetchToken, period * 1000);
+
+    return () => {
+      clearInterval(countdownTimer);
+      clearInterval(fetchTimer);
+    };
+  }, [sessionId, period]);
 
   return (
     <div style={{ textAlign: "center" }}>
       <QRCodeSVG value={token} size={size} level="M" />
-      <div style={{ marginTop: 12, fontSize: 14, color: "#666" }}>
-        Mã hiện tại: <strong>{token}</strong>
-      </div>
-      <div style={{ marginTop: 4, fontSize: 12, color: "#999" }}>
-        Cập nhật sau: <strong>{secondsLeft}s</strong>
-      </div>
+      <p>
+        Mã hiện tại: <b>{token}</b>
+      </p>
+      <p>Cập nhật sau: {secondsLeft}s</p>
     </div>
   );
 };

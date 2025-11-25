@@ -51,6 +51,7 @@ type TeacherInfo = {
   specialization?: string | null;
 };
 
+
 type Profile = {
   id: number;
   fullName: string;
@@ -93,6 +94,7 @@ export default function ProfilePage() {
 
         const data: Profile = res.data.data || res.data;
         setProfile(data);
+        
 
         form.setFieldsValue({
           fullName: data.fullName,
@@ -205,18 +207,6 @@ export default function ProfilePage() {
     }
   };
 
-  // Hàm gọi khi bấm nút "Xoá avatar" – hiện confirm
-  // const handleRemoveAvatar = () => {
-  //   Modal.confirm({
-  //     title: "Bạn có chắc muốn xoá avatar?",
-  //     icon: <ExclamationCircleOutlined />,
-  //     content: "Ảnh đại diện sẽ bị xoá và thay bằng avatar mặc định.",
-  //     okText: "Xoá",
-  //     cancelText: "Huỷ",
-  //     okButtonProps: { danger: true },
-  //     onOk: removeAvatar,
-  //   });
-  // };
 
 const handleRemoveAvatar = async () => {
     try {
@@ -349,44 +339,64 @@ const handleRemoveAvatar = async () => {
               </Space>
 
               <Descriptions
-                column={1}
-                size="small"
-                style={{ marginTop: 16, width: "100%" }}
-              >
-                {profile?.role === "STUDENT" && profile.student && (
-                  <>
-                    <Descriptions.Item label="Mã SV">
-                      {profile.student.studentCode}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Lớp">
-                      {profile.student.className || "—"}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Ngành">
-                      {profile.student.major || "—"}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Niên khóa">
-                      {profile.student.academicYear || "—"}
-                    </Descriptions.Item>
-                  </>
-                )}
+  column={1}
+  size="small"
+  style={{ marginTop: 16, width: "100%" }}
+>
+  {profile && profile.role.toLowerCase() === "student" && profile.student && (
+    <>
+      <Descriptions.Item label="Mã SV">
+        {profile.student.studentCode}
+      </Descriptions.Item>
+      <Descriptions.Item label="Lớp">
+        {profile.student.className || "—"}
+      </Descriptions.Item>
+      <Descriptions.Item label="Ngành">
+        {profile.student.major || "—"}
+      </Descriptions.Item>
+      <Descriptions.Item label="Niên khóa">
+        {profile.student.academicYear || "—"}
+      </Descriptions.Item>
+      <Descriptions.Item label="Lần đăng nhập gần nhất">
+          {dayjs(profile.lastLogin).format("DD/MM/YYYY HH:mm") || "—"}
+        </Descriptions.Item>
+    </>
+  )}
 
-                {profile?.role === "TEACHER" && profile.teacher && (
-                  <>
-                    <Descriptions.Item label="Mã GV">
-                      {profile.teacher.teacherCode}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Khoa/Bộ môn">
-                      {profile.teacher.department || "—"}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Chức vụ">
-                      {profile.teacher.position || "—"}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Chuyên môn">
-                      {profile.teacher.specialization || "—"}
-                    </Descriptions.Item>
-                  </>
-                )}
-              </Descriptions>
+  {profile && profile.role.toLowerCase() === "teacher" && profile.teacher && (
+    <>
+      <Descriptions.Item label="Mã GV">
+        {profile.teacher.teacherCode}
+      </Descriptions.Item>
+      <Descriptions.Item label="Khoa/Bộ môn">
+        {profile.teacher.department || "—"}
+      </Descriptions.Item>
+      <Descriptions.Item label="Chức vụ">
+        {profile.teacher.position || "—"}
+      </Descriptions.Item>
+      <Descriptions.Item label="Chuyên môn">
+        {profile.teacher.specialization || "—"}
+      </Descriptions.Item>
+      <Descriptions.Item label="Lần đăng nhập gần nhất">
+          {dayjs(profile.lastLogin).format("DD/MM/YYYY HH:mm") || "—"}
+        </Descriptions.Item>
+    </>
+  )}
+
+  {profile && profile.role.toLowerCase() === "admin" && (
+    <>
+      <Descriptions.Item label="Quyền hệ thống">
+        {profile.role}
+      </Descriptions.Item>
+      
+        <Descriptions.Item label="Lần đăng nhập gần nhất">
+          {dayjs(profile.lastLogin).format("DD/MM/YYYY HH:mm") || "—"}
+        </Descriptions.Item>
+      
+    </>
+  )}
+</Descriptions>
+
             </Space>
           </Card>
         </Col>

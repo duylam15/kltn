@@ -52,6 +52,7 @@ type Session = {
    totpSecretBase32?: string | null;
   totpPeriod?: number | null;
   totpDigits?: number | null;
+  sessionScore?: number | null;
 };
 
 type Attendance = {
@@ -198,7 +199,7 @@ export default function RollCall() {
         toast.error(
           `Không thể lấy vị trí chính xác (Sai số: ${
             Math.round(accuracy || 0)
-          }m > ${MAX_ALLOWED_ACCURACY_FOR_TEACHER}m). Bật Wi-Fi/High Accuracy và thử lại.`
+          }m > ${MAX_ALLOWED_ACCURACY_FOR_TEACHER}m). Vui lòng tắt->bật lại Wi-Fi THỬ.`
         );
         return;
       }
@@ -211,6 +212,7 @@ export default function RollCall() {
         longitude,
         radius: Number(values.radius) || 100, // lấy từ form
         teacherAccuracy: accuracy, // gửi để server kiểm
+        sessionScore: Number(values.sessionScore),
       };
 
       const res = await axios.post(`${API_BASE}/attendance/sessions`, payload);
@@ -237,6 +239,7 @@ export default function RollCall() {
         ...values,
          radius: Number(values.radius),
         expiresAt: values.expiresAt ? dayjs(values.expiresAt).toISOString() : null,
+        sessionScore: Number(values.sessionScore),
       };
 
       await axios.put(`${API_BASE}/attendance/sessions/${editing.id}`, payload);
@@ -393,7 +396,23 @@ export default function RollCall() {
       sorter: (a: Session, b: Session) =>
         (a.sessionCode || "").localeCompare(b.sessionCode || ""),
       render: (text: string) => text || <Tag color="default">N/A</Tag>,
-    },
+    },{
+    title: "Điểm buổi",
+    dataIndex: "sessionScore",
+    key: "sessionScore",
+    width: 110,
+    align: "center" as const,
+    sorter: (a: Session, b: Session) =>
+      (a.sessionScore ?? 0) - (b.sessionScore ?? 0),
+    render: (v: number | null | undefined) =>
+      v != null ? (
+        <Tag color="blue" style={{ fontWeight: 500 }}>
+          {v.toFixed(1)}
+        </Tag>
+      ) : (
+        <span style={{ color: "#999" }}>—</span>
+      ),
+  },
     {
       title: "Bán kính (m)",
       dataIndex: "radius",
@@ -492,6 +511,7 @@ export default function RollCall() {
                   ...record,
                   radius: record.radius ?? 100,
                   expiresAt: record.expiresAt ? dayjs(record.expiresAt) : null,
+                  sessionScore: record.sessionScore ?? 10,
                 });
                 setEditModalOpen(true);
               }}
@@ -933,6 +953,7 @@ export default function RollCall() {
 >
   {selectedSession?.totpSecretBase32 ? (
     <DynamicQr
+    sessionId={selectedSession.sectionId}
       secretBase32={selectedSession.totpSecretBase32}
       period={selectedSession.totpPeriod ?? 10}
       digits={selectedSession.totpDigits ?? 6}
@@ -1000,56 +1021,121 @@ export default function RollCall() {
       name="radius"
       rules={[
         { required: true, message: "Vui lòng nhập bán kính" },
-        { type: "number", transform: v => Number(v), min: 20, max: 500, message: "20–500 m" },
+        {
+          type: "number",
+          transform: (v) => Number(v),
+          min: 20,
+          max: 500,
+          message: "20–500 m",
+        },
       ]}
     >
-      <InputNumber style={{ width: "100%" }} min={20} max={500} placeholder="VD: 100" />
+      <InputNumber
+        style={{ width: "100%" }}
+        min={20}
+        max={500}
+        placeholder="VD: 100"
+      />
     </Form.Item>
 
     <Form.Item label="Ngày hết hạn" name="expiresAt">
       <DatePicker showTime style={{ width: "100%" }} />
     </Form.Item>
+
+    {/* ⬇️ Thêm điểm buổi */}
+    <Form.Item
+      label="Điểm buổi"
+      name="sessionScore"
+      rules={[
+        { required: true, message: "Vui lòng nhập điểm" },
+        {
+          type: "number",
+          transform: (v) => Number(v),
+          min: 0,
+          max: 10,
+          message: "0–10 điểm",
+        },
+      ]}
+    >
+      <InputNumber
+        style={{ width: "100%" }}
+        min={0}
+        max={10}
+        step={0.5}
+        placeholder="VD: 10"
+      />
+    </Form.Item>
   </Form>
 </Modal>
 
 
+
       {/* Modal tạo phiên */}
-      <Modal
-        title="Tạo phiên điểm danh mới"
-        open={createModalOpen}
-        onCancel={() => setCreateModalOpen(false)}
-        onOk={createSession}
-        okText="Tạo mới"
-      >
-        <Form form={createForm} layout="vertical" initialValues={{ radius: 100 }}>
-          <Form.Item
-            label="Tên phiên điểm danh"
-            name="name"
-            rules={[{ required: true, message: "Vui lòng nhập tên phiên điểm danh" }]}
-          >
-            <Input placeholder="VD: Buổi học CSDL ngày 25/09" />
-          </Form.Item>
+     <Modal
+  title="Tạo phiên điểm danh mới"
+  open={createModalOpen}
+  onCancel={() => setCreateModalOpen(false)}
+  onOk={createSession}
+  okText="Tạo mới"
+>
+  <Form
+    form={createForm}
+    layout="vertical"
+    initialValues={{ radius: 100, sessionScore: 10 }}  // ⬅️ mặc định 10
+  >
+    <Form.Item
+      label="Tên phiên điểm danh"
+      name="name"
+      rules={[{ required: true, message: "Vui lòng nhập tên phiên điểm danh" }]}
+    >
+      <Input placeholder="VD: Buổi học CSDL ngày 25/09" />
+    </Form.Item>
 
-          <Form.Item
-            label="Ngày hết hạn"
-            name="expiresAt"
-            rules={[{ required: true, message: "Vui lòng nhập ngày hết hạn" }]}
-          >
-            <DatePicker showTime style={{ width: "100%" }} />
-          </Form.Item>
+    <Form.Item
+      label="Ngày hết hạn"
+      name="expiresAt"
+      rules={[{ required: true, message: "Vui lòng nhập ngày hết hạn" }]}
+    >
+      <DatePicker showTime style={{ width: "100%" }} />
+    </Form.Item>
 
-          <Form.Item
-            label="Bán kính cho phép (m)"
-            name="radius"
-            rules={[
-              { required: true, message: "Vui lòng nhập bán kính" },
-              { type: "number", transform: v => Number(v), min: 20, max: 500, message: "20–500 m" }
-            ]}
-          >
-            <Input type="number" placeholder="VD: 100" />
-          </Form.Item>
-        </Form>
-      </Modal>
+    <Form.Item
+      label="Bán kính cho phép (m)"
+      name="radius"
+      rules={[
+        { required: true, message: "Vui lòng nhập bán kính" },
+        {
+          type: "number",
+          transform: (v) => Number(v),
+          min: 20,
+          max: 500,
+          message: "20–500 m",
+        },
+      ]}
+    >
+      <Input type="number" placeholder="VD: 100" />
+    </Form.Item>
+
+    {/* ⬇️ Điểm buổi */}
+    <Form.Item
+      label="Điểm buổi (tối đa)"
+      name="sessionScore"
+      rules={[
+        { required: true, message: "Vui lòng nhập điểm" },
+        {
+          type: "number",
+          transform: (v) => Number(v),
+          min: 0,
+          max: 10,
+          message: "0–10 điểm",
+        },
+      ]}
+    >
+      <Input type="number" step="0.5" placeholder="VD: 10" />
+    </Form.Item>
+  </Form>
+</Modal>
+
     </div>
   );
 }

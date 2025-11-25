@@ -173,6 +173,7 @@ export async function me(req: AuthRequest, res: Response) {
                 email: true,
                 fullName: true,
                 studentCode: true,
+                avatarUrl: true,
                 role: {
                     select: {
                         id: true,
@@ -222,6 +223,7 @@ export async function me(req: AuthRequest, res: Response) {
                 email: user.email,
                 fullName: user.fullName,
                 studentCode: user.studentCode,
+                avatarUrl: user.avatarUrl,
                 role: {
                     id: user.role.id,
                     name: user.role.name,

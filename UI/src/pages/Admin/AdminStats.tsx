@@ -6,8 +6,12 @@ import {
 } from "antd";
 import {
   BarChartOutlined, LineChartOutlined, ClockCircleOutlined,
-  PieChartOutlined, ReloadOutlined, DownloadOutlined, InfoCircleOutlined
+  PieChartOutlined, ReloadOutlined, DownloadOutlined, InfoCircleOutlined,
+  FullscreenOutlined, FullscreenExitOutlined,
 } from "@ant-design/icons";
+import { Rnd } from "react-rnd";
+
+
 import type { ColumnsType } from "antd/es/table";
 import axios from "axios";
 import type { Dayjs } from "dayjs";
@@ -51,6 +55,65 @@ const kpiIconStyle = (color1: string, color2: string) => ({
   color: "white",
   fontSize: 20,
 });
+
+type FloatingPanelProps = {
+  visible: boolean;
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+};
+
+function FloatingPanel({ visible, title, onClose, children }: FloatingPanelProps) {
+  if (!visible) return null;
+
+  // dùng window.innerWidth/innerHeight để set kích thước ban đầu
+  const w = typeof window !== "undefined" ? window.innerWidth : 1200;
+  const h = typeof window !== "undefined" ? window.innerHeight : 800;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.25)",
+        zIndex: 2000,
+      }}
+    >
+      <Rnd
+        default={{
+          x: w * 0.1,
+          y: h * 0.1,
+          width: w * 0.8,
+          height: h * 0.8,
+        }}
+        bounds="window"               // chỉ kéo được trong cửa sổ
+        minWidth={500}
+        minHeight={300}
+        dragHandleClassName="floating-panel-header" // chỉ kéo bằng header
+      >
+        <Card
+          style={{ ...glassStyle, height: "100%" }}
+          bodyStyle={{ height: "calc(100% - 56px)", padding: 0 }}
+          title={
+            <div className="floating-panel-header" style={{ cursor: "move" }}>
+              {title}
+            </div>
+          }
+          extra={
+            <Button
+              type="text"
+              icon={<FullscreenExitOutlined />}
+              onClick={onClose}
+            />
+          }
+        >
+          <div style={{ height: "100%", padding: 16 }}>{children}</div>
+        </Card>
+      </Rnd>
+    </div>
+  );
+}
+
 
 /* === Sort helpers === */
 type Order = "ascend" | "descend";
@@ -301,6 +364,22 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
     exportToXlsx("grades.xlsx", "Grades", rows);
   };
 
+  // fullscreen states
+     const [chartFull, setChartFull] = useState(false);
+  const [tableFull, setTableFull] = useState(false);
+
+  const toggleChartFull = () =>
+    setChartFull((prev) => {
+      if (!prev) setTableFull(false); // chỉ 1 cái phóng to
+      return !prev;
+    });
+
+  const toggleTableFull = () =>
+    setTableFull((prev) => {
+      if (!prev) setChartFull(false);
+      return !prev;
+    });
+
   return (
     <Space direction="vertical" size={20} style={{ width: "100%" }}>
       {/* Filter */}
@@ -378,26 +457,63 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
         ))}
       </Row>
 
-      {/* Chart + Table */}
+                {/* Chart + Table (bản thường) */}
       <Row gutter={[16, 16]}>
+        {/* CARD CHART nhỏ trên trang */}
         <Col xs={24} lg={10}>
-          <Card style={glassStyle} title="Điểm TB theo lớp/môn" bodyStyle={{ height: 380, padding: 0 }}>
-            {loading ? <Spin /> : chartData.length ? (
+          <Card
+            style={glassStyle}
+            title="Điểm TB theo lớp/môn"
+            bodyStyle={{ height: 380, padding: 0 }}
+            extra={
+              <Tooltip title={chartFull ? "Thu nhỏ" : "Phóng to (kéo/resize được)"}>
+                <Button
+                  type="text"
+                  icon={chartFull ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+                  onClick={toggleChartFull}
+                />
+              </Tooltip>
+            }
+          >
+            {loading ? (
+              <Spin />
+            ) : chartData.length ? (
               <ResponsiveContainer>
                 <BarChart data={chartData}>
-                  <defs><linearGradient id="barG1"><stop offset="0%" stopColor="#6c5ce7" stopOpacity={0.9}/><stop offset="100%" stopColor="#6c5ce7" stopOpacity={0.3}/></linearGradient></defs>
+                  <defs>
+                    <linearGradient id="barG1">
+                      <stop offset="0%" stopColor="#6c5ce7" stopOpacity={0.9} />
+                      <stop offset="100%" stopColor="#6c5ce7" stopOpacity={0.3} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" angle={-15} textAnchor="end" height={70} />
                   <YAxis domain={[0, 10]} />
                   <RTooltip content={<PrettyTooltip />} />
-                  <Bar dataKey="avg" fill="url(#barG1)" radius={[8,8,0,0]} />
+                  <Bar dataKey="avg" fill="url(#barG1)" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            ) : <Empty />}
+            ) : (
+              <Empty />
+            )}
           </Card>
         </Col>
+
+        {/* CARD TABLE nhỏ trên trang */}
         <Col xs={24} lg={14}>
-          <Card style={glassStyle} title="Danh sách sinh viên">
+          <Card
+            style={glassStyle}
+            title="Danh sách sinh viên"
+            extra={
+              <Tooltip title={tableFull ? "Thu nhỏ" : "Phóng to (kéo/resize được)"}>
+                <Button
+                  type="text"
+                  icon={tableFull ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+                  onClick={toggleTableFull}
+                />
+              </Tooltip>
+            }
+          >
             <Table
               size="small"
               dataSource={dataSource}
@@ -408,6 +524,47 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
           </Card>
         </Col>
       </Row>
+
+      {/* OVERLAY PHÓNG TO – CHART */}
+      <FloatingPanel
+        visible={chartFull}
+        title="Điểm TB theo lớp/môn"
+        onClose={toggleChartFull}
+      >
+        <ResponsiveContainer>
+          <BarChart data={chartData}>
+            <defs>
+              <linearGradient id="barG1-big">
+                <stop offset="0%" stopColor="#6c5ce7" stopOpacity={0.9} />
+                <stop offset="100%" stopColor="#6c5ce7" stopOpacity={0.3} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" angle={-15} textAnchor="end" height={80} />
+            <YAxis domain={[0, 10]} />
+            <RTooltip content={<PrettyTooltip />} />
+            <Bar dataKey="avg" fill="url(#barG1-big)" radius={[8, 8, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </FloatingPanel>
+
+      {/* OVERLAY PHÓNG TO – TABLE */}
+      <FloatingPanel
+        visible={tableFull}
+        title="Danh sách sinh viên"
+        onClose={toggleTableFull}
+      >
+        <Table
+          size="small"
+          dataSource={dataSource}
+          columns={gradeColumns}
+          onChange={onGradeTableChange}
+          pagination={{ pageSize: 12 }}
+          scroll={{ y: "calc(100vh - 220px)" as any }}
+        />
+      </FloatingPanel>
+
+
     </Space>
   );
 }
@@ -469,6 +626,10 @@ function BucketsTab({
     exportToXlsx("grade-buckets.xlsx", "Buckets", rows);
   };
 
+  // === FULLSCREEN cho chart ===
+  const [chartFull, setChartFull] = useState(false);
+  const toggleChartFull = () => setChartFull(prev => !prev);
+
   return (
     <Space direction="vertical" size={20} style={{ width: "100%" }}>
       {/* Filter */}
@@ -496,30 +657,74 @@ function BucketsTab({
         </Form>
       </Card>
 
-      {/* Chart */}
+      {/* Chart nhỏ trên trang */}
       <Row gutter={[16, 16]}>
         <Col xs={24}>
-          <Card style={glassStyle} title="Phân bố điểm theo nhóm" bodyStyle={{ height: 380, padding: 0 }}>
-            {loading ? <Spin /> : chartData.length ? (
+          <Card
+            style={glassStyle}
+            title="Phân bố điểm theo nhóm"
+            bodyStyle={{ height: 380, padding: 0 }}
+            extra={
+              <Tooltip title={chartFull ? "Thu nhỏ" : "Phóng to (kéo/resize được)"}>
+                <Button
+                  type="text"
+                  icon={chartFull ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+                  onClick={toggleChartFull}
+                />
+              </Tooltip>
+            }
+          >
+            {loading ? (
+              <Spin />
+            ) : chartData.length ? (
               <ResponsiveContainer>
                 <BarChart data={chartData}>
                   <defs>
-                    <linearGradient id="barG2"><stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.9}/><stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.3}/></linearGradient>
+                    <linearGradient id="barG2">
+                      <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.9} />
+                      <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                    </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="label" />
                   <YAxis allowDecimals={false} />
                   <RTooltip content={<PrettyTooltip />} />
-                  <Bar dataKey="count" name="Số SV" fill="url(#barG2)" radius={[8,8,0,0]} />
+                  <Bar dataKey="count" name="Số SV" fill="url(#barG2)" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            ) : <Empty description="Chưa có dữ liệu" />}
+            ) : (
+              <Empty description="Chưa có dữ liệu" />
+            )}
           </Card>
         </Col>
       </Row>
+
+      {/* Overlay phóng to */}
+      <FloatingPanel
+        visible={chartFull}
+        title="Phân bố điểm theo nhóm"
+        onClose={toggleChartFull}
+      >
+        <ResponsiveContainer>
+          <BarChart data={chartData}>
+            <defs>
+              <linearGradient id="barG2-big">
+                <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.9} />
+                <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.3} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="label" />
+            <YAxis allowDecimals={false} />
+            <RTooltip content={<PrettyTooltip />} />
+            <Bar dataKey="count" name="Số SV" fill="url(#barG2-big)" radius={[8, 8, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </FloatingPanel>
     </Space>
   );
 }
+
 
 /* ========================================
    ATTENDANCE TAB – Xuất Excel + Sort
@@ -631,6 +836,20 @@ function AttendanceTab({
     exportToXlsx("attendance.xlsx", "Attendance", rows);
   };
 
+  // === FULLSCREEN chart + table ===
+  const [chartFull, setChartFull] = useState(false);
+  const [tableFull, setTableFull] = useState(false);
+  const toggleChartFull = () =>
+    setChartFull(prev => {
+      if (!prev) setTableFull(false);
+      return !prev;
+    });
+  const toggleTableFull = () =>
+    setTableFull(prev => {
+      if (!prev) setChartFull(false);
+      return !prev;
+    });
+
   return (
     <Space direction="vertical" size={20} style={{ width: "100%" }}>
       {/* Filter */}
@@ -661,11 +880,26 @@ function AttendanceTab({
         </Form>
       </Card>
 
-      {/* Chart + Table */}
+      {/* Chart + Table nhỏ trên trang */}
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={10}>
-          <Card style={glassStyle} title="Tỷ lệ chuyên cần" bodyStyle={{ height: 380, padding: 0 }}>
-            {loading ? <Spin /> : chartData.length ? (
+          <Card
+            style={glassStyle}
+            title="Tỷ lệ chuyên cần"
+            bodyStyle={{ height: 380, padding: 0 }}
+            extra={
+              <Tooltip title={chartFull ? "Thu nhỏ" : "Phóng to (kéo/resize được)"}>
+                <Button
+                  type="text"
+                  icon={chartFull ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+                  onClick={toggleChartFull}
+                />
+              </Tooltip>
+            }
+          >
+            {loading ? (
+              <Spin />
+            ) : chartData.length ? (
               <ResponsiveContainer>
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -675,11 +909,25 @@ function AttendanceTab({
                   <Line type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={3} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
-            ) : <Empty />}
+            ) : (
+              <Empty />
+            )}
           </Card>
         </Col>
         <Col xs={24} lg={14}>
-          <Card style={glassStyle} title="Chi tiết chuyên cần">
+          <Card
+            style={glassStyle}
+            title="Chi tiết chuyên cần"
+            extra={
+              <Tooltip title={tableFull ? "Thu nhỏ" : "Phóng to (kéo/resize được)"}>
+                <Button
+                  type="text"
+                  icon={tableFull ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+                  onClick={toggleTableFull}
+                />
+              </Tooltip>
+            }
+          >
             <Table
               size="small"
               dataSource={dataSource}
@@ -690,9 +938,43 @@ function AttendanceTab({
           </Card>
         </Col>
       </Row>
+
+      {/* Overlay phóng to Chart */}
+      <FloatingPanel
+        visible={chartFull}
+        title="Tỷ lệ chuyên cần"
+        onClose={toggleChartFull}
+      >
+        <ResponsiveContainer>
+          <LineChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="section" angle={-15} textAnchor="end" height={80} />
+            <YAxis domain={[0, 100]} />
+            <RTooltip content={<PrettyTooltip />} />
+            <Line type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={3} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </FloatingPanel>
+
+      {/* Overlay phóng to Table */}
+      <FloatingPanel
+        visible={tableFull}
+        title="Chi tiết chuyên cần"
+        onClose={toggleTableFull}
+      >
+        <Table
+          size="small"
+          dataSource={dataSource}
+          columns={attendColumns}
+          onChange={onAttendTableChange}
+          pagination={{ pageSize: 12 }}
+          scroll={{ y: "calc(100vh - 220px)" as any }}
+        />
+      </FloatingPanel>
     </Space>
   );
 }
+
 
 /* ========================================
    DEPARTMENT TAB – Top/Bottom linh động + Lọc điểm + Xuất Excel + Sort
@@ -821,6 +1103,13 @@ function DepartmentTab({
     exportToXlsx("bottom-subjects.xlsx", "Bottom", rows);
   };
 
+  // FULLSCREEN: chart TB theo môn + chart chuyên cần theo môn
+  const [chartFull, setChartFull] = useState(false);      // điểm TB theo môn
+  const [attChartFull, setAttChartFull] = useState(false); // chuyên cần theo môn
+
+  const toggleChartFull = () => setChartFull(prev => !prev);
+  const toggleAttChartFull = () => setAttChartFull(prev => !prev);
+
   return (
     <Space direction="vertical" size={20} style={{ width: "100%" }}>
       {/* Filter */}
@@ -881,7 +1170,20 @@ function DepartmentTab({
       {/* Chart: Avg by Subject */}
       <Row gutter={[16,16]}>
         <Col xs={24}>
-          <Card style={glassStyle} title="Điểm trung bình theo môn" bodyStyle={{ height: 380, padding: 0 }}>
+          <Card
+            style={glassStyle}
+            title="Điểm trung bình theo môn"
+            bodyStyle={{ height: 380, padding: 0 }}
+            extra={
+              <Tooltip title={chartFull ? "Thu nhỏ" : "Phóng to (kéo/resize được)"}>
+                <Button
+                  type="text"
+                  icon={chartFull ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+                  onClick={toggleChartFull}
+                />
+              </Tooltip>
+            }
+          >
             {loading ? <Spin /> : subjectSummary.length ? (
               <ResponsiveContainer>
                 <BarChart data={subjectSummarySortedForChart}>
@@ -936,7 +1238,20 @@ function DepartmentTab({
 
       <Row gutter={[16,16]}>
         <Col xs={24}>
-          <Card style={glassStyle} title="Chuyên cần theo môn" bodyStyle={{ height: 380, padding: 0 }}>
+          <Card
+            style={glassStyle}
+            title="Chuyên cần theo môn"
+            bodyStyle={{ height: 380, padding: 0 }}
+            extra={
+              <Tooltip title={attChartFull ? "Thu nhỏ" : "Phóng to (kéo/resize được)"}>
+                <Button
+                  type="text"
+                  icon={attChartFull ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+                  onClick={toggleAttChartFull}
+                />
+              </Tooltip>
+            }
+          >
             {loading ? <Spin /> : attendanceChart.length ? (
               <ResponsiveContainer>
                 <LineChart data={attendanceChart}>
@@ -951,6 +1266,41 @@ function DepartmentTab({
           </Card>
         </Col>
       </Row>
+
+      {/* Overlay: điểm TB theo môn */}
+      <FloatingPanel
+        visible={chartFull}
+        title="Điểm trung bình theo môn"
+        onClose={toggleChartFull}
+      >
+        <ResponsiveContainer>
+          <BarChart data={subjectSummarySortedForChart}>
+            <defs><linearGradient id="barG3-big"><stop offset="0%" stopColor="#6366f1" stopOpacity={0.9}/><stop offset="100%" stopColor="#6366f1" stopOpacity={0.3}/></linearGradient></defs>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="subject" angle={-15} textAnchor="end" height={80} />
+            <YAxis domain={[0,10]} />
+            <RTooltip content={<PrettyTooltip />} />
+            <Bar dataKey="avg" fill="url(#barG3-big)" radius={[8,8,0,0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </FloatingPanel>
+
+      {/* Overlay: chuyên cần theo môn */}
+      <FloatingPanel
+        visible={attChartFull}
+        title="Chuyên cần theo môn"
+        onClose={toggleAttChartFull}
+      >
+        <ResponsiveContainer>
+          <LineChart data={attendanceChart}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="subject" angle={-15} textAnchor="end" height={80} />
+            <YAxis domain={[0,100]} />
+            <RTooltip content={<PrettyTooltip />} />
+            <Line type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={3} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </FloatingPanel>
     </Space>
   );
 }

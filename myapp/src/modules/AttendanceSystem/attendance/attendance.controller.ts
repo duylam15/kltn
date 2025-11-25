@@ -34,8 +34,15 @@ function generateTotpSecretBase32() {
 export async function createSession(req: Request, res: Response) {
   try {
     const {
-      sectionId, name, expiresAt, latitude, longitude,
-      radius, requireDeviceCheck, maxCheckInsPerIP
+      sectionId,
+      name,
+      expiresAt,
+      latitude,
+      longitude,
+      radius,
+      requireDeviceCheck,
+      maxCheckInsPerIP,
+      sessionScore,            // ⬅️ thêm
     } = req.body;
 
     const sessionCode = Math.random().toString(36).substring(2, 10).toUpperCase();
@@ -51,29 +58,37 @@ export async function createSession(req: Request, res: Response) {
         radius: radius ?? 100,
         requireDeviceCheck: requireDeviceCheck ?? true,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
-        // dynamic QR
+
+        // TOTP
         totpSecretBase32,
         totpPeriod: DEFAULT_TOTP_PERIOD,
         totpDigits: DEFAULT_TOTP_DIGITS,
+
+        // ⬇️ lưu điểm của buổi
+        sessionScore:
+          sessionScore !== undefined && sessionScore !== null
+            ? Number(sessionScore)
+            : 10,
       },
     });
-
 
     return res.json({
       success: true,
       data: session,
-      // ⬇️ Trả secret về **chỉ cho trình duyệt GV** dùng render QR động
       totp: {
         secretBase32: totpSecretBase32,
         period: DEFAULT_TOTP_PERIOD,
         digits: DEFAULT_TOTP_DIGITS,
       },
     });
-  } catch (err:any) {
+  } catch (err: any) {
     console.error(err);
-    return res.status(500).json({ success:false, message: err.message || "Server error" });
+    return res
+      .status(500)
+      .json({ success: false, message: err.message || "Server error" });
   }
 }
+
 
 /* =========================================================
  * 1a) API CHỈ GV DÙNG: LẤY SECRET TOTP CỦA 1 SESSION
@@ -98,6 +113,30 @@ export async function getSessionTotpConfig(req: Request, res: Response) {
     });
   } catch (err:any) {
     return res.status(500).json({ success:false, message: err.message });
+  }
+}
+
+
+/* =========================================================
+ * 1b) Lấy mã TOTP hiện tại cho session (dùng trong QR động)
+ * ========================================================= */
+export async function getSessionCurrentTotp(req: Request, res: Response) {
+  try {
+    const id = Number(req.params.id);
+    const sess = await prisma.attendanceSession.findUnique({ where: { id }});
+    if (!sess) return res.json({ success: false, message: "Session not found" });
+
+    totp.options = { digits: 6, step: 10 };
+
+    const token = generateTotpSecretBase32();
+
+    return res.json({
+      success: true,
+      token,
+      period: 10
+    });
+  } catch (err: any) {
+    return res.json({ success: false, message: err.message });
   }
 }
 
@@ -165,19 +204,17 @@ export async function checkIn(req: Request, res: Response) {
     if (latitude == null || longitude == null) {
       return res.status(400).json({ success: false, message: "Vị trí GPS là bắt buộc để điểm danh" });
     }
-    if (!nonce || !payloadSig) {
-      return res.status(400).json({ success: false, message: "Thiếu nonce hoặc payloadSig" });
-    }
+   
 
-    // accuracy client phải <= 200m
-    const MAX_ALLOWED_ACCURACY = 200;
+    // accuracy client phải <= 100m
+    const MAX_ALLOWED_ACCURACY = 100;
     const accNum = Number(accuracy);
     if (!Number.isFinite(accNum) || accNum > MAX_ALLOWED_ACCURACY) {
       return res.status(400).json({
         success: false,
         message: `Không thể xác định vị trí chính xác (Sai số: ${
           Number.isFinite(accNum) ? Math.round(accNum) + "m" : "N/A"
-        } > ${MAX_ALLOWED_ACCURACY}m). Vui lòng bật Wi-Fi và thử lại.`,
+        } > ${MAX_ALLOWED_ACCURACY}m). Vui lòng tắt->bật lại Wi-Fi THỬ.`,
       });
     }
 
@@ -298,24 +335,15 @@ if (sessionDb.totpSecretBase32 && scannedToken) {
       create: { studentId: student.id, sessionId: session.id, deviceId, userAgent },
     });
 
-    // 12) Chấm điểm theo rule + phạt nếu ngoài bán kính
-    let score = 10;
-    const scoreRules = await prisma.attendanceScoreRule.findMany({ where: { sectionId: session.sectionId } });
-    const matchedRule = scoreRules.find(r => r.status === status);
-    if (matchedRule) score = matchedRule.score;
+ // 12) Điểm cho buổi này = sessionScore của session
+const baseScore =
+  (session as any).sessionScore !== undefined &&
+  (session as any).sessionScore !== null
+    ? Number((session as any).sessionScore)
+    : 10;
 
-    if (!isValid && distance !== null) {
-      const extraDistance = distance - (session.radius || 50);
-      const penalty = Math.min(extraDistance / 100, 3);
-      score = Math.max(score - penalty, 0);
-    }
+const score = baseScore; // không phụ thuộc status / rule / trễ nữa
 
-    const now = new Date();
-    const sessionStart = new Date(session.createdAt);
-    const minutesLate = Math.floor((now.getTime() - sessionStart.getTime()) / (1000 * 60));
-    if (minutesLate > 15 && minutesLate <= 30) { status = "late"; score = Math.max(score - 2, 0); }
-    else if (minutesLate > 30) { status = "late"; score = Math.max(score - 4, 0); }
-    score = Math.round(score * 10) / 10;
 
     // 13) Lưu attendance
     const attendance = await prisma.attendance.create({
@@ -351,12 +379,13 @@ if (sessionDb.totpSecretBase32 && scannedToken) {
     });
 
     return res.json({
-      success: true,
-      message: isValid ? "Điểm danh thành công" : "Điểm danh thành công nhưng có cảnh báo",
-      data: attendance,
-      warning: !isValid ? `Lệch vị trí/thiết bị. Khoảng cách: ${distance?.toFixed?.(0) ?? "?"}m.` : null,
-      scoreInfo: { score, status, minutesLate, appliedRule: matchedRule ? `Quy tắc: ${matchedRule.score}` : "Mặc định" },
-    });
+  success: true,
+  message: isValid ? "Điểm danh thành công" : "Điểm danh thành công nhưng có cảnh báo",
+  data: attendance,
+  warning: !isValid ? `Lệch vị trí/thiết bị. Khoảng cách: ${distance?.toFixed?.(0) ?? "?"}m.` : null,
+  scoreInfo: { score, status }, // đủ dùng, không cần minutesLate/matchedRule nữa
+});
+
   } catch (err: any) {
     console.error("❌ Error in checkIn:", err);
     return res.status(500).json({ success: false, message: err.message || "Server error" });
@@ -396,11 +425,17 @@ export async function manualCheckIn(req: Request, res: Response) {
       });
     }
 
-    let finalStatus: "present" | "late" | "absent" = (status as any) || "present";
-    let score = 10;
-    const scoreRules = await prisma.attendanceScoreRule.findMany({ where: { sectionId: session.sectionId } });
-    const matchedRule = scoreRules.find((r) => r.status === finalStatus);
-    if (matchedRule) score = matchedRule.score;
+let finalStatus: "present" | "late" | "absent" =
+  (status as any) || "present";
+
+const baseScore =
+  (session as any).sessionScore !== undefined &&
+  (session as any).sessionScore !== null
+    ? Number((session as any).sessionScore)
+    : 10;
+
+const score = baseScore;
+
 
     const attendance = await prisma.attendance.create({
       data: {
@@ -692,6 +727,7 @@ export async function getSession(req: Request, res: Response) {
         totpSecretBase32: session.totpSecretBase32, // ← Đảm bảo có
     totpPeriod: session.totpPeriod,
     totpDigits: session.totpDigits,
+    sessionScore: (session as any).sessionScore,
       }
     });
   } catch (err: any) {
@@ -705,7 +741,7 @@ export async function getSession(req: Request, res: Response) {
 export async function updateSession(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const { name, expiresAt, radius } = req.body;     // ⬅️ nhận radius
+    const { name, expiresAt, radius, sessionScore } = req.body; // ⬅️ nhận thêm
 
     const session = await prisma.attendanceSession.findUnique({
       where: { id: Number(id) },
@@ -714,14 +750,18 @@ export async function updateSession(req: Request, res: Response) {
       return res.status(404).json({ success: false, message: "Session not found" });
     }
 
-    // chuẩn hoá radius nếu được gửi lên (20–500m)
     const updates: any = {
       name,
       expiresAt: expiresAt ? new Date(expiresAt) : undefined,
     };
+
     if (radius !== undefined && radius !== null && radius !== "") {
       const safeRadius = Math.min(Math.max(Number(radius), 20), 500);
-      updates.radius = safeRadius;                    // ⬅️ set radius mới
+      updates.radius = safeRadius;
+    }
+
+    if (sessionScore !== undefined && sessionScore !== null && sessionScore !== "") {
+      updates.sessionScore = Number(sessionScore);
     }
 
     const updated = await prisma.attendanceSession.update({
@@ -735,6 +775,7 @@ export async function updateSession(req: Request, res: Response) {
     return res.status(500).json({ success: false, message: err.message || "Server error" });
   }
 }
+
 
 
 /* =========================================================

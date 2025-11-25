@@ -27,6 +27,9 @@ export default function LayoutAdmin() {
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const { user,  logout } = useAuth();
 
+	  const getInitial = () =>
+  user?.fullName ? user.fullName.charAt(0).toUpperCase() : "A";
+
 	// Hàm check quyền
 	const hasPermission = (perm: string) =>
 		user?.role?.permissions?.some((p) => p.name === perm) ?? false;
@@ -94,11 +97,23 @@ export default function LayoutAdmin() {
 					{/* Right Section */}
 					<div className="ml-auto flex items-center gap-1">
 						{/* User Profile */}
-						<button className="ml-2 p-1 rounded-full hover:bg-gray-100 transition-colors">
-							<div className="h-8 w-8 rounded-full bg-gradient-to-r from-indigo-400 to-purple-400 text-white text-sm font-medium flex items-center justify-center">
-								{user?.fullName?.[0] ?? "A"}
-							</div>
-						</button>
+						            <button
+  className="ml-2 p-1 rounded-full hover:bg-gray-100 transition-colors"
+  onClick={() => navigate("/admin/profile")}
+  title="Hồ sơ cá nhân"
+>
+  {user?.avatarUrl ? (
+    <img
+      src={user.avatarUrl}
+      alt="avatar"
+      className="h-8 w-8 rounded-full object-cover"
+    />
+  ) : (
+    <div className="h-8 w-8 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 text-white text-sm font-medium flex items-center justify-center">
+      {getInitial()}
+    </div>
+  )}
+</button>
 
 						{/* Logout */}
 						<button

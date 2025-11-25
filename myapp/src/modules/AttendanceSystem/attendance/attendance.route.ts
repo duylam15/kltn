@@ -12,6 +12,10 @@ router.post("/check-in", attendanceController.checkIn);
 // Lấy cấu hình TOTP của session (chỉ GV dùng)
 router.get("/sessions/:id/totp", attendanceController.getSessionTotpConfig);
 
+// Lấy mã TOTP hiện tại của session cho QR code
+router.get("/sessions/:id/totp-current", attendanceController.getSessionCurrentTotp);
+
+
 // Danh sách session của section
 router.get("/sections/:sectionId/sessions", attendanceController.listSessions);
 router.get("/sessions", attendanceController.listAllSessions);
