@@ -7,6 +7,22 @@ import bcrypt from "bcrypt";
 
 const SALT_ROUNDS = 10;
 
+export const getStudentByStudentCode = async (studentCode: string) => {
+    return prisma.student.findUnique({
+        where: { studentCode },
+        include: {
+            user: {
+                select: {
+                    id: true,
+                    fullName: true,
+                    email: true,
+                },
+            },
+        },
+    });
+};
+
+
 export const createStudent = async (data: {
     studentCode: string;
     password: string;

@@ -94,15 +94,40 @@ export async function assignMaterialToClass(req: Request, res: Response) {
     try {
         const { courseSectionId, materialId, assignedBy } = req.body;
 
-        // Validate
         if (!assignedBy) {
             return res.status(400).json({
                 success: false,
-                message: "Thiếu thông tin assignedBy (ID người gán)",
+                message: "Thiếu thông tin assignedBy",
             });
         }
 
-        // Check trước khi tạo
+        // ✅ Kiểm tra material có tồn tại không
+        const material = await prisma.material.findUnique({
+            where: { id: Number(materialId) },
+        });
+
+        if (!material) {
+            return res.status(404).json({
+                success: false,
+                message: "Tài liệu không tồn tại",
+            });
+        }
+
+        // ✅ Kiểm tra quyền: chỉ gán được nếu:
+        // - Là tài liệu của mình HOẶC
+        // - Là tài liệu public của người khác
+        const isOwner = material.uploadedBy === Number(assignedBy);
+        const isPublic = material.isPublic;
+
+        if (!isOwner && !isPublic) {
+            return res.status(403).json({
+                success: false,
+                message:
+                    "Bạn không có quyền gán tài liệu này (chỉ gán được tài liệu của mình hoặc tài liệu public)",
+            });
+        }
+
+        // ✅ Kiểm tra trùng
         const existing = await prisma.courseMaterial.findUnique({
             where: {
                 courseSectionId_materialId: {
@@ -119,10 +144,11 @@ export async function assignMaterialToClass(req: Request, res: Response) {
             });
         }
 
+        // ✅ Tạo liên kết
         const courseMaterial = await materialService.assignMaterialToClass(
             Number(courseSectionId),
             Number(materialId),
-            Number(assignedBy) // ← THÊM THAM SỐ
+            Number(assignedBy)
         );
 
         res.json({ success: true, data: courseMaterial });
@@ -412,23 +438,40 @@ export const listOpenBySection = catchAsync(
         if (isNaN(sectionId))
             return next(new ApiError(400, "Invalid sectionId"));
 
+        // Bước 1: Lấy tất cả tài liệu đã mở
         const rows = await prisma.courseMaterial.findMany({
             where: {
-                courseSectionId: sectionId, // 👈 đúng field
-                isOpen: true, // 👈 chỉ lấy tài liệu đã mở
+                courseSectionId: sectionId,
+                isOpen: true,
             },
             include: {
-                material: true, // 👈 lấy thông tin file từ Material
+                material: {
+                    include: {
+                        uploader: {
+                            select: { id: true, fullName: true, email: true },
+                        },
+                    },
+                },
+                assigner: true, // Người gán (để check xem có phải GV dạy lớp không)
             },
             orderBy: {
-                // sắp xếp theo thời gian đăng của Material
                 material: { uploadedAt: "desc" },
             },
         });
 
-        // FE của bạn (MaterialsStudent) chỉ cần mảng Material
-        const materials = rows.map((r) => r.material);
+        // Bước 2: Lọc ở application layer
+        const validMaterials = rows
+            .filter((row) => {
+                const mat = row.material;
+                // Giữ lại nếu:
+                // 1. Tài liệu vẫn public, HOẶC
+                // 2. Tài liệu của chính người gán (GV đã upload)
+                return (
+                    mat.isPublic === true || mat.uploadedBy === row.assignedBy
+                );
+            })
+            .map((r) => r.material);
 
-        sendResponse(res, { success: true, data: jsonSafe(materials) });
+        sendResponse(res, { success: true, data: jsonSafe(validMaterials) });
     }
 );

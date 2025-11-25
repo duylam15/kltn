@@ -5,6 +5,29 @@ import { sendResponse } from "@/utils/response";
 import ApiError from "@/utils/ApiError";
 import { prisma } from "@/prisma/client";
 
+export const getStudentByStudentCode = catchAsync(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const studentCode = req.params.studentCode;
+
+        if (!studentCode) {
+            return next(new ApiError(400, "studentCode is required"));
+        }
+
+        const student = await studentService.getStudentByStudentCode(
+            studentCode
+        );
+
+        if (!student) {
+            return next(
+                new ApiError(404, "Student not found with this studentCode")
+            );
+        }
+
+        sendResponse(res, { success: true, data: student });
+    }
+);
+
+
 export const create = catchAsync(async (req: Request, res: Response) => {
     const s = await studentService.createStudent(req.body);
     sendResponse(

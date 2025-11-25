@@ -46,7 +46,6 @@ import GradesTeacher from "../pages/Teacher/GradesTeacher";
 import GroupList from "../pages/Teacher/GroupList";
 import MaterialsAdmin from "../pages/Admin/MaterialsAdmin";
 import Group from "../pages/Student/Group";
-import MaterialStudent from "../pages/Student/MaterialStudent";
 import RollCallStudent from "../pages/Student/RollCallStudent";
 import AssignmentsStudent from "../pages/Student/AssignmentsStudent";
 import GradesStudent from "../pages/Student/GradesStudent";
@@ -58,7 +57,7 @@ import VRPage from "../pages/VRPage";
 import AssignmentSubmissionHistory from "../pages/Student/AssignmentSubmissionHistory";
 import AssignmentsScore from "../pages/Student/AssignmentsScore";
 
-import {  getRoleRoute, ROLE_ROUTES } from "../constants/roles";
+import { getRoleRoute, ROLE_ROUTES } from "../constants/roles";
 
 
 // Import các components khác...
@@ -69,6 +68,8 @@ import RequirePermission from "./RequirePermission";
 import CourseLayoutStudent from "../layouts/CourseLayoutStudent";
 import TestRefreshToken from "../pages/Admin/TestRefreshToken";
 import QuestionsTeacher from "../pages/Teacher/QuestionsTeacher";
+import JoinClassByInvite from "../pages/Teacher/JoinClassByInvite";
+import MaterialsStudent from "../pages/Student/MaterialsStudent";
 
 // Helper function để check auth và redirect
 const checkAuthAndRedirect = async () => {
@@ -120,6 +121,12 @@ export const router = createBrowserRouter([
     element: <RollCallCheckIn />,
   },
 
+  {
+    path: "/join",
+    element: <JoinClassByInvite />
+  },
+
+
   // ========== Student Routes ==========
   {
     path: "/student",
@@ -138,7 +145,7 @@ export const router = createBrowserRouter([
           { index: true, loader: () => redirect("overview") },
           { path: "overview", element: <OverviewStudent /> },
           { path: "groups", element: <Group /> },
-          { path: "materials", element: <MaterialStudent /> },
+          { path: "materials", element: <MaterialsStudent /> },
           { path: "roll-call", element: <RollCallStudent /> },
           { path: "assignments", element: <AssignmentsStudent /> },
           { path: "assignments/:assignmentId", element: <AssignmentsDetailsStudent /> },
@@ -183,6 +190,7 @@ export const router = createBrowserRouter([
 
     ],
   },
+
 
   // ========== Admin Routes ==========
   {

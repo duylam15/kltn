@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { Typography, List, Card, Space, Empty, Spin, Tag, Select } from "antd";
-import { FilePdfOutlined, FileTextOutlined, FileImageOutlined } from "@ant-design/icons";
+import { Typography, List, Card, Space, Empty, Spin, Tag, Select, Alert } from "antd";
+import { FilePdfOutlined, FileTextOutlined, FileImageOutlined, WarningOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 
 const { Title, Text } = Typography;
@@ -18,6 +18,8 @@ type Material = {
   filePath?: string | null;
   fileType?: string | null;
   uploadedAt: string;
+  isPublic?: boolean; // 👈 Thêm field này để hiển thị warning
+  uploadedBy?: number;
 };
 
 export default function MaterialsStudent({ sectionId: propId }: { sectionId?: number }) {
@@ -28,12 +30,14 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
   const [materials, setMaterials] = useState<Material[]>([]);
   const [openId, setOpenId] = useState<number | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<string>("Tất cả");
+  const [error, setError] = useState<string>("");
 
   useEffect(() => {
     if (!sectionId) return;
     (async () => {
       try {
         setLoading(true);
+        setError("");
         const res = await axios.get<{ success: boolean; data: Material[] }>(
           `${API_BASE}/materials/class/${sectionId}/open`,
           { withCredentials: true }
@@ -44,6 +48,9 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
           );
           setMaterials(list);
         }
+      } catch (err: any) {
+        console.error("Lỗi khi tải tài liệu:", err);
+        setError(err.response?.data?.message || "Không thể tải danh sách tài liệu");
       } finally {
         setLoading(false);
       }
@@ -242,6 +249,26 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
   return (
     <Spin spinning={loading}>
       <div style={{ padding: 16 }}>
+        {error && (
+          <Alert
+            message="Lỗi"
+            description={error}
+            type="error"
+            closable
+            style={{ marginBottom: 16 }}
+          />
+        )}
+
+        {/* Thông báo quan trọng */}
+        <Alert
+          message="Lưu ý"
+          description="Bạn chỉ xem được các tài liệu đã được giáo viên mở cho lớp và vẫn đang công khai (hoặc do giáo viên của lớp upload)."
+          type="info"
+          icon={<WarningOutlined />}
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+
         {/* Bộ lọc chủ đề */}
         <div style={{ marginBottom: 16, display: "flex", gap: 12, alignItems: "center" }}>
           <Text strong>Chủ đề:</Text>
@@ -254,7 +281,7 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
         </div>
 
         {filteredMaterials.length === 0 ? (
-          <Empty description="Chưa có tài liệu" />
+          <Empty description={loading ? "Đang tải..." : "Chưa có tài liệu khả dụng"} />
         ) : (
           orderedGroups.map(([gkey, items]) => (
             <GroupBlock key={gkey} gkey={gkey} items={items} />

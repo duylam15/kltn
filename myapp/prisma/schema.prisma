@@ -333,7 +333,7 @@ model Material {
   uploadedBy         Int
   uploadedAt         DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
-
+  link               String?
   uploader    User             @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
   courseLinks CourseMaterial[] @relation("MaterialToCourse")
 }

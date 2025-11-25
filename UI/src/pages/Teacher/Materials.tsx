@@ -12,6 +12,8 @@ import {
 	Col,
 	Statistic,
 	Input,
+	Modal,
+	Tabs,
 } from "antd";
 import {
 	EyeOutlined,
@@ -22,6 +24,8 @@ import {
 	EyeInvisibleOutlined,
 	FolderOpenOutlined,
 	DownloadOutlined,
+	PlusOutlined,
+	GlobalOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -31,31 +35,32 @@ import { useAuth } from "../../context/authContext";
 const { Title, Text } = Typography;
 const API_BASE = "http://localhost:4000/api/v1";
 
+type Material = {
+	id: number;
+	title: string;
+	description?: string;
+	fileName?: string;
+	filePath?: string;
+	fileType?: string;
+	fileSize?: number;
+	uploadedBy: number;
+	uploadedAt: string;
+	updatedAt: string;
+	isPublic: boolean;
+	category: string;
+	originalMaterialId: string;
+	uploader?: { id: number; fullName: string; email: string };
+};
+
 type CourseMaterial = {
-	id: number;              // id trong CourseMaterial
-	materialId: number;      // id tài liệu
+	id: number;
+	materialId: number;
 	isOpen: boolean;
 	assignedAt: string;
 	assignedBy: number;
 	courseSectionId: number;
-	material: {
-		id: number;
-		title: string;
-		description?: string;
-		fileName?: string;
-		filePath?: string;
-		fileType?: string;
-		fileSize?: number;
-		uploadedBy: number;
-		uploadedAt: string;
-		updatedAt: string;
-		isPublic: boolean;
-		category: string;
-		originalMaterialId: string;
-		uploader?: { fullName: string; email: string }; // chỉ có nếu bạn include trong backend
-	};
-}
-
+	material: Material;
+};
 
 export default function Materials() {
 	const { user } = useAuth();
@@ -65,6 +70,15 @@ export default function Materials() {
 	const [loading, setLoading] = useState(true);
 	const [materials, setMaterials] = useState<CourseMaterial[]>([]);
 	const [keyword, setKeyword] = useState("");
+
+	// Modal thêm tài liệu
+	const [isModalVisible, setIsModalVisible] = useState(false);
+	const [publicMaterials, setPublicMaterials] = useState<Material[]>([]);
+	const [myMaterials, setMyMaterials] = useState<Material[]>([]);
+	const [loadingPublic, setLoadingPublic] = useState(false);
+	const [loadingMy, setLoadingMy] = useState(false);
+	const [searchPublic, setSearchPublic] = useState("");
+	const [searchMy, setSearchMy] = useState("");
 
 	useEffect(() => {
 		fetchData();
@@ -77,7 +91,6 @@ export default function Materials() {
 
 			if (res.data.success) {
 				setMaterials(res.data.data || []);
-				console.log(materials);	
 			}
 		} catch (err) {
 			console.error("Lỗi khi tải dữ liệu:", err);
@@ -87,7 +100,82 @@ export default function Materials() {
 		}
 	};
 
-	const handleToggleVisibility = async (materialId: number, checked: boolean) => {
+	// Lấy tài liệu public
+	const fetchPublicMaterials = async () => {
+		try {
+			setLoadingPublic(true);
+			const res = await axios.get(`${API_BASE}/materials/public`, {
+				params: {
+					userId: user?.id,
+					keyword: searchPublic,
+					page: 1,
+					size: 100,
+				},
+			});
+
+			if (res.data.success) {
+				setPublicMaterials(res.data.data || []);
+			}
+		} catch (err) {
+			console.error("Lỗi khi tải tài liệu public:", err);
+			toast.error("Không tải được tài liệu public");
+		} finally {
+			setLoadingPublic(false);
+		}
+	};
+
+	// Lấy tài liệu của tôi
+	const fetchMyMaterials = async () => {
+		try {
+			setLoadingMy(true);
+			const res = await axios.get(`${API_BASE}/materials/teacher/${user?.id}`);
+
+			if (res.data.success) {
+				setMyMaterials(res.data.data || []);
+			}
+		} catch (err) {
+			console.error("Lỗi khi tải tài liệu của tôi:", err);
+			toast.error("Không tải được tài liệu của tôi");
+		} finally {
+			setLoadingMy(false);
+		}
+	};
+
+	// Mở modal
+	const showAddModal = () => {
+		setIsModalVisible(true);
+		fetchPublicMaterials();
+		fetchMyMaterials();
+	};
+
+	// Gán tài liệu vào lớp
+	const handleAssignMaterial = async (materialId: number) => {
+		try {
+			const res = await axios.post(`${API_BASE}/materials/assign`, {
+				courseSectionId: sectionId,
+				materialId,
+				assignedBy: user?.id,
+			});
+
+			if (res.data.success) {
+				toast.success("Đã thêm tài liệu vào lớp");
+				fetchData();
+				setIsModalVisible(false);
+			} else {
+				toast.error(res.data.message || "Không thể thêm tài liệu");
+			}
+		} catch (err: any) {
+			console.error("Lỗi khi gán tài liệu:", err);
+			const errorMsg =
+				err.response?.data?.message || "Lỗi server khi thêm tài liệu";
+			toast.error(errorMsg);
+		}
+	};
+
+	const handleToggleVisibility = async (
+		materialId: number,
+		checked: boolean
+	) => {
 		try {
 			const res = await axios.patch(`${API_BASE}/materials/visibility`, {
 				courseSectionId: sectionId,
@@ -112,7 +200,10 @@ export default function Materials() {
 
 	const handleView = (record: CourseMaterial) => {
 		if (record.material.filePath) {
-			window.open(`http://localhost:4000/${record.material.filePath}`, "_blank");
+			window.open(
+				`http://localhost:4000/${record.material.filePath}`,
+				"_blank"
+			);
 		} else {
 			toast.error("Tài liệu này chưa có file để xem");
 		}
@@ -129,7 +220,6 @@ export default function Materials() {
 			toast.error("Tài liệu này chưa có file để tải");
 		}
 	};
-
 
 	const getFileTypeTag = (fileType: string) => {
 		const type = fileType?.toLowerCase();
@@ -154,7 +244,7 @@ export default function Materials() {
 	const columns = [
 		{
 			title: "Tiêu đề",
-			dataIndex: ["material", "title"], // ✅ nested key
+			dataIndex: ["material", "title"],
 			key: "title",
 			width: "30%",
 			sorter: (a: CourseMaterial, b: CourseMaterial) =>
@@ -289,13 +379,105 @@ export default function Materials() {
 		},
 	];
 
+	// Columns cho modal thêm tài liệu
+	const materialPickerColumns = [
+		{
+			title: "Tiêu đề",
+			dataIndex: "title",
+			key: "title",
+			width: "30%",
+			render: (title: string, record: Material) => (
+				<div>
+					<div style={{ fontWeight: 600, marginBottom: 4 }}>{title}</div>
+					{record.description && (
+						<div style={{ fontSize: 12, color: "#666" }}>
+							{record.description}
+						</div>
+					)}
+				</div>
+			),
+		},
+		{
+			title: "File",
+			key: "file",
+			width: "25%",
+			render: (_: any, record: Material) => (
+				<div>
+					<div style={{ fontSize: 12, marginBottom: 4 }}>
+						{record.fileName || "N/A"}
+					</div>
+					<div style={{ display: "flex", gap: 4 }}>
+						{getFileTypeTag(record.fileType || "")}
+						{record.fileSize && (
+							<Tag>{formatFileSize(record.fileSize)}</Tag>
+						)}
+					</div>
+				</div>
+			),
+		},
+		{
+			title: "Người tải",
+			key: "uploader",
+			width: "20%",
+			render: (_: any, record: Material) =>
+				record.uploader?.fullName || "Không rõ",
+		},
+		{
+			title: "Ngày tải",
+			dataIndex: "uploadedAt",
+			key: "uploadedAt",
+			width: "15%",
+			render: (date: string) => dayjs(date).format("DD/MM/YYYY"),
+		},
+		{
+			title: "",
+			key: "action",
+			width: "10%",
+			align: "center" as const,
+			render: (_: any, record: Material) => {
+				const alreadyAdded = materials.some(
+					(m) => m.materialId === record.id
+				);
+				return (
+					<Button
+						type="primary"
+						size="small"
+						icon={<PlusOutlined />}
+						onClick={() => handleAssignMaterial(record.id)}
+						disabled={alreadyAdded}
+					>
+						{alreadyAdded ? "Đã thêm" : "Thêm"}
+					</Button>
+				);
+			},
+		},
+	];
+
 	const filteredMaterials = materials.filter(
 		(m) =>
 			!keyword ||
 			m.material.title.toLowerCase().includes(keyword.toLowerCase()) ||
 			m.material.description?.toLowerCase().includes(keyword.toLowerCase()) ||
 			m.material.fileName?.toLowerCase().includes(keyword.toLowerCase()) ||
-			m.material.uploader?.fullName?.toLowerCase().includes(keyword.toLowerCase())
+			m.material.uploader?.fullName
+				?.toLowerCase()
+				.includes(keyword.toLowerCase())
+	);
+
+	const filteredPublicMaterials = publicMaterials.filter(
+		(m) =>
+			!searchPublic ||
+			m.title.toLowerCase().includes(searchPublic.toLowerCase()) ||
+			m.description?.toLowerCase().includes(searchPublic.toLowerCase()) ||
+			m.fileName?.toLowerCase().includes(searchPublic.toLowerCase())
+	);
+
+	const filteredMyMaterials = myMaterials.filter(
+		(m) =>
+			!searchMy ||
+			m.title.toLowerCase().includes(searchMy.toLowerCase()) ||
+			m.description?.toLowerCase().includes(searchMy.toLowerCase()) ||
+			m.fileName?.toLowerCase().includes(searchMy.toLowerCase())
 	);
 
 	const getStatistics = () => {
@@ -314,7 +496,6 @@ export default function Materials() {
 			totalFileSize,
 		};
 	};
-
 
 	const stats = getStatistics();
 
@@ -394,6 +575,13 @@ export default function Materials() {
 						onChange={(e) => setKeyword(e.target.value)}
 						style={{ width: 300 }}
 					/>
+					<Button
+						type="primary"
+						icon={<PlusOutlined />}
+						onClick={showAddModal}
+					>
+						Thêm tài liệu
+					</Button>
 					<Button icon={<ReloadOutlined />} onClick={fetchData}>
 						Làm mới
 					</Button>
@@ -424,6 +612,92 @@ export default function Materials() {
 					scroll={{ x: "max-content" }}
 				/>
 			)}
+
+			{/* Modal thêm tài liệu */}
+			<Modal
+				title="Thêm tài liệu vào lớp"
+				open={isModalVisible}
+				onCancel={() => setIsModalVisible(false)}
+				footer={null}
+				width={1000}
+				bodyStyle={{ padding: "16px 0" }}
+			>
+				<Tabs
+					defaultActiveKey="my"
+					items={[
+						{
+							key: "my",
+							label: (
+								<span>
+									<FolderOpenOutlined /> Tài liệu của tôi
+								</span>
+							),
+							children: (
+								<div>
+									<Input
+										allowClear
+										prefix={<SearchOutlined />}
+										placeholder="Tìm trong tài liệu của tôi..."
+										value={searchMy}
+										onChange={(e) => setSearchMy(e.target.value)}
+										style={{ marginBottom: 16 }}
+									/>
+									<Table<Material>
+										dataSource={filteredMyMaterials}
+										columns={materialPickerColumns}
+										rowKey="id"
+										loading={loadingMy}
+										pagination={{ pageSize: 5 }}
+										scroll={{ x: "max-content" }}
+									/>
+								</div>
+							),
+						},
+						{
+							key: "public",
+							label: (
+								<span>
+									<GlobalOutlined /> Tài liệu công khai
+								</span>
+							),
+							children: (
+								<div>
+									<div
+										style={{
+											display: "flex",
+											gap: 8,
+											marginBottom: 16,
+										}}
+									>
+										<Input
+											allowClear
+											prefix={<SearchOutlined />}
+											placeholder="Tìm trong tài liệu công khai..."
+											value={searchPublic}
+											onChange={(e) => setSearchPublic(e.target.value)}
+											style={{ flex: 1 }}
+										/>
+										<Button
+											icon={<ReloadOutlined />}
+											onClick={fetchPublicMaterials}
+										>
+											Tìm kiếm
+										</Button>
+									</div>
+									<Table<Material>
+										dataSource={filteredPublicMaterials}
+										columns={materialPickerColumns}
+										rowKey="id"
+										loading={loadingPublic}
+										pagination={{ pageSize: 5 }}
+										scroll={{ x: "max-content" }}
+									/>
+								</div>
+							),
+						},
+					]}
+				/>
+			</Modal>
 		</div>
 	);
 }

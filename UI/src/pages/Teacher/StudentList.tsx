@@ -4,7 +4,6 @@ import {
 	Button,
 	Spin,
 	Typography,
-	message,
 	Tag,
 	Modal,
 	Form,
@@ -13,6 +12,11 @@ import {
 	Popconfirm,
 	Tooltip,
 	Space,
+	Upload,
+	Alert,
+	Card,
+	Divider,
+	message,
 } from "antd";
 import {
 	PlusOutlined,
@@ -24,12 +28,18 @@ import {
 	TeamOutlined,
 	CheckCircleOutlined,
 	WarningOutlined,
-	UsergroupAddOutlined,
+	UploadOutlined,
+	DownloadOutlined,
+	QrcodeOutlined,
+	CopyOutlined,
+	LinkOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
 import type { InputRef } from "antd";
 import toast from "react-hot-toast";
+import * as XLSX from "xlsx";
+import { QRCodeSVG } from "qrcode.react";
 
 const { Option } = Select;
 const API_BASE = "http://localhost:4000/api/v1";
@@ -70,6 +80,36 @@ type Enrollment = {
 	group?: Group;
 };
 
+type ImportStudent = {
+	studentCode: string;
+	firstName: string;
+	lastName: string;
+	fullName: string;
+	email: string;
+	phone?: string;
+	className: string;
+	classFullName?: string;
+	dateOfBirth?: string;
+};
+
+type ImportResult = {
+	success: number;
+	failed: number;
+	skipped: number;
+	errors: Array<{
+		row: number;
+		studentCode: string;
+		fullName: string;
+		error: string;
+	}>;
+};
+
+type InviteCode = {
+	sectionId: number;
+	code: string;
+	defaultPassword: string;
+};
+
 export default function StudentList() {
 	const path = window.location.pathname;
 	const sectionId = Number(path.split("/")[3]);
@@ -83,17 +123,27 @@ export default function StudentList() {
 	const [addModalOpen, setAddModalOpen] = useState(false);
 	const [editModalOpen, setEditModalOpen] = useState(false);
 	const [groupModalOpen, setGroupModalOpen] = useState(false);
+	const [importModalOpen, setImportModalOpen] = useState(false);
+	const [inviteModalOpen, setInviteModalOpen] = useState(false);
 	const [editing, setEditing] = useState<Enrollment | null>(null);
 	const [assigningStudent, setAssigningStudent] = useState<Enrollment | null>(null);
+
+	// Import states
+	const [importFile, setImportFile] = useState<File | null>(null);
+	const [importData, setImportData] = useState<ImportStudent[]>([]);
+	const [importLoading, setImportLoading] = useState(false);
+	const [importResult, setImportResult] = useState<ImportResult | null>(null);
+
+	// Invite states
+	const [inviteCode, setInviteCode] = useState<InviteCode | null>(null);
 
 	const [form] = Form.useForm();
 	const [addForm] = Form.useForm();
 	const [groupForm] = Form.useForm();
+	const [inviteForm] = Form.useForm();
 
-	// trong component
 	const studentCodeRef = useRef<InputRef>(null);
 	const emailRef = useRef<InputRef>(null);
-
 
 	useEffect(() => {
 		fetchData();
@@ -112,27 +162,26 @@ export default function StudentList() {
 			]);
 
 			if (enrollmentsRes.data.success) {
-				setEnrollments(enrollmentsRes.data.data || []);
+				const enrollmentsData = enrollmentsRes.data.data || [];
+				setEnrollments(enrollmentsData);
 			}
 
 			if (groupsRes.data.success) {
 				const groupsData = groupsRes.data.data || [];
 				setGroups(groupsData);
 
-				// Tạo map để tìm group cho mỗi student
 				const groupMap: Record<number, Group> = {};
-				groupsData.forEach(group => {
-					group.enrollments?.forEach(enrollment => {
+				groupsData.forEach((group) => {
+					group.enrollments?.forEach((enrollment) => {
 						groupMap[enrollment.studentId] = group;
 					});
 				});
 
-				// Cập nhật enrollments với thông tin group
-				setEnrollments(prev =>
-					prev.map(enrollment => ({
+				setEnrollments((prev) =>
+					prev.map((enrollment) => ({
 						...enrollment,
 						group: groupMap[enrollment.studentId] || undefined,
-						groupId: groupMap[enrollment.studentId]?.id || undefined
+						groupId: groupMap[enrollment.studentId]?.id || undefined,
 					}))
 				);
 			}
@@ -147,7 +196,7 @@ export default function StudentList() {
 	const refresh = () => {
 		setKeyword("");
 		fetchData();
-	}
+	};
 
 	const handleAdd = async () => {
 		try {
@@ -166,7 +215,6 @@ export default function StudentList() {
 
 			if (!studentRes.data.success) {
 				const msg = studentRes.data.message || "Không thể tạo sinh viên";
-				// map lỗi backend → field
 				if (/student code/i.test(msg)) {
 					addForm.setFields([{ name: "studentCode", errors: [msg] }]);
 					addForm.scrollToField("studentCode");
@@ -183,7 +231,6 @@ export default function StudentList() {
 
 			const createdStudent = studentRes.data.data;
 
-			// Enroll
 			const enrollmentPayload = {
 				sectionId,
 				studentId: createdStudent.student.id,
@@ -199,16 +246,17 @@ export default function StudentList() {
 				addForm.resetFields();
 				fetchData();
 			} else {
-				toast.error(enrollmentRes.data.message || "Sinh viên đã tạo nhưng không thể gán vào lớp");
+				toast.error(
+					enrollmentRes.data.message || "Sinh viên đã tạo nhưng không thể gán vào lớp"
+				);
 				fetchData();
 			}
 		} catch (err: any) {
-			if (err?.errorFields) return; // lỗi validate client
+			if (err?.errorFields) return;
 
 			const status = err.response?.status;
 			const msg: string = err.response?.data?.message || "Không thể thêm sinh viên";
 
-			// —— Map lỗi 409 từ backend → field + focus ——
 			if (status === 409) {
 				if (/student code/i.test(msg)) {
 					addForm.setFields([{ name: "studentCode", errors: ["MSSV đã tồn tại"] }]);
@@ -218,7 +266,6 @@ export default function StudentList() {
 				}
 			}
 
-			// Lỗi format MSSV do backend validate
 			if (/invalid.*student.*code/i.test(msg)) {
 				addForm.setFields([{ name: "studentCode", errors: [msg] }]);
 				addForm.scrollToField("studentCode");
@@ -235,7 +282,7 @@ export default function StudentList() {
 			form.setFieldsValue({
 				fullName: editing.student.user.fullName,
 				email: editing.student.user.email,
-				phoneNumber: editing.student.user.phone,
+				phone: editing.student.user.phone,
 				className: editing.student.className,
 			});
 		} else {
@@ -248,31 +295,30 @@ export default function StudentList() {
 			const values = await form.validateFields();
 			if (!editing) return;
 
-			// payload cho User
 			const userPayload = {
 				email: values.email?.trim(),
 				fullName: values.fullName?.trim(),
-				phone: values.phoneNumber?.trim() || null,
+				phone: values.phone?.trim() || null,
 			};
-			console.log(editing);
 
-			// gọi API update User
 			const res = await axios.patch(
-				`${API_BASE}/users/${editing.student.user.id}`, // chú ý lấy user.id
+				`${API_BASE}/users/${editing.student.user.id}`,
 				userPayload
 			);
 			if (res.data.success) {
 				toast.success("Cập nhật thông tin người dùng thành công");
 				setEditModalOpen(false);
 				setEditing(null);
-				fetchData();	
+				fetchData();
 			} else {
 				toast.error(res.data.message || "Không thể cập nhật thông tin người dùng");
 			}
 		} catch (err: any) {
-			if (err?.errorFields) return; // lỗi validate form
+			if (err?.errorFields) return;
 			console.error("Lỗi update:", err);
-			toast.error(err.response?.data?.message || "Không thể cập nhật thông tin người dùng");
+			toast.error(
+				err.response?.data?.message || "Không thể cập nhật thông tin người dùng"
+			);
 		}
 	};
 
@@ -313,10 +359,450 @@ export default function StudentList() {
 				toast.error(res.data.message || "Không thể phân nhóm");
 			}
 		} catch (err: any) {
-			if (err?.errorFields) return; // lỗi validate form
+			if (err?.errorFields) return;
 			console.error("Lỗi assign group:", err);
 			toast.error(err.response?.data?.message || "Không thể phân nhóm");
 		}
+	};
+
+	// ============ INVITE CODE FUNCTIONS ============
+	const handleGenerateInviteCode = () => {
+		const values = inviteForm.getFieldsValue();
+		const code = `${sectionId}-${Date.now().toString(36)}`;
+
+		setInviteCode({
+			sectionId,
+			code,
+			defaultPassword: values.defaultPassword || "123456",
+		});
+
+		toast.success("Tạo mã mời thành công!");
+	};
+
+	const handleCopyInviteLink = () => {
+		if (!inviteCode) return;
+		const inviteLink = `${window.location.origin}/join?code=${inviteCode.code}&section=${sectionId}&pwd=${inviteCode.defaultPassword}`;
+		navigator.clipboard.writeText(inviteLink);
+		message.success("Đã sao chép link mời!");
+	};
+
+	const handleCopyInviteCode = () => {
+		if (!inviteCode) return;
+		navigator.clipboard.writeText(inviteCode.code);
+		message.success("Đã sao chép mã mời!");
+	};
+
+	const handleDownloadQR = () => {
+		const svg = document.querySelector("#qr-code-container svg");
+		if (!svg) return;
+
+		const svgData = new XMLSerializer().serializeToString(svg);
+		const canvas = document.createElement("canvas");
+		const ctx = canvas.getContext("2d");
+		const img = new Image();
+
+		img.onload = () => {
+			canvas.width = img.width;
+			canvas.height = img.height;
+			ctx?.drawImage(img, 0, 0);
+
+			canvas.toBlob((blob) => {
+				if (blob) {
+					const url = URL.createObjectURL(blob);
+					const link = document.createElement("a");
+					link.download = `ma-moi-lop-${sectionId}.png`;
+					link.href = url;
+					link.click();
+					URL.revokeObjectURL(url);
+					message.success("Đã tải xuống mã QR!");
+				}
+			});
+		};
+
+		img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData)));
+	};
+
+	const handleCloseInviteModal = () => {
+		setInviteModalOpen(false);
+		setInviteCode(null);
+		inviteForm.resetFields();
+	};
+
+	// ============ IMPORT FUNCTIONS ============
+	const parseExcelDate = (excelDate: any): string | undefined => {
+		if (!excelDate) return undefined;
+
+		if (typeof excelDate === "number") {
+			const date = XLSX.SSF.parse_date_code(excelDate);
+			return `${String(date.d).padStart(2, "0")}/${String(date.m).padStart(2, "0")}/${date.y}`;
+		}
+
+		if (typeof excelDate === "string") {
+			if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(excelDate)) {
+				return excelDate;
+			}
+			if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(excelDate)) {
+				const [y, m, d] = excelDate.split("-");
+				return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+			}
+		}
+
+		return undefined;
+	};
+
+	const normalizePhoneNumber = (phone: any): string | undefined => {
+		if (!phone) return undefined;
+
+		let phoneStr = String(phone).trim().replace(/[\s\-\.]/g, '');
+		phoneStr = phoneStr.replace(/[^\d+]/g, '');
+
+		if (phoneStr.startsWith('+84')) {
+			phoneStr = '0' + phoneStr.substring(3);
+		}
+
+		if (phoneStr.startsWith('84') && phoneStr.length > 10) {
+			phoneStr = '0' + phoneStr.substring(2);
+		}
+
+		if (!/^0\d{9,10}$/.test(phoneStr)) {
+			console.warn(`Invalid phone format: ${phone} -> ${phoneStr}`);
+			return undefined;
+		}
+
+		return phoneStr;
+	};
+
+	const handleFileUpload = (file: File) => {
+		const reader = new FileReader();
+
+		reader.onload = (e) => {
+			try {
+				const data = new Uint8Array(e.target?.result as ArrayBuffer);
+				const workbook = XLSX.read(data, { type: "array" });
+				const sheetName = workbook.SheetNames[0];
+				const worksheet = workbook.Sheets[sheetName];
+				const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+				let headerRowIndex = -1;
+				for (let i = 0; i < Math.min(20, jsonData.length); i++) {
+					const row = jsonData[i];
+					if (row.some((cell) => String(cell).includes("Mã SV"))) {
+						headerRowIndex = i;
+						break;
+					}
+				}
+
+				if (headerRowIndex === -1) {
+					toast.error("Không tìm thấy header trong file Excel");
+					return;
+				}
+
+				const headers = jsonData[headerRowIndex].map((h) => String(h).trim());
+				const dataRows = jsonData.slice(headerRowIndex + 1);
+
+				const colMap: any = {};
+				headers.forEach((header, index) => {
+					if (header.includes("Mã SV")) colMap.studentCode = index;
+					if (header.includes("Họ lót")) colMap.firstName = index;
+					if (header.includes("Tên") && !header.includes("Họ") && !header.includes("lớp")) colMap.lastName = index;
+					if (header.includes("Email")) colMap.email = index;
+					if (header.includes("Điện thoại")) colMap.phone = index;
+					if (header.includes("Mã lớp")) colMap.className = index;
+					if (header.includes("Tên lớp")) colMap.classFullName = index;
+					if (header.includes("Ngày sinh")) colMap.dateOfBirth = index;
+				});
+
+				const students: ImportStudent[] = dataRows
+					.filter((row) => row[colMap.studentCode])
+					.map((row) => {
+						const firstName = String(row[colMap.firstName] || "").trim();
+						const lastName = String(row[colMap.lastName] || "").trim();
+						const fullName = `${firstName} ${lastName}`.trim();
+						const phone = normalizePhoneNumber(row[colMap.phone]);
+
+						let major = "Information Technology";
+						const classFullName = String(row[colMap.classFullName] || "");
+						if (classFullName.includes("Kỹ thuật phần mềm")) {
+							major = "Software Engineering";
+						} else if (classFullName.includes("Công nghệ thông tin")) {
+							major = "Information Technology";
+						}
+
+						return {
+							studentCode: String(row[colMap.studentCode]).trim(),
+							firstName,
+							lastName,
+							fullName,
+							email: String(row[colMap.email] || "").trim(),
+							phone,
+							className: String(row[colMap.className] || "").trim(),
+							classFullName,
+							dateOfBirth: parseExcelDate(row[colMap.dateOfBirth]),
+						};
+					});
+
+				setImportData(students);
+				setImportFile(file);
+				toast.success(`Đã đọc được ${students.length} sinh viên từ file`);
+			} catch (error) {
+				console.error("Error parsing Excel:", error);
+				toast.error("Lỗi khi đọc file Excel");
+			}
+		};
+
+		reader.readAsArrayBuffer(file);
+		return false;
+	};
+
+	const handleImport = async () => {
+		if (importData.length === 0) {
+			toast.error("Chưa có dữ liệu để import");
+			return;
+		}
+
+		setImportLoading(true);
+		const result: ImportResult = {
+			success: 0,
+			failed: 0,
+			skipped: 0,
+			errors: [],
+		};
+
+		let allStudents: any[] = [];
+		try {
+			const allStudentsRes = await axios.get(`${API_BASE}/students?limit=1000`);
+			if (allStudentsRes.data.success && allStudentsRes.data.data) {
+				allStudents = allStudentsRes.data.data;
+			}
+		} catch (error) {
+			console.error("Error loading students:", error);
+			toast.error("Không thể tải danh sách sinh viên");
+			setImportLoading(false);
+			return;
+		}
+
+		for (let i = 0; i < importData.length; i++) {
+			const student = importData[i];
+			try {
+				let major = "Information Technology";
+				if (student.classFullName) {
+					if (student.classFullName.includes("Kỹ thuật phần mềm")) {
+						major = "Software Engineering";
+					} else if (student.classFullName.includes("Công nghệ thông tin")) {
+						major = "Information Technology";
+					}
+				}
+
+				let studentId: number | null = null;
+
+				const normalizedStudentCode = String(student.studentCode).trim();
+				const normalizedEmail = String(student.email).trim().toLowerCase();
+
+				let existingStudent = allStudents.find(
+					(s: any) =>
+						String(s.studentCode).trim() === normalizedStudentCode ||
+						String(s.user?.email || "").trim().toLowerCase() === normalizedEmail
+				);
+
+				if (!existingStudent) {
+					try {
+						const searchByCodeRes = await axios.get(`${API_BASE}/students?studentCode=${student.studentCode}`);
+
+						if (searchByCodeRes.data.success && searchByCodeRes.data.data && searchByCodeRes.data.data.length > 0) {
+							existingStudent = searchByCodeRes.data.data.find(
+								(s: any) => String(s.studentCode).trim() === normalizedStudentCode
+							);
+						}
+
+						if (!existingStudent) {
+							try {
+								const searchByEmailRes = await axios.get(`${API_BASE}/students?email=${student.email}`);
+
+								if (searchByEmailRes.data.success && searchByEmailRes.data.data && searchByEmailRes.data.data.length > 0) {
+									existingStudent = searchByEmailRes.data.data.find(
+										(s: any) => String(s.user?.email || "").trim().toLowerCase() === normalizedEmail
+									);
+								}
+							} catch (emailSearchError) {
+								// Không tìm thấy qua email
+							}
+						}
+
+						if (existingStudent) {
+							allStudents.push(existingStudent);
+						}
+					} catch (searchError) {
+						console.log(`Student ${student.studentCode} not found in database`);
+					}
+				}
+
+				if (existingStudent) {
+					studentId = existingStudent.id;
+				} else {
+					try {
+						const fullName = `${student.firstName} ${student.lastName}`.trim();
+
+						const studentPayload: any = {
+							studentCode: student.studentCode,
+							password: "123456",
+							fullName: fullName,
+							email: student.email,
+							className: student.className,
+							major: major,
+						};
+
+						if (student.phone) {
+							studentPayload.phone = student.phone;
+						}
+
+						if (student.dateOfBirth) {
+							studentPayload.dateOfBirth = student.dateOfBirth;
+						}
+
+						const studentRes = await axios.post(`${API_BASE}/students`, studentPayload);
+
+						if (studentRes.data.success) {
+							studentId = studentRes.data.data.student.id;
+							const newStudent = {
+								id: studentId,
+								studentCode: student.studentCode,
+								...studentRes.data.data.student
+							};
+							allStudents.push(newStudent);
+						} else {
+							throw new Error(studentRes.data.message || "Không thể tạo sinh viên");
+						}
+					} catch (createError: any) {
+						const createErrorMsg = createError.response?.data?.message || createError.message || "";
+
+						if (createErrorMsg.includes("already exists") || createErrorMsg.includes("đã tồn tại")) {
+							try {
+								const fetchRes = await axios.get(`${API_BASE}/students?studentCode=${student.studentCode}`);
+								if (fetchRes.data.success && fetchRes.data.data && fetchRes.data.data.length > 0) {
+									existingStudent = fetchRes.data.data[0];
+									studentId = existingStudent.id;
+									allStudents.push(existingStudent);
+								} else {
+									throw createError;
+								}
+							} catch {
+								throw createError;
+							}
+						} else {
+							throw createError;
+						}
+					}
+				}
+
+				if (studentId !== null) {
+					try {
+						const enrollmentPayload = {
+							sectionId,
+							studentId,
+						};
+
+						const enrollmentRes = await axios.post(
+							`${API_BASE}/sections-enrollments`,
+							enrollmentPayload
+						);
+
+						if (enrollmentRes.data.success) {
+							result.success++;
+						} else {
+							throw new Error(enrollmentRes.data.message || "Không thể đăng ký vào lớp");
+						}
+					} catch (enrollError: any) {
+						const enrollErrorMsg = enrollError.response?.data?.message || enrollError.message || "";
+
+						if (enrollErrorMsg.includes("already enrolled") ||
+							enrollErrorMsg.includes("đã đăng ký")) {
+							result.skipped++;
+						} else {
+							throw enrollError;
+						}
+					}
+				} else {
+					throw new Error("Không thể lấy ID sinh viên");
+				}
+
+			} catch (error: any) {
+				result.failed++;
+				const errorMessage = error.response?.data?.message || error.message || "Lỗi không xác định";
+				result.errors.push({
+					row: i + 2,
+					studentCode: student.studentCode,
+					fullName: student.fullName,
+					error: errorMessage,
+				});
+			}
+
+			if (i < importData.length - 1) {
+				await new Promise(resolve => setTimeout(resolve, 150));
+			}
+		}
+
+		setImportLoading(false);
+		setImportResult(result);
+
+		const messages = [];
+		if (result.success > 0) {
+			messages.push(`✅ Thành công: ${result.success}`);
+		}
+		if (result.skipped > 0) {
+			messages.push(`⚠️ Đã có trong lớp: ${result.skipped}`);
+		}
+		if (result.failed > 0) {
+			messages.push(`❌ Thất bại: ${result.failed}`);
+		}
+
+		if (result.success > 0) {
+			toast.success(messages.join(" | "));
+			fetchData();
+		} else if (result.skipped > 0) {
+			toast.success(messages.join(" | "));
+		} else {
+			toast.error(messages.join(" | "));
+		}
+	};
+
+	const handleCloseImportModal = () => {
+		setImportModalOpen(false);
+		setImportFile(null);
+		setImportData([]);
+		setImportResult(null);
+	};
+
+	const downloadTemplate = () => {
+		const templateData = [
+			["Trường Đại học Sài Gòn", "", "", "", "", "", "Cộng Hòa Xã Hội Chủ Nghĩa Việt Nam"],
+			["        Phòng Đào tạo Đại học", "", "", "", "", "", "           Độc lập - Tự do - Hạnh phúc"],
+			[],
+			["", "", "", "BẢNG DANH SÁCH SINH VIÊN MẪU"],
+			[],
+			["STT", "Mã SV", "Họ lót", "Tên", "Mã lớp", "Tên lớp", "Ngày sinh", "Điện thoại", "Email"],
+			["1", "3122410001", "Nguyễn Văn", "An", "DCT1221", "ĐH chính quy - ngành Công nghệ thông tin - K.22 - Lớp 1", "01/01/2004", "0901234567", "nguyenvanan@example.com"],
+			["2", "3122410002", "Trần Thị", "Bình", "DCT1221", "ĐH chính quy - ngành Công nghệ thông tin - K.22 - Lớp 1", "15/02/2004", "0912345678", "tranthib@example.com"],
+			["3", "3122560001", "Lê Văn", "Cường", "DKP1221", "ĐH chính quy - ngành Kỹ thuật phần mềm - K.22 - Lớp 1", "20/03/2004", "0923456789", "levancuong@example.com"],
+		];
+
+		const ws = XLSX.utils.aoa_to_sheet(templateData);
+		const wb = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(wb, ws, "DanhSachSinhVien");
+
+		ws["!cols"] = [
+			{ wch: 5 },
+			{ wch: 15 },
+			{ wch: 20 },
+			{ wch: 15 },
+			{ wch: 12 },
+			{ wch: 50 },
+			{ wch: 15 },
+			{ wch: 15 },
+			{ wch: 35 },
+		];
+
+		XLSX.writeFile(wb, "MauDanhSachSinhVien.xlsx");
+		toast.success("Đã tải xuống file mẫu");
 	};
 
 	const getGroupTag = (group: Group | undefined) => {
@@ -331,72 +817,47 @@ export default function StudentList() {
 	const columns = [
 		{
 			title: "MSSV",
-			dataIndex: ["student", "studentCode"],
 			key: "studentCode",
-			width: 100,
-			ellipsis: true,
+			width: 120,
+			fixed: "left" as const,
 			sorter: (a: Enrollment, b: Enrollment) =>
-				(a.student.studentCode || "").localeCompare(b.student.studentCode || ""),
-			render: (text: string) => (
-				<div style={{ fontWeight: 600, color: "#1890ff", whiteSpace: "nowrap" }}>
+				(a.student?.studentCode || "").localeCompare(b.student?.studentCode || ""),
+			render: (_: any, record: Enrollment) => (
+				<div style={{ fontWeight: 600, color: "#1890ff" }}>
 					<UserOutlined style={{ marginRight: 8 }} />
-					<Tooltip title={text} placement="topLeft">
-						{text}
-					</Tooltip>
+					{record.student?.studentCode || "N/A"}
 				</div>
 			),
 		},
 		{
 			title: "Họ và tên",
-			dataIndex: ["student", "user", "fullName"],
 			key: "fullName",
-			width: 160,
-			ellipsis: true,
+			width: 180,
 			sorter: (a: Enrollment, b: Enrollment) =>
-				(a.student.user.fullName || "").localeCompare(
-					b.student.user.fullName || ""
-				),
-			render: (text: string) => (
-				<Tooltip title={text} placement="topLeft">
-					{text}
-				</Tooltip>
-			),
+				(a.student?.user?.fullName || "").localeCompare(b.student?.user?.fullName || ""),
+			render: (_: any, record: Enrollment) => {
+				const fullName = record.student?.user?.fullName || "N/A";
+				return <span>{fullName}</span>;
+			},
 		},
 		{
 			title: "Email",
-			dataIndex: ["student", "user", "email"],
 			key: "email",
-			width: 180,
+			width: 220,
 			ellipsis: true,
 			sorter: (a: Enrollment, b: Enrollment) =>
-				(a.student.user.email || "").localeCompare(b.student.user.email || ""),
-			render: (text: string) => (
-				<Tooltip title={text} placement="topLeft">
-					{text}
+				(a.student?.user?.email || "").localeCompare(b.student?.user?.email || ""),
+			render: (_: any, record: Enrollment) => (
+				<Tooltip title={record.student?.user?.email || "N/A"}>
+					{record.student?.user?.email || "N/A"}
 				</Tooltip>
 			),
-		},
-		{
-			title: "Số điện thoại",
-			dataIndex: ["student", "user", "phone"],
-			key: "phone",
-			width: 120,
-			ellipsis: true,
-			sorter: (a: Enrollment, b: Enrollment) =>
-				(a.student.user.phone || "").localeCompare(b.student.user.phone || ""),
-			render: (text: string) =>
-				text ? (
-					<Tooltip title={text}>{text}</Tooltip>
-				) : (
-					<Tag color="default">Chưa có</Tag>
-				),
 		},
 		{
 			title: "Nhóm",
 			key: "group",
 			align: "center" as const,
-			width: 100,
-			ellipsis: true,
+			width: 120,
 			sorter: (a: Enrollment, b: Enrollment) => {
 				const nameA =
 					a.group?.groupName ||
@@ -415,7 +876,6 @@ export default function StudentList() {
 			dataIndex: "enrolledAt",
 			key: "enrolledAt",
 			width: 150,
-			ellipsis: true,
 			sorter: (a: Enrollment, b: Enrollment) =>
 				new Date(a.enrolledAt).getTime() - new Date(b.enrolledAt).getTime(),
 			render: (date: string) => dayjs(date).format("DD/MM/YYYY HH:mm"),
@@ -423,7 +883,8 @@ export default function StudentList() {
 		{
 			title: "Hành động",
 			key: "actions",
-			width: 120,
+			width: 140,
+			fixed: "right" as const,
 			render: (_: any, record: Enrollment) => (
 				<div style={{ display: "flex", gap: 8 }}>
 					<Tooltip title="Phân nhóm">
@@ -446,10 +907,10 @@ export default function StudentList() {
 							onClick={() => {
 								setEditing(record);
 								form.setFieldsValue({
-									fullName: record.student.user.fullName,
-									email: record.student.user.email,
-									phoneNumber: record.student.user.phone,
-									className: record.student.className,
+									fullName: record.student?.user?.fullName || "",
+									email: record.student?.user?.email || "",
+									phone: record.student?.user?.phone || "",
+									className: record.student?.className || "",
 								});
 								setEditModalOpen(true);
 							}}
@@ -472,31 +933,17 @@ export default function StudentList() {
 		},
 	];
 
-
-
 	const filteredEnrollments = enrollments.filter((enrollment) => {
 		if (!keyword) return true;
 		const searchText = keyword.toLowerCase();
 
 		return (
-			(enrollment.student.studentCode ?? "")
-				.toLowerCase()
-				.includes(searchText) ||
-			(enrollment.student.user.fullName ?? "")
-				.toLowerCase()
-				.includes(searchText) ||
-			(enrollment.student.user.email ?? "")
-				.toLowerCase()
-				.includes(searchText) ||
-			(enrollment.student.className ?? "")
-				.toLowerCase()
-				.includes(searchText) ||
-			(enrollment.group?.groupName ?? "")
-				.toLowerCase()
-				.includes(searchText) ||
-			(enrollment.group?.groupCode ?? "")
-				.toLowerCase()
-				.includes(searchText)
+			(enrollment.student.studentCode ?? "").toLowerCase().includes(searchText) ||
+			(enrollment.student.user.fullName ?? "").toLowerCase().includes(searchText) ||
+			(enrollment.student.user.email ?? "").toLowerCase().includes(searchText) ||
+			(enrollment.student.className ?? "").toLowerCase().includes(searchText) ||
+			(enrollment.group?.groupName ?? "").toLowerCase().includes(searchText) ||
+			(enrollment.group?.groupCode ?? "").toLowerCase().includes(searchText)
 		);
 	});
 
@@ -504,27 +951,20 @@ export default function StudentList() {
 		const totalStudents = enrollments.length;
 		const studentsWithGroup = enrollments.filter((e) => e.groupId).length;
 		const studentsWithoutGroup = totalStudents - studentsWithGroup;
-		const totalGroups = groups.length;
-		const activeGroups = groups.filter((g) => g.isActive).length;
-		const groupUtilization = totalGroups > 0 ? (studentsWithGroup / totalStudents) * 100 : 0;
 
 		return {
 			totalStudents,
 			studentsWithGroup,
 			studentsWithoutGroup,
-			totalGroups,
-			activeGroups,
-			groupUtilization,
 		};
 	};
 
 	const stats = getStatistics();
 
-	if (loading) return <Spin tip="Đang tải..." />;
+	if (loading) return <Spin tip="Đang tải..." style={{ display: "flex", justifyContent: "center", marginTop: "20%" }} />;
 
 	return (
 		<div style={{ padding: 16 }}>
-			{/* Header + search + refresh + add */}
 			<div
 				style={{
 					display: "flex",
@@ -587,7 +1027,9 @@ export default function StudentList() {
 						>
 							<WarningOutlined style={{ fontSize: 14, color: "#ff4d4f" }} />
 							<span>Chưa có nhóm:</span>
-							<strong style={{ color: "#ff4d4f" }}>{stats.studentsWithoutGroup}</strong>
+							<strong style={{ color: "#ff4d4f" }}>
+								{stats.studentsWithoutGroup}
+							</strong>
 						</div>
 					)}
 				</div>
@@ -598,10 +1040,27 @@ export default function StudentList() {
 						placeholder="Tìm theo MSSV, tên, email, lớp, nhóm..."
 						value={keyword}
 						onChange={(e) => setKeyword(e.target.value)}
-						style={{ width: 200 }}
+						style={{ width: 280 }}
 					/>
 					<Button icon={<ReloadOutlined />} onClick={refresh}>
 						Refresh
+					</Button>
+					<Button
+						type="default"
+						icon={<QrcodeOutlined />}
+						onClick={() => {
+							inviteForm.setFieldsValue({ defaultPassword: "123456" });
+							setInviteModalOpen(true);
+						}}
+					>
+						Mã mời
+					</Button>
+					<Button
+						type="default"
+						icon={<UploadOutlined />}
+						onClick={() => setImportModalOpen(true)}
+					>
+						Import Excel
 					</Button>
 					<Button
 						type="primary"
@@ -622,10 +1081,9 @@ export default function StudentList() {
 				columns={columns}
 				rowKey="id"
 				bordered
-				pagination={{ pageSize: 10 }}
-				tableLayout="fixed"   // đủ để ellipsis hoạt động
+				pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (total) => `Tổng ${total} sinh viên` }}
+				scroll={{ x: 1200 }}
 			/>
-
 
 			{/* Modal thêm sinh viên */}
 			<Modal
@@ -645,7 +1103,10 @@ export default function StudentList() {
 						label="Mã số sinh viên"
 						rules={[
 							{ required: true, message: "Vui lòng nhập MSSV" },
-							{ pattern: /^[0-9]{6,12}$/, message: "MSSV chỉ gồm số (6–12 ký tự)" },
+							{
+								pattern: /^[0-9]{6,12}$/,
+								message: "MSSV chỉ gồm số (6–12 ký tự)",
+							},
 						]}
 					>
 						<Input ref={studentCodeRef} placeholder="VD: 2021001234" />
@@ -660,6 +1121,25 @@ export default function StudentList() {
 					</Form.Item>
 
 					<Form.Item
+						name="email"
+						label="Email"
+						rules={[
+							{ required: true, message: "Vui lòng nhập email" },
+							{ type: "email", message: "Email không hợp lệ" },
+						]}
+					>
+						<Input ref={emailRef} placeholder="VD: student@university.edu.vn" />
+					</Form.Item>
+
+					<Form.Item
+						name="className"
+						label="Mã lớp"
+						rules={[{ required: true, message: "Vui lòng nhập mã lớp" }]}
+					>
+						<Input placeholder="VD: DCT1221" />
+					</Form.Item>
+
+					<Form.Item
 						name="major"
 						label="Chuyên ngành"
 						rules={[{ required: true, message: "Vui lòng nhập chuyên ngành" }]}
@@ -667,7 +1147,6 @@ export default function StudentList() {
 						<Input placeholder="VD: Information Technology, Software Engineering" />
 					</Form.Item>
 				</Form>
-
 			</Modal>
 
 			{/* Modal sửa sinh viên */}
@@ -700,7 +1179,7 @@ export default function StudentList() {
 					>
 						<Input placeholder="VD: student@university.edu.vn" />
 					</Form.Item>
-					<Form.Item name="phoneNumber" label="Số điện thoại">
+					<Form.Item name="phone" label="Số điện thoại">
 						<Input placeholder="VD: 0123456789" />
 					</Form.Item>
 					{editing && (
@@ -741,10 +1220,19 @@ export default function StudentList() {
 						}}
 					>
 						<Space direction="vertical" size={4}>
-							<div><strong>MSSV:</strong> {assigningStudent?.student.studentCode}</div>
-							<div><strong>Họ tên:</strong> {assigningStudent?.student.user.fullName}</div>
-							<div><strong>Lớp:</strong> {assigningStudent?.student.className}</div>
-							<div><strong>Nhóm hiện tại:</strong> {getGroupTag(assigningStudent?.group)}</div>
+							<div>
+								<strong>MSSV:</strong> {assigningStudent?.student.studentCode}
+							</div>
+							<div>
+								<strong>Họ tên:</strong> {assigningStudent?.student.user.fullName}
+							</div>
+							<div>
+								<strong>Lớp:</strong> {assigningStudent?.student.className}
+							</div>
+							<div>
+								<strong>Nhóm hiện tại:</strong>{" "}
+								{getGroupTag(assigningStudent?.group)}
+							</div>
 						</Space>
 					</div>
 					<Form.Item name="groupId" label="Chọn nhóm">
@@ -753,7 +1241,9 @@ export default function StudentList() {
 							allowClear
 							showSearch
 							filterOption={(input, option) =>
-								(option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
+								(option?.children as unknown as string)
+									?.toLowerCase()
+									.includes(input.toLowerCase())
 							}
 						>
 							{groups
@@ -764,12 +1254,10 @@ export default function StudentList() {
 									const isFull = currentMembers >= maxMembers;
 
 									return (
-										<Option
-											key={group.id}
-											value={group.id}
-											disabled={isFull}
-										>
-											{group.groupName || group.groupCode || `Nhóm #${group.id}`}
+										<Option key={group.id} value={group.id} disabled={isFull}>
+											{group.groupName ||
+												group.groupCode ||
+												`Nhóm #${group.id}`}
 											{` (${currentMembers}/${maxMembers})`}
 											{isFull && " - Đã đầy"}
 										</Option>
@@ -779,6 +1267,131 @@ export default function StudentList() {
 					</Form.Item>
 				</Form>
 			</Modal>
+
+			{/* Modal Mã Mời */}
+			<Modal
+				title="Tạo mã mời tham gia lớp"
+				open={inviteModalOpen}
+				onCancel={handleCloseInviteModal}
+				footer={null}
+				width={700}
+			>
+				{!inviteCode ? (
+					<div>
+						<Alert
+							message="Hướng dẫn"
+							description={
+								<ul style={{ marginBottom: 0, paddingLeft: 20 }}>
+									<li>Sinh viên quét mã QR hoặc truy cập link để tham gia lớp</li>
+									<li>Sinh viên cần nhập MSSV để xác nhận đăng ký</li>
+									<li>Nếu chưa có tài khoản, hệ thống sẽ tự động tạo tài khoản mới với mật khẩu bạn cài đặt</li>
+									<li>Nếu đã có tài khoản, sinh viên sẽ được thêm vào lớp ngay lập tức</li>
+								</ul>
+							}
+							type="info"
+							showIcon
+							style={{ marginBottom: 20 }}
+						/>
+
+						<Form form={inviteForm} layout="vertical">
+							<Form.Item
+								name="defaultPassword"
+								label="Mật khẩu mặc định cho tài khoản mới"
+								rules={[
+									{ required: true, message: "Vui lòng nhập mật khẩu mặc định" },
+									{ min: 6, message: "Mật khẩu phải có ít nhất 6 ký tự" },
+								]}
+								tooltip="Mật khẩu này sẽ được sử dụng cho các sinh viên chưa có tài khoản"
+								initialValue="123456"
+							>
+								<Input.Password placeholder="VD: 123456" />
+							</Form.Item>
+
+							<Button
+								type="primary"
+								onClick={handleGenerateInviteCode}
+								block
+								size="large"
+								icon={<QrcodeOutlined />}
+							>
+								Tạo mã mời
+							</Button>
+						</Form>
+					</div>
+				) : (
+					<Space direction="vertical" style={{ width: "100%" }} size="large">
+						<Alert
+							message="Mã mời đã được tạo thành công!"
+							description="Sinh viên có thể quét mã QR hoặc truy cập link để tham gia lớp"
+							type="success"
+							showIcon
+						/>
+
+						<Card title="Mã QR Code" size="small">
+							<div style={{ textAlign: "center", padding: "20px 0" }} id="qr-code-container">
+								<QRCodeSVG
+									value={`${window.location.origin}/join?code=${inviteCode.code}&section=${sectionId}&pwd=${inviteCode.defaultPassword}`}
+									size={256}
+									level="H"
+									includeMargin
+								/>
+							</div>
+							<Button
+								icon={<DownloadOutlined />}
+								onClick={handleDownloadQR}
+								block
+								style={{ marginTop: 16 }}
+							>
+								Tải xuống mã QR
+							</Button>
+						</Card>
+
+						<Card title="Mã mời" size="small">
+							<Input
+								value={inviteCode.code}
+								readOnly
+								addonAfter={
+									<CopyOutlined
+										onClick={handleCopyInviteCode}
+										style={{ cursor: "pointer" }}
+									/>
+								}
+							/>
+						</Card>
+
+						<Card title="Link tham gia" size="small">
+							<Input
+								value={`${window.location.origin}/join?code=${inviteCode.code}&section=${sectionId}&pwd=${inviteCode.defaultPassword}`}
+								readOnly
+								addonAfter={
+									<LinkOutlined
+										onClick={handleCopyInviteLink}
+										style={{ cursor: "pointer" }}
+									/>
+								}
+							/>
+						</Card>
+
+						<Divider />
+
+						<Space style={{ width: "100%", justifyContent: "space-between" }}>
+							<Button
+								onClick={() => {
+									setInviteCode(null);
+									inviteForm.resetFields();
+									inviteForm.setFieldsValue({ defaultPassword: "123456" });
+								}}
+							>
+								Tạo mã mới
+							</Button>
+							<Button type="primary" onClick={handleCloseInviteModal}>
+								Đóng
+							</Button>
+						</Space>
+					</Space>
+				)}
+			</Modal>
+			{/* Modal Import Excel */} <Modal title="Import danh sách sinh viên từ Excel" open={importModalOpen} onCancel={handleCloseImportModal} footer={[<Button key="download" icon={<DownloadOutlined />} onClick={downloadTemplate}> Tải file mẫu </Button>, <Button key="cancel" onClick={handleCloseImportModal}> Đóng </Button>, <Button key="import" type="primary" loading={importLoading} disabled={importData.length === 0} onClick={handleImport} > Import {importData.length > 0 && `(${importData.length} SV)`} </Button>,]} width={1000} > <Space direction="vertical" style={{ width: "100%" }} size="large"> <Alert message="Hướng dẫn" description={<ul style={{ marginBottom: 0, paddingLeft: 20 }}> <li>Tải file mẫu và điền thông tin sinh viên theo định dạng</li> <li> File Excel phải chứa các cột: <strong>Mã SV</strong>, <strong>Họ lót</strong>, <strong>Tên</strong>, <strong>Email</strong>, <strong>Điện thoại</strong>, <strong>Mã lớp</strong>, <strong>Tên lớp</strong> </li> <li><strong>Nếu sinh viên đã có tài khoản:</strong> Chỉ thêm vào lớp, không tạo tài khoản mới</li> <li><strong>Nếu sinh viên chưa có tài khoản:</strong> Tạo tài khoản mới và thêm vào lớp</li> <li>Sinh viên đã có trong lớp sẽ được bỏ qua</li> <li>Số điện thoại phải có định dạng: 10-11 số, bắt đầu bằng 0 (VD: 0901234567)</li> <li>Mật khẩu mặc định cho tài khoản mới: <strong>123456</strong></li> </ul>} type="info" showIcon /> <Upload accept=".xlsx,.xls" beforeUpload={handleFileUpload} maxCount={1} onRemove={() => { setImportFile(null); setImportData([]); setImportResult(null); }} > <Button icon={<UploadOutlined />} block size="large"> Chọn file Excel </Button> </Upload> {importData.length > 0 && !importResult && (<Alert message={`Đã đọc được ${importData.length} sinh viên`} type="success" showIcon />)} {importResult && (<div> <Alert message="Kết quả import" description={<div> <p> <CheckCircleOutlined style={{ color: "#52c41a" }} /> Thành công: {importResult.success} </p> {importResult.skipped > 0 && (<p style={{ color: "#1890ff" }}> ℹ️ Đã có trong lớp (bỏ qua): {importResult.skipped} </p>)} {importResult.failed > 0 && (<p> <WarningOutlined style={{ color: "#ff4d4f" }} /> Thất bại: {importResult.failed} </p>)} </div>} type={importResult.failed > 0 ? "warning" : "success"} showIcon /> {importResult.errors.length > 0 && (<div style={{ marginTop: 16 }}> <Typography.Title level={5}>Chi tiết lỗi:</Typography.Title> <div style={{ maxHeight: 300, overflowY: "auto", border: "1px solid #d9d9d9", borderRadius: 6, padding: 12, }} > {importResult.errors.map((error, index) => (<div key={index} style={{ marginBottom: 8, padding: 8, backgroundColor: "#fff2e8", borderRadius: 4, }} > <strong>Dòng {error.row}:</strong> {error.studentCode} -{" "} {error.fullName} <br /> <span style={{ color: "#ff4d4f" }}>{error.error}</span> </div>))} </div> </div>)} </div>)} {importData.length > 0 && !importResult && (<div> <Typography.Title level={5}> Danh sách sinh viên sẽ import: </Typography.Title> <div style={{ maxHeight: 400, overflowY: "auto", border: "1px solid #d9d9d9", borderRadius: 6, }} > <Table dataSource={importData} columns={[{ title: "MSSV", dataIndex: "studentCode", key: "studentCode", width: 120, }, { title: "Họ và tên", dataIndex: "fullName", key: "fullName", width: 180, }, { title: "Email", dataIndex: "email", key: "email", width: 220, }, { title: "Số điện thoại", dataIndex: "phone", key: "phone", width: 130, render: (phone) => phone || <Tag color="default">Chưa có</Tag>, }, { title: "Mã lớp", dataIndex: "className", key: "className", width: 100, },]} rowKey="studentCode" pagination={false} size="small" scroll={{ x: 750 }} /> </div> </div>)} </Space> </Modal>
 		</div>
 	);
 }
