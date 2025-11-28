@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import * as service from "./assignment.service";
-import { prisma } from "@/prisma/client";
-import { jsonSafe } from "@/utils/bigint";
+import { prisma } from "../../../prisma/client";
+import { jsonSafe } from "../../../utils/bigint";
 import axios from "axios";
 import FormData from "form-data";
 import fs from "fs";
@@ -87,6 +87,8 @@ export async function submitCode(req: Request, res: Response) {
     }
 }
 
+
+
 export async function submitProject(req: Request, res: Response) {
     try {
         const assignmentId = Number(req.params.id);
@@ -127,7 +129,47 @@ export async function getAnswerStatus(req: Request, res: Response) {
     }
 }
 
+export async function getAnswerResult(req: Request, res: Response) {
+    try {
+        const answerId = Number(req.params.answerId);
 
+        const answer = await prisma.submissionAnswer.findUnique({
+            where: { id: answerId },
+        });
+
+        if (!answer) {
+            return res.status(404).json({
+                success: false,
+                message: "Answer not found",
+            });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                id: answer.id,
+                questionId: answer.questionId,
+                score: answer.score,
+                maxScore: answer.maxScore,
+                judgeStatus: answer.judgeStatus,
+                compileLog: answer.compileLog,
+                stdoutLog: answer.stdoutLog,
+                stderrLog: answer.stderrLog,
+                testResults: Array.isArray(answer.testResults) 
+                    ? answer.testResults.map((t: any) => ({
+                        id: t.id,
+                        input: t.input,
+                        expect: t.expectedOutput,
+                        got: t.actualOutput,
+                        status: t.isPassed ? "ok" : "wrong",
+                    })) 
+                    : [],
+            },
+        });
+    } catch (err: any) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+}
 
 export async function getAssignmentsByTeacher(req: Request, res: Response) {
     try {

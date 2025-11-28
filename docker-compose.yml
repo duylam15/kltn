@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  backend:
+    build: ./myapp
+    container_name: ktln-backend
+    restart: always
+    env_file:
+      - ./myapp/.env
+    depends_on:
+      - redis
+      - ai-service
+    ports:
+      - "3000:3000"
+    networks:
+      - ktln-net
+
+  ui:
+    build: ./UI
+    container_name: ktln-ui
+    restart: always
+    ports:
+      - "5173:80"
+    networks:
+      - ktln-net
+
+  ai-service:
+    build: ./ai-service
+    container_name: ktln-ai
+    restart: always
+    ports:
+      - "5000:5000"
+    networks:
+      - ktln-net
+
+  redis:
+    image: redis:6-alpine
+    container_name: ktln-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - ktln-net
+
+networks:
+  ktln-net:
+    driver: bridge

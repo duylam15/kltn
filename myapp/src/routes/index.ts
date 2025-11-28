@@ -24,13 +24,13 @@ import gradeColumnRoute from "../modules/GradeManagement/gradeColumn/gradeColumn
 import gradeRoute from "../modules/GradeManagement/grade/grade.route";
 import chapterRoute from "../modules/AssignmentAssessment/chapter/chapter.route";
 import assignmentGeneratorRouter from "../modules/AssignmentAssessment/assignmentGenerator/assignmentGenerator.route";
-import subjectInstructorRoute from "@/modules/CourseSectionManagement/subjectInstructor/subjectInstructor.route";
+import subjectInstructorRoute from "../modules/CourseSectionManagement/subjectInstructor/subjectInstructor.route";
 import statsRoute from "../modules/stats/stats.admin.routes";
 import catalogRoute from "../modules/catalog/catalog.routes";
-import testCaseRoute from "@/modules/AssignmentAssessment/testCase/testCase.route";
-import submissionAnswerRoutes from "@/modules/AssignmentAssessment/submissionAnswer/submissionAnswer.route";
-import codeSubmissionResultRoutes from "@/modules/AssignmentAssessment/codeSubmissionResult/codeSubmissionResult.route";
-import submissionRoutes from "@/modules/AssignmentAssessment/submission/submission.route";
+import testCaseRoute from "../modules/AssignmentAssessment/testCase/testCase.route";
+import submissionAnswerRoutes from "../modules/AssignmentAssessment/submissionAnswer/submissionAnswer.route";
+import codeSubmissionResultRoutes from "../modules/AssignmentAssessment/codeSubmissionResult/codeSubmissionResult.route";
+import submissionRoutes from "../modules/AssignmentAssessment/submission/submission.route";
 import profileRoutes from "../modules/Profile/profile.routes";
 
 const router = Router();

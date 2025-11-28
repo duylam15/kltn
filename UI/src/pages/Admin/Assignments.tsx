@@ -20,6 +20,7 @@ import {
 	Card,
 	Statistic,
 	InputNumber,
+	Alert,
 } from "antd";
 import {
 	ReloadOutlined,
@@ -32,6 +33,8 @@ import {
 	FilterOutlined,
 	ClearOutlined,
 	ThunderboltOutlined,
+	WarningOutlined,
+	CheckCircleOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -39,6 +42,7 @@ import toast from "react-hot-toast";
 import { FileQuestion } from "lucide-react";
 import { useAuth } from "../../context/authContext";
 import { v4 as uuidv4 } from "uuid";
+import instance from "../../utils/axiosInstance";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -103,7 +107,6 @@ type Chapter = {
 	chapterName: string;
 };
 
-// 🆕 Type cho auto generate
 type ChapterRule = {
 	chapterId: number;
 	easy: { count: number; pointPerQuestion: number };
@@ -128,13 +131,11 @@ export default function Assignments() {
 	const [tempSelectedSectionIds, setTempSelectedSectionIds] = useState<number[]>([]);
 	const [savingAssignment, setSavingAssignment] = useState(false);
 
-	// State cho câu hỏi
 	const [assignedQuestionIds, setAssignedQuestionIds] = useState<number[]>([]);
 	const [tempSelectedQuestionIds, setTempSelectedQuestionIds] = useState<number[]>([]);
 	const [loadingQuestions, setLoadingQuestions] = useState(false);
 	const [questionKeyword, setQuestionKeyword] = useState("");
 
-	// 🆕 State cho filter câu hỏi
 	const [questionSubjects, setQuestionSubjects] = useState<QuestionSubject[]>([]);
 	const [chapters, setChapters] = useState<Chapter[]>([]);
 	const [selectedSubjectId, setSelectedSubjectId] = useState<number | undefined>();
@@ -142,10 +143,18 @@ export default function Assignments() {
 	const [selectedDifficulty, setSelectedDifficulty] = useState<string | undefined>();
 	const [selectedType, setSelectedType] = useState<string | undefined>();
 
-	// 🆕 State cho auto generate modal
 	const [autoGenModalOpen, setAutoGenModalOpen] = useState(false);
 	const [autoGenForm] = Form.useForm<any>();
 	const [generatingQuestions, setGeneratingQuestions] = useState(false);
+
+	// 🆕 State cho validation điểm
+	const [currentMaxScore, setCurrentMaxScore] = useState<number>(10);
+	const [totalSelectedPoints, setTotalSelectedPoints] = useState<number>(0);
+	const [pointsValidation, setPointsValidation] = useState<{
+		isValid: boolean;
+		message: string;
+		type: "success" | "warning" | "error";
+	}>({ isValid: true, message: "", type: "success" });
 
 	const { user } = useAuth();
 	const teacherId = user?.id;
@@ -156,12 +165,10 @@ export default function Assignments() {
 		fetchQuestionSubjects();
 	}, []);
 
-	// 🆕 Fetch câu hỏi với filter
 	useEffect(() => {
 		fetchQuestions();
 	}, [selectedSubjectId, selectedChapterId, selectedDifficulty, selectedType]);
 
-	// 🆕 Load chapters khi chọn subject
 	useEffect(() => {
 		if (selectedSubjectId) {
 			fetchChaptersBySubject(selectedSubjectId);
@@ -171,16 +178,70 @@ export default function Assignments() {
 		}
 	}, [selectedSubjectId]);
 
+	// 🆕 Tính tổng điểm khi chọn/bỏ chọn câu hỏi
+	useEffect(() => {
+		calculateTotalPoints();
+	}, [tempSelectedQuestionIds, questions, currentMaxScore]);
+
+	// 🆕 Update maxScore khi form thay đổi
+	const handleFormValuesChange = (changedValues: any, allValues: any) => {
+		if (changedValues.maxScore !== undefined) {
+			setCurrentMaxScore(Number(changedValues.maxScore) || 10);
+		}
+	};
+
+	// 🆕 Hàm tính tổng điểm
+	const calculateTotalPoints = () => {
+		const selectedQuestions = questions.filter((q) =>
+			tempSelectedQuestionIds.includes(q.id)
+		);
+
+		const total = selectedQuestions.reduce((sum, q) => sum + (q.points || 0), 0);
+		setTotalSelectedPoints(total);
+
+		// Validation
+		if (total === 0) {
+			setPointsValidation({
+				isValid: true,
+				message: "Chưa chọn câu hỏi nào",
+				type: "warning",
+			});
+		} else if (total < currentMaxScore) {
+			setPointsValidation({
+				isValid: false,
+				message: `Tổng điểm (${total}) nhỏ hơn điểm tối đa (${currentMaxScore}). Cần thêm ${currentMaxScore - total} điểm.`,
+				type: "warning",
+			});
+		} else if (total > currentMaxScore) {
+			setPointsValidation({
+				isValid: false,
+				message: `Tổng điểm (${total}) vượt quá điểm tối đa (${currentMaxScore}). Cần giảm ${total - currentMaxScore} điểm.`,
+				type: "error",
+			});
+		} else {
+			setPointsValidation({
+				isValid: true,
+				message: `Tổng điểm hợp lệ: ${total}/${currentMaxScore}`,
+				type: "success",
+			});
+		}
+	};
+
 	async function fetchAssignments() {
 		try {
 			setLoading(true);
-			const res = await axios.get<{ success: boolean; data: Assignment[] }>(
-				`${API_BASE}/assignments`
+
+			// ✅ Dùng instance thay vì axios
+			const res:any = await instance.get<{ success: boolean; data: Assignment[] }>(
+				"/assignments" // ✅ Không cần `${API_BASE}` vì baseURL đã set
 			);
-			if (res.data.success) {
-				setAssignments(res.data.data || []);
+
+			// ✅ res đã là data (do interceptor return response. data)
+			if (res.success) {
+				setAssignments(res.data || []);
 			}
-		} catch {
+		} catch (error) {
+			console.error("❌ Fetch assignments error:", error);
 			toast.error("Không tải được danh sách bài tập");
 		} finally {
 			setLoading(false);
@@ -200,16 +261,13 @@ export default function Assignments() {
 		}
 	}
 
-	// 🆕 Fetch question subjects
 	async function fetchQuestionSubjects() {
 		try {
 			const res = await axios.get<{
 				success: boolean;
 				data: QuestionSubject[];
 				meta: any;
-			}>(
-				`${API_BASE}/subjects?limit=100`
-			);
+			}>(`${API_BASE}/subjects?limit=100`);
 			if (res.data.success) {
 				setQuestionSubjects(res.data.data || []);
 			}
@@ -218,7 +276,6 @@ export default function Assignments() {
 		}
 	}
 
-	// 🆕 Fetch chapters by subject
 	async function fetchChaptersBySubject(subjectId: number) {
 		try {
 			const res = await axios.get<{ success: boolean; data: Chapter[] }>(
@@ -233,7 +290,6 @@ export default function Assignments() {
 		}
 	}
 
-	// 🆕 Fetch questions với filter
 	async function fetchQuestions() {
 		try {
 			setLoadingQuestions(true);
@@ -250,7 +306,6 @@ export default function Assignments() {
 			}>(`${API_BASE}/questions`, { params });
 
 			if (res.data.success) {
-				// Handle cả 2 format response
 				const items = Array.isArray(res.data.data)
 					? res.data.data
 					: (res.data.data as any).items || [];
@@ -275,6 +330,16 @@ export default function Assignments() {
 	};
 
 	const handleSubmit = async () => {
+		// 🆕 Validation điểm trước khi submit
+		if (tempSelectedQuestionIds.length > 0 && !pointsValidation.isValid) {
+			Modal.error({
+				title: "Không thể lưu bài tập",
+				content: pointsValidation.message,
+				okText: "Đã hiểu",
+			});
+			return;
+		}
+
 		try {
 			const values = await form.validateFields();
 			const uniqueCode = uuidv4();
@@ -285,7 +350,7 @@ export default function Assignments() {
 				description: values.description?.trim(),
 				type: values.type,
 				dueDate: values.dueDate ? values.dueDate.toISOString() : null,
-				maxScore: Number(values.maxScore || 100),
+				maxScore: Number(values.maxScore || 10),
 				passingScore: values.passingScore ? Number(values.passingScore) : null,
 				timeLimit: values.timeLimit ? Number(values.timeLimit) : null,
 				maxAttempts: values.maxAttempts ? Number(values.maxAttempts) : 1,
@@ -293,7 +358,7 @@ export default function Assignments() {
 				showAnswersAfterSubmit: values.showAnswersAfterSubmit || false,
 				allowLateSubmission: values.allowLateSubmission || false,
 				createdBy: teacherId,
-				originalAssignmentId: uniqueCode
+				originalAssignmentId: uniqueCode,
 			};
 
 			let assignmentId: number;
@@ -318,6 +383,8 @@ export default function Assignments() {
 			form.resetFields();
 			setTempSelectedQuestionIds([]);
 			setAssignedQuestionIds([]);
+			setCurrentMaxScore(10);
+			setTotalSelectedPoints(0);
 			resetFilters();
 			fetchAssignments();
 		} catch (err: any) {
@@ -353,11 +420,15 @@ export default function Assignments() {
 			await Promise.all([...addPromises, ...removePromises]);
 
 			if (toAdd.length > 0 || toRemove.length > 0) {
-				toast.success(`Đã cập nhật câu hỏi (thêm: ${toAdd.length}, xóa: ${toRemove.length})`);
+				toast.success(
+					`Đã cập nhật câu hỏi (thêm: ${toAdd.length}, xóa: ${toRemove.length})`
+				);
 			}
-		} catch (error) {
+		} catch (error: any) {
 			console.error("Error saving question assignments:", error);
-			toast.error("Không thể cập nhật câu hỏi");
+			toast.error(
+				error?.response?.data?.message || "Không thể cập nhật câu hỏi"
+			);
 			throw error;
 		}
 	};
@@ -384,6 +455,7 @@ export default function Assignments() {
 	const openCreateEditModal = async (assignment?: Assignment) => {
 		if (assignment) {
 			setEditing(assignment);
+			setCurrentMaxScore(assignment.maxScore || 10);
 			form.setFieldsValue({
 				...assignment,
 				dueDate: assignment.dueDate ? dayjs(assignment.dueDate) : null,
@@ -397,7 +469,7 @@ export default function Assignments() {
 						assignmentId: number;
 						questionId: number;
 						question: Question;
-					}>
+					}>;
 				}>(
 					`${API_BASE}/assignments-questions/assignments/${assignment.id}/questions`
 				);
@@ -420,15 +492,17 @@ export default function Assignments() {
 			}
 		} else {
 			setEditing(null);
+			setCurrentMaxScore(10);
 			form.resetFields();
+			form.setFieldValue("maxScore", 10);
 			setAssignedQuestionIds([]);
 			setTempSelectedQuestionIds([]);
+			setTotalSelectedPoints(0);
 		}
 		resetFilters();
 		setModalOpen(true);
 	};
 
-	// 🆕 Mở modal auto generate
 	const openAutoGenModal = (assignment?: Assignment) => {
 		if (assignment) {
 			setEditing(assignment);
@@ -440,12 +514,10 @@ export default function Assignments() {
 		setAutoGenModalOpen(true);
 	};
 
-	// 🆕 Handle auto generate
 	const handleAutoGenerate = async () => {
 		try {
 			const values = await autoGenForm.validateFields();
 
-			// Validate assignment exists
 			if (!editing) {
 				toast.error("Vui lòng tạo bài tập trước khi tự động tạo câu hỏi");
 				return;
@@ -453,7 +525,6 @@ export default function Assignments() {
 
 			setGeneratingQuestions(true);
 
-			// Gọi API auto generate
 			const res = await axios.post(`${API_BASE}/assignment-generator/generate`, {
 				assignmentId: editing.id,
 				subjectId: values.subjectId,
@@ -462,15 +533,18 @@ export default function Assignments() {
 			});
 
 			if (res.data.success) {
-				toast.success(`Đã tự động tạo ${res.data.data.totalQuestionsAdded} câu hỏi!`);
+				toast.success(
+					`Đã tự động tạo ${res.data.data.totalQuestionsAdded} câu hỏi!`
+				);
 				setAutoGenModalOpen(false);
 				autoGenForm.resetFields();
-				// Refresh assignment
 				fetchAssignments();
 			}
 		} catch (err: any) {
 			if (err?.errorFields) return;
-			toast.error(err?.response?.data?.message || "Không thể tự động tạo câu hỏi");
+			toast.error(
+				err?.response?.data?.message || "Không thể tự động tạo câu hỏi"
+			);
 		} finally {
 			setGeneratingQuestions(false);
 		}
@@ -488,7 +562,9 @@ export default function Assignments() {
 		if (checked) {
 			setTempSelectedQuestionIds((prev) => [...prev, questionId]);
 		} else {
-			setTempSelectedQuestionIds((prev) => prev.filter((id) => id !== questionId));
+			setTempSelectedQuestionIds((prev) =>
+				prev.filter((id) => id !== questionId)
+			);
 		}
 	};
 
@@ -506,9 +582,12 @@ export default function Assignments() {
 			);
 
 			const addPromises = toAdd.map((sectionId) =>
-				axios.post(`${API_BASE}/sections-assignments/sections/${sectionId}/assignments`, {
-					assignmentId: selectedAssignment.id,
-				})
+				axios.post(
+					`${API_BASE}/sections-assignments/sections/${sectionId}/assignments`,
+					{
+						assignmentId: selectedAssignment.id,
+					}
+				)
 			);
 
 			const removePromises = toRemove.map((sectionId) =>
@@ -530,7 +609,6 @@ export default function Assignments() {
 		}
 	};
 
-	// 🆕 Reset filters
 	const resetFilters = () => {
 		setSelectedSubjectId(undefined);
 		setSelectedChapterId(undefined);
@@ -539,7 +617,6 @@ export default function Assignments() {
 		setQuestionKeyword("");
 	};
 
-	// 🎨 Render difficulty tag
 	const renderDifficultyTag = (difficulty?: string) => {
 		const config: Record<string, { color: string; text: string }> = {
 			easy: { color: "green", text: "Dễ" },
@@ -551,7 +628,6 @@ export default function Assignments() {
 		return <Tag color={diff.color}>{diff.text}</Tag>;
 	};
 
-	// 🎨 Render type tag
 	const renderTypeTag = (type: string) => {
 		const config: Record<string, { color: string; text: string }> = {
 			multiple_choice: { color: "blue", text: "Trắc nghiệm" },
@@ -671,11 +747,13 @@ export default function Assignments() {
 
 	return (
 		<div className="pl-3 pr-3">
-			<div style={{
-				display: "flex",
-				justifyContent: "space-between",
-				alignItems: "center",
-			}}>
+			<div
+				style={{
+					display: "flex",
+					justifyContent: "space-between",
+					alignItems: "center",
+				}}
+			>
 				<Title level={3} className="mt-2">
 					<div className="flex items-center gap-2">
 						<FileQuestion /> Quản lý Bài tập
@@ -718,7 +796,7 @@ export default function Assignments() {
 				/>
 			)}
 
-			{/* Modal thêm/sửa - với filter câu hỏi */}
+			{/* Modal thêm/sửa */}
 			<Modal
 				title={editing ? "Sửa thông tin bài tập" : "Thêm bài tập mới"}
 				open={modalOpen}
@@ -727,11 +805,17 @@ export default function Assignments() {
 					setEditing(null);
 					setTempSelectedQuestionIds([]);
 					setAssignedQuestionIds([]);
+					setCurrentMaxScore(10);
+					setTotalSelectedPoints(0);
 					resetFilters();
 				}}
 				onOk={handleSubmit}
 				okText={editing ? "Lưu" : "Tạo mới"}
 				cancelText="Hủy"
+				// 🆕 Disable nút OK nếu điểm không hợp lệ
+				okButtonProps={{
+					disabled: tempSelectedQuestionIds.length > 0 && !pointsValidation.isValid,
+				}}
 				width={1400}
 				centered
 				bodyStyle={{
@@ -743,31 +827,32 @@ export default function Assignments() {
 				<Row gutter={24}>
 					{/* Cột trái: Thông tin bài tập */}
 					<Col span={10}>
-						<Title level={5} style={{ marginBottom: 12 }}>Thông tin bài tập</Title>
+						<Title level={5} style={{ marginBottom: 12 }}>
+							Thông tin bài tập
+						</Title>
 
-						<Form
-							form={form}
-							layout="vertical"
-							className="[&_.ant-form-item]:mb-3"
-						>
+						<Form form={form} layout="vertical" className="[&_.ant-form-item]:mb-3">
 							<Form.Item
 								label="Tiêu đề"
 								name="title"
 								rules={[{ required: true }]}
 								className="mb-3"
 							>
-								<Input placeholder="VD: Bài tập OOP" className="!py-1.5 !px-2" />
+								<Input
+									placeholder="VD: Bài tập OOP"
+									className="!py-1.5 !px-2"
+								/>
 							</Form.Item>
 
 							<Form.Item label="Mô tả" name="description" className="mb-3">
-								<Input.TextArea rows={3} placeholder="Mô tả chi tiết bài tập" className="!p-2" />
+								<Input.TextArea
+									rows={3}
+									placeholder="Mô tả chi tiết bài tập"
+									className="!p-2"
+								/>
 							</Form.Item>
 
-							<Form.Item
-								label="Loại bài tập"
-								name="type"
-								className="mb-3"
-							>
+							<Form.Item label="Loại bài tập" name="type" className="mb-3">
 								<Select placeholder="Chọn loại bài tập">
 									<Option value="exercise">Exercise</Option>
 									<Option value="quiz">Quiz</Option>
@@ -787,39 +872,86 @@ export default function Assignments() {
 							<Divider className="!my-3">Cấu hình</Divider>
 
 							<div className="grid grid-cols-2 gap-4">
-								<Form.Item label="Điểm tối đa" name="maxScore" className="mb-3">
-									<Input type="number" className="!py-1.5 !px-2" />
+								<Form.Item
+									label="Điểm tối đa"
+									name="maxScore"
+									className="mb-3"
+									initialValue={10}
+									rules={[
+										{ required: true, message: "Vui lòng nhập điểm tối đa" },
+										{
+											type: "number",
+											min: 1,
+											message: "Điểm tối đa phải lớn hơn 0",
+										},
+									]}
+								>
+									<InputNumber
+										min={1}
+										className="w-full !py-1.5 !px-2"
+										placeholder="Mặc định: 10"
+									/>
 								</Form.Item>
 								<Form.Item label="Điểm đạt" name="passingScore" className="mb-3">
-									<Input type="number" className="!py-1.5 !px-2" />
+									<InputNumber min={0} className="w-full !py-1.5 !px-2" />
 								</Form.Item>
 							</div>
 
 							<div className="grid grid-cols-2 gap-4">
-								<Form.Item label="Thời gian (phút)" name="timeLimit" className="mb-3">
-									<Input type="number" className="!py-1.5 !px-2" />
+								<Form.Item
+									label="Thời gian (phút)"
+									name="timeLimit"
+									className="mb-3"
+								>
+									<InputNumber min={0} className="w-full !py-1.5 !px-2" />
 								</Form.Item>
-								<Form.Item label="Số lần nộp" name="maxAttempts" className="mb-3">
-									<Input type="number" className="!py-1.5 !px-2" />
+								<Form.Item
+									label="Số lần nộp"
+									name="maxAttempts"
+									className="mb-3"
+									initialValue={1}
+								>
+									<InputNumber min={1} className="w-full !py-1.5 !px-2" />
 								</Form.Item>
 							</div>
 
-							<Form.Item name="shuffleQuestions" valuePropName="checked" className="mb-2">
+							<Form.Item
+								name="shuffleQuestions"
+								valuePropName="checked"
+								className="mb-2"
+							>
 								<Checkbox>Xáo trộn câu hỏi</Checkbox>
 							</Form.Item>
-							<Form.Item name="showAnswersAfterSubmit" valuePropName="checked" className="mb-2">
+							<Form.Item
+								name="showAnswersAfterSubmit"
+								valuePropName="checked"
+								className="mb-2"
+							>
 								<Checkbox>Hiện đáp án sau khi nộp</Checkbox>
 							</Form.Item>
-							<Form.Item name="allowLateSubmission" valuePropName="checked" className="mb-0">
+							<Form.Item
+								name="allowLateSubmission"
+								valuePropName="checked"
+								className="mb-0"
+							>
 								<Checkbox>Cho phép nộp muộn</Checkbox>
 							</Form.Item>
 						</Form>
 					</Col>
 
-					{/* Cột phải: Danh sách câu hỏi với filter */}
+					{/* Cột phải: Danh sách câu hỏi */}
 					<Col span={14}>
-						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-							<Title level={5} style={{ margin: 0 }}>Câu hỏi</Title>
+						<div
+							style={{
+								display: "flex",
+								justifyContent: "space-between",
+								alignItems: "center",
+								marginBottom: 12,
+							}}
+						>
+							<Title level={5} style={{ margin: 0 }}>
+								Câu hỏi
+							</Title>
 							<Space>
 								<Button
 									icon={<ThunderboltOutlined />}
@@ -840,12 +972,37 @@ export default function Assignments() {
 							</Space>
 						</div>
 
-						{/* 🆕 Bộ lọc */}
-						<Card size="small" style={{ marginBottom: 12, backgroundColor: "#fafafa" }}>
+						{/* 🆕 Alert validation điểm */}
+						{tempSelectedQuestionIds.length > 0 && (
+							<Alert
+								message={
+									<Space>
+										{pointsValidation.type === "success" ? (
+											<CheckCircleOutlined />
+										) : (
+											<WarningOutlined />
+										)}
+										{pointsValidation.message}
+									</Space>
+								}
+								type={pointsValidation.type}
+								showIcon
+								style={{ marginBottom: 12 }}
+								banner
+							/>
+						)}
+
+						{/* Bộ lọc */}
+						<Card
+							size="small"
+							style={{ marginBottom: 12, backgroundColor: "#fafafa" }}
+						>
 							<Space direction="vertical" style={{ width: "100%" }} size="small">
 								<Row gutter={8}>
 									<Col span={12}>
-										<Text type="secondary" style={{ fontSize: 12 }}>Môn học:</Text>
+										<Text type="secondary" style={{ fontSize: 12 }}>
+											Môn học:
+										</Text>
 										<Select
 											allowClear
 											placeholder="Chọn môn học"
@@ -862,7 +1019,9 @@ export default function Assignments() {
 										</Select>
 									</Col>
 									<Col span={12}>
-										<Text type="secondary" style={{ fontSize: 12 }}>Chương:</Text>
+										<Text type="secondary" style={{ fontSize: 12 }}>
+											Chương:
+										</Text>
 										<Select
 											allowClear
 											placeholder="Chọn chương"
@@ -882,7 +1041,9 @@ export default function Assignments() {
 								</Row>
 								<Row gutter={8}>
 									<Col span={12}>
-										<Text type="secondary" style={{ fontSize: 12 }}>Độ khó:</Text>
+										<Text type="secondary" style={{ fontSize: 12 }}>
+											Độ khó:
+										</Text>
 										<Select
 											allowClear
 											placeholder="Chọn độ khó"
@@ -897,7 +1058,9 @@ export default function Assignments() {
 										</Select>
 									</Col>
 									<Col span={12}>
-										<Text type="secondary" style={{ fontSize: 12 }}>Loại câu hỏi:</Text>
+										<Text type="secondary" style={{ fontSize: 12 }}>
+											Loại câu hỏi:
+										</Text>
 										<Select
 											allowClear
 											placeholder="Chọn loại"
@@ -927,21 +1090,35 @@ export default function Assignments() {
 							size="small"
 						/>
 
-						{/* Thống kê */}
+						{/* 🆕 Thống kê cải tiến */}
 						<Card size="small" style={{ marginBottom: 12 }}>
 							<Row gutter={16}>
-								<Col span={12}>
+								<Col span={8}>
 									<Statistic
 										title="Tổng số câu"
 										value={questions.length}
 										valueStyle={{ fontSize: 20 }}
 									/>
 								</Col>
-								<Col span={12}>
+								<Col span={8}>
 									<Statistic
 										title="Đã chọn"
 										value={tempSelectedQuestionIds.length}
 										valueStyle={{ fontSize: 20, color: "#1890ff" }}
+									/>
+								</Col>
+								<Col span={8}>
+									<Statistic
+										title="Tổng điểm"
+										value={`${totalSelectedPoints}/${currentMaxScore}`}
+										valueStyle={{
+											fontSize: 20,
+											color: pointsValidation.isValid
+												? "#52c41a"
+												: pointsValidation.type === "error"
+													? "#ff4d4f"
+													: "#faad14",
+										}}
 									/>
 								</Col>
 							</Row>
@@ -962,10 +1139,14 @@ export default function Assignments() {
 									<Spin tip="Đang tải câu hỏi..." />
 								</div>
 							) : filteredQuestions.length === 0 ? (
-								<div style={{ textAlign: "center", padding: 20, color: "#999" }}>
+								<div
+									style={{ textAlign: "center", padding: 20, color: "#999" }}
+								>
 									<FilterOutlined style={{ fontSize: 32, marginBottom: 8 }} />
 									<p>Không tìm thấy câu hỏi phù hợp</p>
-									<Button size="small" onClick={resetFilters}>Xóa bộ lọc</Button>
+									<Button size="small" onClick={resetFilters}>
+										Xóa bộ lọc
+									</Button>
 								</div>
 							) : (
 								filteredQuestions.map((q) => {
@@ -984,39 +1165,52 @@ export default function Assignments() {
 												backgroundColor: checked ? "#e6f7ff" : "transparent",
 											}}
 											onMouseEnter={(e) => {
-												if (!checked) e.currentTarget.style.backgroundColor = "#f5f5f5";
+												if (!checked)
+													e.currentTarget.style.backgroundColor = "#f5f5f5";
 											}}
 											onMouseLeave={(e) => {
-												if (!checked) e.currentTarget.style.backgroundColor = "transparent";
+												if (!checked)
+													e.currentTarget.style.backgroundColor =
+														"transparent";
 											}}
 										>
-											<div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+											<div
+												style={{
+													display: "flex",
+													alignItems: "flex-start",
+													gap: 8,
+												}}
+											>
 												<input
 													type="checkbox"
 													checked={checked}
-													onChange={(e) => toggleTempQuestionSelection(q.id, e.target.checked)}
+													onChange={(e) =>
+														toggleTempQuestionSelection(q.id, e.target.checked)
+													}
 													style={{ marginTop: 4, cursor: "pointer" }}
 												/>
 												<div style={{ flex: 1 }}>
 													<div
 														style={{ fontWeight: 500, marginBottom: 4 }}
 														dangerouslySetInnerHTML={{
-															__html: q.content.substring(0, 100) + (q.content.length > 100 ? "..." : "")
+															__html:
+																q.content.substring(0, 100) +
+																(q.content.length > 100 ? "..." : ""),
 														}}
 													/>
 													<div style={{ fontSize: 12 }}>
 														{renderTypeTag(q.type)}
 														{renderDifficultyTag(q.difficulty)}
-														{q.points && <Tag color="green">{q.points} điểm</Tag>}
+														{q.points && (
+															<Tag color="green">{q.points} điểm</Tag>
+														)}
 														{q.subject && (
 															<Tag color="blue" icon={<BookOutlined />}>
 																{q.subject.subjectCode}
 															</Tag>
 														)}
 														{q.chapter && (
-															<Tag color="purple">
-																{q.chapter.chapterCode}
-															</Tag>
+															<Tag color="purple">{q.chapter.chapterCode}</Tag>
 														)}
 													</div>
 												</div>
@@ -1030,7 +1224,7 @@ export default function Assignments() {
 				</Row>
 			</Modal>
 
-			{/* 🆕 Modal tự động tạo câu hỏi */}
+			{/* Modal tự động tạo câu hỏi */}
 			<Modal
 				title={
 					<Space>
@@ -1056,10 +1250,13 @@ export default function Assignments() {
 						name="subjectId"
 						rules={[{ required: true, message: "Vui lòng chọn môn học" }]}
 					>
-						<Select placeholder="Chọn môn học" onChange={(value) => {
-							fetchChaptersBySubject(value);
-							autoGenForm.setFieldValue("chapterRules", []);
-						}}>
+						<Select
+							placeholder="Chọn môn học"
+							onChange={(value) => {
+								fetchChaptersBySubject(value);
+								autoGenForm.setFieldValue("chapterRules", []);
+							}}
+						>
 							{questionSubjects.map((s) => (
 								<Option key={s.id} value={s.id}>
 									{s.subjectCode} - {s.subjectName}
@@ -1097,31 +1294,76 @@ export default function Assignments() {
 										<Row gutter={8}>
 											<Col span={8}>
 												<Text strong>Dễ:</Text>
-												<Form.Item {...restField} name={[name, "easy", "count"]} label="Số câu">
-													<InputNumber min={0} style={{ width: "100%" }} />
+												<Form.Item
+													{...restField}
+													name={[name, "easy", "count"]}
+													label="Số câu"
+												>
+													<InputNumber
+														min={0}
+														style={{ width: "100%" }}
+													/>
 												</Form.Item>
-												<Form.Item {...restField} name={[name, "easy", "pointPerQuestion"]} label="Điểm/câu">
-													<InputNumber min={0} step={0.5} style={{ width: "100%" }} />
+												<Form.Item
+													{...restField}
+													name={[name, "easy", "pointPerQuestion"]}
+													label="Điểm/câu"
+												>
+													<InputNumber
+														min={0}
+														step={0.5}
+														style={{ width: "100%" }}
+													/>
 												</Form.Item>
 											</Col>
 
 											<Col span={8}>
 												<Text strong>Trung bình:</Text>
-												<Form.Item {...restField} name={[name, "medium", "count"]} label="Số câu">
-													<InputNumber min={0} style={{ width: "100%" }} />
+												<Form.Item
+													{...restField}
+													name={[name, "medium", "count"]}
+													label="Số câu"
+												>
+													<InputNumber
+														min={0}
+														style={{ width: "100%" }}
+													/>
 												</Form.Item>
-												<Form.Item {...restField} name={[name, "medium", "pointPerQuestion"]} label="Điểm/câu">
-													<InputNumber min={0} step={0.5} style={{ width: "100%" }} />
+												<Form.Item
+													{...restField}
+													name={[name, "medium", "pointPerQuestion"]}
+													label="Điểm/câu"
+												>
+													<InputNumber
+														min={0}
+														step={0.5}
+														style={{ width: "100%" }}
+													/>
 												</Form.Item>
 											</Col>
 
 											<Col span={8}>
 												<Text strong>Khó:</Text>
-												<Form.Item {...restField} name={[name, "hard", "count"]} label="Số câu">
-													<InputNumber min={0} style={{ width: "100%" }} />
+												<Form.Item
+													{...restField}
+													name={[name, "hard", "count"]}
+													label="Số câu"
+												>
+													<InputNumber
+														min={0}
+														style={{ width: "100%" }}
+													/>
 												</Form.Item>
-												<Form.Item {...restField} name={[name, "hard", "pointPerQuestion"]} label="Điểm/câu">
-													<InputNumber min={0} step={0.5} style={{ width: "100%" }} />
+												<Form.Item
+													{...restField}
+													name={[name, "hard", "pointPerQuestion"]}
+													label="Điểm/câu"
+												>
+													<InputNumber
+														min={0}
+														step={0.5}
+														style={{ width: "100%" }}
+													/>
 												</Form.Item>
 											</Col>
 										</Row>
@@ -1132,14 +1374,22 @@ export default function Assignments() {
 									</Card>
 								))}
 
-								<Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+								<Button
+									type="dashed"
+									onClick={() => add()}
+									block
+									icon={<PlusOutlined />}
+								>
 									Thêm chương
 								</Button>
 							</>
 						)}
 					</Form.List>
 
-					<Card size="small" style={{ marginTop: 16, backgroundColor: "#fff7e6" }}>
+					<Card
+						size="small"
+						style={{ marginTop: 16, backgroundColor: "#fff7e6" }}
+					>
 						<Text type="warning">
 							⚠️ Tổng điểm phải bằng 10. Hệ thống sẽ tự động kiểm tra khi tạo.
 						</Text>
@@ -1164,7 +1414,9 @@ export default function Assignments() {
 			>
 				<div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
 					{sections.length === 0 ? (
-						<p style={{ textAlign: "center", color: "#999" }}>Không có lớp nào</p>
+						<p style={{ textAlign: "center", color: "#999" }}>
+							Không có lớp nào
+						</p>
 					) : (
 						sections.map((s) => {
 							const checked = tempSelectedSectionIds.includes(s.id);
@@ -1191,7 +1443,9 @@ export default function Assignments() {
 									<input
 										type="checkbox"
 										checked={checked}
-										onChange={(e) => toggleTempSelection(s.id, e.target.checked)}
+										onChange={(e) =>
+											toggleTempSelection(s.id, e.target.checked)
+										}
 										style={{ cursor: "pointer" }}
 									/>
 									<span>

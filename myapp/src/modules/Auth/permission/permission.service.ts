@@ -1,4 +1,4 @@
-import { prisma } from "@/prisma/client";
+import { prisma } from "../../../prisma/client";
 
 // Tạo permission
 export async function createPermission(data: {

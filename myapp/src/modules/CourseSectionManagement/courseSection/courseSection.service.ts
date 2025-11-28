@@ -1,5 +1,5 @@
-import { prisma } from "@/prisma/client";
-import ApiError from "@/utils/ApiError";
+import { prisma } from "../../../prisma/client";
+import ApiError from "../../../utils/ApiError";
 import type { CourseSectionStatus } from "@prisma/client";
 
 export const createCourseSection = async (data: {
@@ -26,7 +26,7 @@ export const createCourseSection = async (data: {
             sectionCode: data.sectionCode || "",
             sectionName: data.sectionName,
             schedule: data.schedule,
-            maxStudents: data.maxStudents || 50,
+            maxStudents: Number(data.maxStudents) || 50,
             status: data.status || "planned",
         },
         include: {

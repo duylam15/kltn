@@ -1,4 +1,4 @@
-import { prisma } from "@/prisma/client";
+import { prisma } from "../../../prisma/client";
 
 export async function getAnswersBySubmission(submissionId: number) {
     return prisma.submissionAnswer.findMany({

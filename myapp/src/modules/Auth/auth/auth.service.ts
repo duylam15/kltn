@@ -1,8 +1,8 @@
 import bcrypt from "bcrypt";
 import ms from "ms";
 import type { SignOptions } from "jsonwebtoken";
-import { prisma } from "@/prisma/client";
-import { signJwt } from "@/utils/jwt";
+import { prisma } from "../../../prisma/client";
+import { signJwt } from "../../../utils/jwt";
 
 const accessTtl: SignOptions["expiresIn"] = (process.env.ACCESS_TOKEN_TTL || "15m") as SignOptions["expiresIn"];
 type MsStringValue = Exclude<Parameters<typeof ms>[0], number>;

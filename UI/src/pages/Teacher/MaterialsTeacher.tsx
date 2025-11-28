@@ -4,7 +4,6 @@ import {
 	Button,
 	Spin,
 	Typography,
-	message,
 	Switch,
 	Tag,
 	Modal,
@@ -31,7 +30,6 @@ import {
 	ShareAltOutlined,
 	GlobalOutlined,
 	LockOutlined,
-	CopyOutlined,
 	CloudUploadOutlined,
 	FolderOpenOutlined,
 	CheckCircleOutlined,
@@ -49,7 +47,6 @@ const API_BASE = "http://localhost:4000/api/v1";
 
 type Material = {
 	id: number;
-	materialId: number;
 	title: string;
 	description?: string;
 	fileName?: string;
@@ -60,10 +57,12 @@ type Material = {
 	uploadedAt: string;
 	isPublic: boolean;
 	uploader?: {
+		id: number;
 		fullName: string;
 		email: string;
 	};
 	originalMaterialId?: string;
+	category?: string;
 };
 
 type Section = {
@@ -83,7 +82,6 @@ export default function MaterialsTeacher() {
 	const { user } = useAuth();
 	const userId = user?.id;
 	const teacherId = user?.teacher?.id;
-	console.log("teacherId", teacherId);
 
 	const [loading, setLoading] = useState(true);
 	const [materials, setMaterials] = useState<Material[]>([]);
@@ -104,6 +102,7 @@ export default function MaterialsTeacher() {
 	const [form] = Form.useForm();
 	const [addForm] = Form.useForm();
 	const [assignForm] = Form.useForm();
+	const [libraryForm] = Form.useForm(); // 👈 Form cho modal thư viện
 
 	// Library states
 	const [allMaterials, setAllMaterials] = useState<Material[]>([]);
@@ -146,55 +145,74 @@ export default function MaterialsTeacher() {
 		}
 	};
 
-
-	// ====== SAO CHÉP TÀI LIỆU  ======
-	async function copyOne(materialId: number, forceDuplicate = false) {
-		await axios.post(`${API_BASE}/materials/copy`, {
-			materialId,
-			userId,  // 👈 thuộc "tủ của tôi"
-		});
-	}
-
-
-	const handleCopyMaterials = async () => {
-		if (selectedMaterialIds.length === 0) {
-			toast.error("Vui lòng chọn ít nhất 1 tài liệu");
-			return;
-		}
-
-		try {
-			for (const id of selectedMaterialIds) {
-				await copyOne(id);
-			}
-
-			toast.success(`Đã xử lý sao chép ${selectedMaterialIds.length} tài liệu`);
-			setLibraryModalOpen(false);
-			setSelectedMaterialIds([]);
-			setLibraryKeyword("");
-			fetchData(); // refresh "tủ của tôi"
-		} catch (e: any) {
-			if (e?.message !== "cancelled") {
-				toast.error(e?.response?.data?.message || "Không thể sao chép tài liệu");
-			}
-		}
-	};
-
-
+	// ✅ Lấy tài liệu public từ thư viện (không lọc theo userId vì giờ gán trực tiếp)
 	const fetchAllMaterials = async () => {
 		try {
 			setLoadingLibrary(true);
 			const { data } = await axios.get(`${API_BASE}/materials/public`, {
-				params: { page: 1, size: 50, userId }, // 👈 gửi userId hiện tại
+				params: {
+					userId, // Backend vẫn cần để lọc nếu cần
+					page: 1,
+					size: 100,
+					keyword: libraryKeyword,
+				},
 			});
 
-			if (data?.success) setAllMaterials(data.data || []);
+			if (data?.success) {
+				setAllMaterials(data.data || []);
+			}
 		} catch (err) {
+			console.error("Lỗi khi tải thư viện:", err);
 			toast.error("Không tải được danh sách tài liệu chung");
 		} finally {
 			setLoadingLibrary(false);
 		}
 	};
 
+	// ✅ GÁN TRỰC TIẾP tài liệu public vào lớp (không cần copy)
+	const handleAssignFromLibrary = async () => {
+		try {
+			const values = await libraryForm.validateFields();
+
+			if (selectedMaterialIds.length === 0) {
+				toast.error("Vui lòng chọn ít nhất 1 tài liệu");
+				return;
+			}
+
+			let successCount = 0;
+			let errorCount = 0;
+
+			for (const materialId of selectedMaterialIds) {
+				try {
+					await axios.post(`${API_BASE}/materials/assign`, {
+						courseSectionId: values.sectionId,
+						materialId, // 👈 Gán trực tiếp, không cần copy
+						assignedBy: userId,
+					});
+					successCount++;
+				} catch (err: any) {
+					errorCount++;
+					console.error(`Lỗi gán material ${materialId}:`, err);
+				}
+			}
+
+			if (successCount > 0) {
+				toast.success(`Đã thêm ${successCount} tài liệu vào lớp`);
+			}
+			if (errorCount > 0) {
+				toast.error(`${errorCount} tài liệu không thể thêm (có thể đã tồn tại)`);
+			}
+
+			setLibraryModalOpen(false);
+			setSelectedMaterialIds([]);
+			setLibraryKeyword("");
+			libraryForm.resetFields();
+		} catch (err: any) {
+			if (err?.errorFields) return; // Validation error
+			console.error("Lỗi assign from library:", err);
+			toast.error("Không thể thêm tài liệu vào lớp");
+		}
+	};
 
 	const handleTogglePublic = async (materialId: number, isPublic: boolean) => {
 		try {
@@ -222,13 +240,14 @@ export default function MaterialsTeacher() {
 				return;
 			}
 
-			const uniqueCode = uuidv4();
 			const formData = new FormData();
 			formData.append("file", file);
 			formData.append("title", values.title);
 			formData.append("description", values.description || "");
 			formData.append("isPublic", values.isPublic ? "true" : "false");
 			formData.append("uploadedBy", String(userId));
+			formData.append("category", values.category || "other");
+			formData.append("originalMaterialId", uuidv4());
 
 			await axios.post(`${API_BASE}/materials/upload`, formData, {
 				headers: { "Content-Type": "multipart/form-data" },
@@ -242,7 +261,7 @@ export default function MaterialsTeacher() {
 		} catch (err: any) {
 			if (err?.errorFields) return;
 			console.error("Lỗi add:", err);
-			toast.error("Không thể thêm tài lxxiệu");
+			toast.error(err.response?.data?.message || "Không thể thêm tài liệu");
 		}
 	};
 
@@ -251,7 +270,7 @@ export default function MaterialsTeacher() {
 			const values = await form.validateFields();
 			if (!editingMaterial) return;
 
-			await axios.patch(`${API_BASE}/materials/${editingMaterial.id}`, values);
+			await axios.put(`${API_BASE}/materials/${editingMaterial.id}`, values);
 			toast.success("Cập nhật tài liệu thành công");
 			setEditModalOpen(false);
 			setEditingMaterial(null);
@@ -272,7 +291,10 @@ export default function MaterialsTeacher() {
 			}
 		} catch (err: any) {
 			console.error("Lỗi delete:", err);
-			toast.error("Không thể xóa tài liệu (có thể đã được gán vào lớp)");
+			toast.error(
+				err.response?.data?.message ||
+				"Không thể xóa tài liệu (có thể đã được gán vào lớp)"
+			);
 		}
 	};
 
@@ -296,8 +318,6 @@ export default function MaterialsTeacher() {
 			toast.error(err.response?.data?.message || "Không thể thêm vào lớp");
 		}
 	};
-
-
 
 	const handleView = (material: Material) => {
 		if (material.filePath) {
@@ -339,9 +359,7 @@ export default function MaterialsTeacher() {
 						{text}
 					</div>
 					{record.description && (
-						<div
-							style={{ fontSize: 12, color: "#666", marginTop: 4 }}
-						>
+						<div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
 							{record.description}
 						</div>
 					)}
@@ -356,9 +374,13 @@ export default function MaterialsTeacher() {
 				<div>
 					<div style={{ marginBottom: 4 }}>
 						{record.fileName ? (
-							<span style={{ fontSize: 12, color: "#666" }}>
-								{record.fileName}
-							</span>
+							<Tooltip title={record.fileName}>
+								<span style={{ fontSize: 12, color: "#666" }}>
+									{record.fileName.length > 30
+										? record.fileName.substring(0, 30) + "..."
+										: record.fileName}
+								</span>
+							</Tooltip>
 						) : (
 							<Tag color="red">Chưa có file</Tag>
 						)}
@@ -381,8 +403,16 @@ export default function MaterialsTeacher() {
 			align: "center" as const,
 			render: (_: any, record: Material) => (
 				<Switch
-					checkedChildren={<><GlobalOutlined /> Công khai</>}
-					unCheckedChildren={<><LockOutlined /> Riêng tư</>}
+					checkedChildren={
+						<>
+							<GlobalOutlined /> Công khai
+						</>
+					}
+					unCheckedChildren={
+						<>
+							<LockOutlined /> Riêng tư
+						</>
+					}
 					checked={record.isPublic}
 					onChange={(checked) => handleTogglePublic(record.id, checked)}
 				/>
@@ -458,8 +488,7 @@ export default function MaterialsTeacher() {
 			m.description?.toLowerCase().includes(keyword.toLowerCase()) ||
 			m.fileName?.toLowerCase().includes(keyword.toLowerCase());
 
-		const matchPublic =
-			filterPublic === null || m.isPublic === filterPublic;
+		const matchPublic = filterPublic === null || m.isPublic === filterPublic;
 
 		return matchKeyword && matchPublic;
 	});
@@ -588,13 +617,15 @@ export default function MaterialsTeacher() {
 						Làm mới
 					</Button>
 					<Button
-						icon={<CopyOutlined />}
+						icon={<GlobalOutlined />}
 						onClick={() => {
 							setLibraryModalOpen(true);
+							setLibraryKeyword("");
+							libraryForm.resetFields();
 							fetchAllMaterials();
 						}}
 					>
-						Lấy từ thư viện
+						Thư viện chung
 					</Button>
 					<Button
 						type="primary"
@@ -652,6 +683,16 @@ export default function MaterialsTeacher() {
 							placeholder="Nhập mô tả chi tiết về tài liệu"
 						/>
 					</Form.Item>
+					<Form.Item name="category" label="Loại tài liệu" initialValue="other">
+						<Select>
+							<Option value="lecture">Bài giảng</Option>
+							<Option value="slide">Slide</Option>
+							<Option value="exercise">Bài tập</Option>
+							<Option value="reference">Tài liệu tham khảo</Option>
+							<Option value="syllabus">Đề cương</Option>
+							<Option value="other">Khác</Option>
+						</Select>
+					</Form.Item>
 					<Form.Item
 						label="Chọn file"
 						rules={[{ required: true, message: "Vui lòng chọn file" }]}
@@ -690,11 +731,19 @@ export default function MaterialsTeacher() {
 						label="Chia sẻ tài liệu"
 						valuePropName="checked"
 						initialValue={false}
-						tooltip="Khi bật, giảng viên khác có thể xem và sao chép tài liệu này"
+						tooltip="Khi bật, giảng viên khác có thể xem và sử dụng tài liệu này"
 					>
 						<Switch
-							checkedChildren={<><ShareAltOutlined /> Công khai</>}
-							unCheckedChildren={<><LockOutlined /> Riêng tư</>}
+							checkedChildren={
+								<>
+									<ShareAltOutlined /> Công khai
+								</>
+							}
+							unCheckedChildren={
+								<>
+									<LockOutlined /> Riêng tư
+								</>
+							}
 						/>
 					</Form.Item>
 				</Form>
@@ -726,14 +775,32 @@ export default function MaterialsTeacher() {
 							placeholder="Nhập mô tả chi tiết về tài liệu"
 						/>
 					</Form.Item>
+					<Form.Item name="category" label="Loại tài liệu">
+						<Select>
+							<Option value="lecture">Bài giảng</Option>
+							<Option value="slide">Slide</Option>
+							<Option value="exercise">Bài tập</Option>
+							<Option value="reference">Tài liệu tham khảo</Option>
+							<Option value="syllabus">Đề cương</Option>
+							<Option value="other">Khác</Option>
+						</Select>
+					</Form.Item>
 					<Form.Item
 						name="isPublic"
 						label="Chia sẻ tài liệu"
 						valuePropName="checked"
 					>
 						<Switch
-							checkedChildren={<><ShareAltOutlined /> Công khai</>}
-							unCheckedChildren={<><LockOutlined /> Riêng tư</>}
+							checkedChildren={
+								<>
+									<ShareAltOutlined /> Công khai
+								</>
+							}
+							unCheckedChildren={
+								<>
+									<LockOutlined /> Riêng tư
+								</>
+							}
 						/>
 					</Form.Item>
 					{editingMaterial?.fileName && (
@@ -788,16 +855,15 @@ export default function MaterialsTeacher() {
 							showSearch
 							placeholder="Chọn lớp học"
 							filterOption={(input, option) =>
-								String(option?.children || '')
+								String(option?.children || "")
 									?.toLowerCase()
 									.includes(input.toLowerCase())
 							}
 						>
 							{mySections.map((section) => (
 								<Option key={section.id} value={section.id}>
-									{section.subject.subjectCode} -{" "}
-									{section.subject.subjectName} - {section.sectionName} (
-									{section.term.name})
+									{section.subject.subjectCode} - {section.subject.subjectName} -{" "}
+									{section.sectionName} ({section.term.name})
 								</Option>
 							))}
 						</Select>
@@ -805,11 +871,11 @@ export default function MaterialsTeacher() {
 				</Form>
 			</Modal>
 
-			{/* Modal thư viện */}
+			{/* Modal thư viện - GÁN TRỰC TIẾP */}
 			<Modal
 				title={
-					<div className="flex items-center gap-2">
-						<CopyOutlined /> Lấy tài liệu từ thư viện chung
+					<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+						<GlobalOutlined /> Thư viện tài liệu chung
 					</div>
 				}
 				open={libraryModalOpen}
@@ -817,21 +883,51 @@ export default function MaterialsTeacher() {
 					setLibraryModalOpen(false);
 					setSelectedMaterialIds([]);
 					setLibraryKeyword("");
+					libraryForm.resetFields();
 				}}
-				onOk={handleCopyMaterials}
-				okText={`Sao chép (${selectedMaterialIds.length})`}
+				onOk={handleAssignFromLibrary}
+				okText={`Thêm vào lớp (${selectedMaterialIds.length})`}
 				cancelText="Hủy"
-				width={900}
+				width={1100}
 				centered
 			>
-				<div style={{ marginBottom: 16 }}>
+				<Form form={libraryForm} layout="vertical">
+					<Form.Item
+						name="sectionId"
+						label="Chọn lớp học cần thêm tài liệu"
+						rules={[{ required: true, message: "Vui lòng chọn lớp" }]}
+					>
+						<Select
+							showSearch
+							placeholder="Chọn lớp học"
+							filterOption={(input, option) =>
+								String(option?.children || "")
+									?.toLowerCase()
+									.includes(input.toLowerCase())
+							}
+						>
+							{mySections.map((section) => (
+								<Option key={section.id} value={section.id}>
+									{section.subject.subjectCode} - {section.subject.subjectName} -{" "}
+									{section.sectionName} ({section.term.name})
+								</Option>
+							))}
+						</Select>
+					</Form.Item>
+				</Form>
+
+				<div style={{ marginTop: 16, marginBottom: 16, display: "flex", gap: 8 }}>
 					<Input
 						allowClear
 						prefix={<SearchOutlined />}
 						placeholder="Tìm tài liệu..."
 						value={libraryKeyword}
 						onChange={(e) => setLibraryKeyword(e.target.value)}
+						style={{ flex: 1 }}
 					/>
+					<Button icon={<ReloadOutlined />} onClick={fetchAllMaterials}>
+						Tìm kiếm
+					</Button>
 				</div>
 
 				{loadingLibrary ? (
@@ -840,21 +936,13 @@ export default function MaterialsTeacher() {
 					</div>
 				) : (
 					<Table<Material>
-						dataSource={allMaterials.filter(
-							(m) =>
-								!libraryKeyword ||
-								m.title
-									.toLowerCase()
-									.includes(libraryKeyword.toLowerCase()) ||
-								m.description
-									?.toLowerCase()
-									.includes(libraryKeyword.toLowerCase())
-						)}
+						dataSource={allMaterials}
 						columns={[
 							{
 								title: "Tiêu đề",
 								dataIndex: "title",
 								key: "title",
+								width: "30%",
 								render: (text: string, record: Material) => (
 									<div>
 										<div style={{ fontWeight: 500 }}>{text}</div>
@@ -865,41 +953,33 @@ export default function MaterialsTeacher() {
 										)}
 									</div>
 								),
-							}, {
+							},
+							{
 								title: "Người tải lên",
 								key: "uploader",
-								width: 150,
+								width: "20%",
 								render: (_: any, record: Material) => (
-									<div
-										style={{
-											display: "flex",
-											gap: 8,
-											alignItems: "center",
-										}}
-									>
+									<div>
 										<div style={{ fontWeight: 500 }}>
 											{record.uploader?.fullName || "Không rõ"}
 										</div>
+										{record.uploader?.email && (
+											<div style={{ fontSize: 11, color: "#666" }}>
+												{record.uploader.email}
+											</div>
+										)}
 									</div>
 								),
 							},
 							{
 								title: "File",
 								key: "file",
-								width: 150,
+								width: "20%",
 								render: (_: any, record: Material) => (
-									<div
-										style={{
-											display: "flex",
-											gap: 8,
-											alignItems: "center",
-										}}
-									>
+									<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
 										{getFileTypeTag(record.fileType || "")}
 										{record.fileSize && (
-											<Tag color="default">
-												{formatFileSize(record.fileSize)}
-											</Tag>
+											<Tag color="default">{formatFileSize(record.fileSize)}</Tag>
 										)}
 									</div>
 								),
@@ -908,17 +988,16 @@ export default function MaterialsTeacher() {
 								title: "Ngày tải",
 								dataIndex: "uploadedAt",
 								key: "uploadedAt",
-								width: 140,
+								width: "15%",
 								render: (date: string) => dayjs(date).format("DD/MM/YYYY"),
 							},
 						]}
 						rowKey="id"
 						rowSelection={{
 							selectedRowKeys: selectedMaterialIds,
-							onChange: (keys) =>
-								setSelectedMaterialIds(keys as number[]),
+							onChange: (keys) => setSelectedMaterialIds(keys as number[]),
 						}}
-						pagination={{ pageSize: 5 }}
+						pagination={{ pageSize: 6 }}
 						size="small"
 					/>
 				)}

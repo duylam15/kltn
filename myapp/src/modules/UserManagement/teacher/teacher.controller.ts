@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import * as teacherService from "./teacher.service";
-import catchAsync from "@/utils/catchAsync";
-import { sendResponse } from "@/utils/response";
-import ApiError from "@/utils/ApiError";
+import catchAsync from "../../../utils/catchAsync";
+import { sendResponse } from "../../../utils/response";
+import ApiError from "../../../utils/ApiError";
 
 export async function getAllGroupsOfTeacher(req: Request, res: Response) {
     try {

@@ -1,41 +1,53 @@
-// middlewares/requirePermission.ts
-import { Request, Response, NextFunction } from "express";
+import { verifyJwt } from "../utils/jwt";
 import { prisma } from "../prisma/client";
+import { NextFunction, Response } from "express";
 
-export function requirePermission(module: string, action: string) {
-    return async (req: Request, res: Response, next: NextFunction) => {
-        const user = (req as any).user;
-        if (!user) {
-            return res
-                .status(401)
-                .json({ success: false, message: "Unauthorized" });
-        }
+export const requirePermission = (permissions: string[]) => {
+    return async (req: any, res: Response, next: NextFunction) => {
+        try {
+            const token = req.cookies?.access_token;
+            if (!token)
+                return res.status(401).json({ message: "Missing token" });
 
-        const role = await prisma.role.findUnique({
-            where: { id: user.roleId },
-        });
-        if (!role || !role.permissions) {
-            return res
-                .status(403)
-                .json({ success: false, message: "No permissions" });
-        }
+            const { valid, decoded } = verifyJwt(token);
+            if (!valid || !decoded)
+                return res.status(401).json({ message: "Invalid token" });
 
-        const perms = role.permissions as any;
+            const userId = decoded.userId || decoded.id;
 
-        // Nếu role có wildcard ["*"] thì cho qua
-        if (Array.isArray(perms) && perms.includes("*")) {
-            return next();
-        }
+            const user = await prisma.user.findUnique({
+                where: { id: userId },
+                include: {
+                    role: {
+                        include: {
+                            permissions: { include: { permission: true } },
+                        },
+                    },
+                },
+            });
 
-        // Nếu là dạng module-based
-        if (perms.modules) {
-            const modules = perms.modules || {};
-            const allowed = modules[module] || [];
-            if (allowed.includes(action)) {
-                return next();
+            if (!user)
+                return res.status(401).json({ message: "User not found" });
+
+            req.user = user;
+
+            const userPermissions = user.role.permissions.map(
+                (rp: any) => rp.permission.name
+            );
+
+            const ok = permissions.some((p) => userPermissions.includes(p));
+
+            if (!ok) {
+                return res.status(403).json({
+                    message: `Forbidden – require one of: ${permissions.join(
+                        ", "
+                    )}`,
+                });
             }
-        }
 
-        return res.status(403).json({ success: false, message: "Forbidden" });
+            next();
+        } catch (err) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
     };
-}
+};

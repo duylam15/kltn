@@ -13,7 +13,7 @@ router.delete("/:id", roleController.deleteRole);
 // Optional: endpoints thao tác trực tiếp với permissions của role
 router.get("/:id/permissions", roleController.getRoleById); // lấy kèm permissions
 // Nếu muốn assign riêng permissions thì thêm 1 endpoint custom:
-router.post("/:id/permissions", roleController.updateRole);
+router.post("/:id/permissions", roleController.updateRole) ;
 // (truyền body { permissions: [1,2,3] } sẽ chỉ cập nhật permissions)
 
 export default router;

@@ -1,8 +1,7 @@
 fastapi
-tabpfn
-scikit-learn
-pandas
-numpy
 uvicorn[standard]
-torch
+scikit-learn==1.3.2
+numpy<2
+pandas
 python-multipart
+tabpfn==0.1.9

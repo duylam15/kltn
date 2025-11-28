@@ -5,7 +5,7 @@ import {
     getChatRoomByContextSchema, // 👈 Thêm import
 } from "./chat.validation";
 import * as chatController from "./chat.controller";
-import validate from "@/middlewares/validate";
+import validate from "../../middlewares/validate";
 const router = Router();
 
 // 📌 CRUD ChatRoom

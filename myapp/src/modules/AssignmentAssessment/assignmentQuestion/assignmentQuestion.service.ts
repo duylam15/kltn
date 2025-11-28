@@ -1,4 +1,4 @@
-import { prisma } from "@/prisma/client";
+import { prisma } from "../../../prisma/client";
 
 // Gán câu hỏi vào bài tập
 export async function addQuestionToAssignment(

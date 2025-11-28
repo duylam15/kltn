@@ -1,4 +1,4 @@
-import { prisma } from "@/prisma/client";
+import { prisma } from "../../prisma/client";
 
 export async function sendMessageWithNotification(
     roomId: number,
@@ -19,7 +19,7 @@ export async function sendMessageWithNotification(
 
     // 3. Tạo notifications cho họ
     const notifications = await prisma.notification.createMany({
-        data: participants.map((p) => ({
+        data: participants.map((p:any) => ({
             userId: p.userId,
             type: "chat", // 👈 thêm enum NotificationType.chat
             title: `Tin nhắn mới từ ${message.sender.fullName}`,

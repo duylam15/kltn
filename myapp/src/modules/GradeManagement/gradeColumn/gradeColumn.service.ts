@@ -1,4 +1,4 @@
-import { prisma } from "@/prisma/client";
+import { prisma } from "../../../prisma/client";
 import { GradeColumnType, GradeCalculationMethod } from "@prisma/client";
 
 interface CreateColumnData {

@@ -211,6 +211,225 @@ console.log("🔍 HTML user code:", answer.codeAnswer);
                 await browser.close();
             }
 
+            // -------------------- JAVA --------------------
+            else if (answer.language === "java") {
+                const wrapper = `
+import java.util.*;
+public class Main {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        int n = sc.hasNextInt() ? sc.nextInt() : 0;
+
+        ${answer.codeAnswer || ""}
+
+        if (Main.class.getDeclaredMethods() != null) {
+            try {
+                java.lang.reflect.Method f = Main.class.getDeclaredMethod("factorial", int.class);
+                System.out.println(f.invoke(null, n));
+            } catch (Exception e) {}
+        }
+    }
+}
+`;
+                fs.writeFileSync(path.join(workspace, "Main.java"), wrapper);
+
+                for (const tc of answer.question.testCases) {
+                    maxScore += tc.points;
+                    try {
+                        const compile = await execa("docker", [
+                            "run",
+                            "--rm",
+                            "-v",
+                            `${workspace}:/workspace`,
+                            "-w",
+                            "/workspace",
+                            "openjdk:17-alpine",
+                            "javac",
+                            "Main.java",
+                        ]);
+
+                        const run = await execa(
+                            "docker",
+                            [
+                                "run",
+                                "--rm",
+                                "-i",
+                                "-v",
+                                `${workspace}:/workspace`,
+                                "-w",
+                                "/workspace",
+                                "openjdk:17-alpine",
+                                "java",
+                                "Main",
+                            ],
+                            { input: tc.input }
+                        );
+
+                        const got = run.stdout.trim();
+                        const expect = (tc.expectedOutput || "").trim();
+                        const ok = got === expect;
+                        if (ok) score += tc.points;
+
+                        results.push({
+                            id: tc.id,
+                            got,
+                            expect,
+                            status: ok ? "ok" : "fail",
+                        });
+                    } catch (err: any) {
+                        results.push({
+                            id: tc.id,
+                            status: "error",
+                            stderr: err.stderr || err.message,
+                        });
+                    }
+                }
+            }
+
+            // -------------------- C++ --------------------
+            else if (answer.language === "cpp") {
+                const wrapper = `
+#include <bits/stdc++.h>
+using namespace std;
+
+${answer.codeAnswer || ""}
+
+int main() {
+    int n;
+    if (!(cin >> n)) n = 0;
+    cout << factorial(n);
+}
+`;
+                fs.writeFileSync(path.join(workspace, "main.cpp"), wrapper);
+
+                for (const tc of answer.question.testCases) {
+                    maxScore += tc.points;
+                    try {
+                        await execa("docker", [
+                            "run",
+                            "--rm",
+                            "-v",
+                            `${workspace}:/workspace`,
+                            "-w",
+                            "/workspace",
+                            "gcc:latest",
+                            "g++",
+                            "main.cpp",
+                            "-o",
+                            "main",
+                        ]);
+
+                        const run = await execa(
+                            "docker",
+                            [
+                                "run",
+                                "--rm",
+                                "-i",
+                                "-v",
+                                `${workspace}:/workspace`,
+                                "-w",
+                                "/workspace",
+                                "gcc:latest",
+                                "./main",
+                            ],
+                            { input: tc.input }
+                        );
+
+                        const got = run.stdout.trim();
+                        const expect = (tc.expectedOutput || "").trim();
+                        const ok = got === expect;
+                        if (ok) score += tc.points;
+
+                        results.push({
+                            id: tc.id,
+                            got,
+                            expect,
+                            status: ok ? "ok" : "fail",
+                        });
+                    } catch (err: any) {
+                        results.push({
+                            id: tc.id,
+                            status: "error",
+                            stderr: err.stderr || err.message,
+                        });
+                    }
+                }
+            }
+
+            // -------------------- C# --------------------
+            else if (answer.language === "csharp") {
+                const wrapper = `
+using System;
+
+public class Program {
+    ${answer.codeAnswer || ""}
+
+    public static void Main() {
+        string input = Console.ReadLine();
+        int n = int.TryParse(input, out int v) ? v : 0;
+        Console.WriteLine(factorial(n));
+    }
+}
+`;
+
+                fs.writeFileSync(path.join(workspace, "Program.cs"), wrapper);
+
+                for (const tc of answer.question.testCases) {
+                    maxScore += tc.points;
+                    try {
+                        // build
+                        await execa("docker", [
+                            "run",
+                            "--rm",
+                            "-v",
+                            `${workspace}:/workspace`,
+                            "-w",
+                            "/workspace",
+                            "mcr.microsoft.com/dotnet/sdk:8.0",
+                            "sh",
+                            "-c",
+                            "dotnet new console -n app && mv Program.cs app/ && cd app && dotnet build -c Release",
+                        ]);
+
+                        // run
+                        const run = await execa(
+                            "docker",
+                            [
+                                "run",
+                                "--rm",
+                                "-i",
+                                "-v",
+                                `${workspace}/app:/workspace/app`,
+                                "-w",
+                                "/workspace/app",
+                                "mcr.microsoft.com/dotnet/sdk:8.0",
+                                "dotnet",
+                                "bin/Release/net8.0/app.dll",
+                            ],
+                            { input: tc.input }
+                        );
+
+                        const got = run.stdout.trim();
+                        const expect = (tc.expectedOutput || "").trim();
+                        const ok = got === expect;
+                        if (ok) score += tc.points;
+
+                        results.push({
+                            id: tc.id,
+                            got,
+                            expect,
+                            status: ok ? "ok" : "fail",
+                        });
+                    } catch (err: any) {
+                        results.push({
+                            id: tc.id,
+                            status: "error",
+                            stderr: err.stderr || err.message,
+                        });
+                    }
+                }
+            }
+
             // -------------------- JAVASCRIPT --------------------
             else if (answer.language === "javascript") {
                 const wrapper = `
@@ -296,7 +515,12 @@ if (typeof factorial === "function") {
             console.error("❌ Lỗi chấm:", err);
         }
     },
-    { connection: { host: "127.0.0.1", port: 6379 } }
+    {
+        connection: {
+            host: process.env.REDIS_HOST,
+            port: Number(process.env.REDIS_PORT),
+        }
+    }
 );
 
 worker.on("ready", () => console.log("✅ Worker started..."));

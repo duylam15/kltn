@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import * as userService from "./user.service";
-import catchAsync from "@/utils/catchAsync";
-import { sendResponse } from "@/utils/response";
-import ApiError from "@/utils/ApiError";
+import catchAsync from "../../../utils/catchAsync";
+import { sendResponse } from "../../../utils/response";
+import ApiError from "../../../utils/ApiError";
 
 export const create = catchAsync(async (req: Request, res: Response) => {
     // map lại field từ client nếu vẫn gửi full_name:
@@ -43,7 +43,7 @@ export const list = catchAsync(async (req: Request, res: Response) => {
 
     sendResponse(res, {
         success: true,
-        data: result.items.map((u) => ({
+        data: result.items.map((u:any) => ({
             id: u.id,
             email: u.email,
             fullName: u.fullName,

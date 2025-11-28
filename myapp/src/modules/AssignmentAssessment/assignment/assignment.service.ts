@@ -1,5 +1,5 @@
-import { queue } from "@/middlewares/queue";
-import { prisma } from "@/prisma/client";
+import { queue } from "../../../middlewares/queue";
+import { prisma } from "../../../prisma/client";
 import { AssignmentType, ProgrammingLanguage } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
 
@@ -145,7 +145,7 @@ export async function createAssignment(data: {
             description: data.description,
             type: data.type,
             dueDate: data.dueDate ? new Date(data.dueDate) : null,
-            maxScore: 0,
+            maxScore: data.maxScore ?? 10,
             passingScore: data.passingScore ?? null,
             timeLimit: data.timeLimit ?? null,
             maxAttempts: data.maxAttempts ?? 1,

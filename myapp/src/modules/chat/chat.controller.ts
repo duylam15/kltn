@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import * as chatService from "./chat.service";
-import { io } from "@/server";
+import { io } from "../../server";
 
 
 export async function sendMessage(req: Request, res: Response) {

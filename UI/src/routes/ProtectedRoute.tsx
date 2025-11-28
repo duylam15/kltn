@@ -1,36 +1,51 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/authContext";
+import { getRoleRoute, RoleName } from "../constants/roles";
+import LoadingScreen from "../components/LoadingScreen";
 
 interface ProtectedRouteProps {
 	children: React.ReactNode;
-	allowedRoles: number[]; // 100 = student, 101 = teacher, 102 = admin
+	allowedRoles: RoleName[];
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
+	children,
+	allowedRoles
+}) => {
 	const { user, loading } = useAuth();
 	const location = useLocation();
 
-	if (loading) return <p>⏳ Đang kiểm tra đăng nhập...</p>;
-
-	// Nếu chưa đăng nhập
-	if (!user) {
-		return <Navigate to="/login" replace />;
+	// Đang load thông tin user
+	if (loading) {
+		return <LoadingScreen />;
 	}
 
-	const roleId = user.role?.id; // 👈 lấy từ user.role.id
+	// Chưa đăng nhập
+	if (!user) {
+		return <Navigate to="/login" state={{ from: location }} replace />;
+	}
 
-	// Nếu role hợp lệ → cho vào
-	if (roleId && allowedRoles.includes(roleId)) {
+	const userRoleName = user.role?.name?.toLowerCase();
+
+	// Check quyền truy cập
+	const hasAccess = allowedRoles.some(
+		role => role.toLowerCase() === userRoleName
+	);
+
+	if (hasAccess) {
 		return <>{children}</>;
 	}
 
-	// Nếu role không hợp lệ → đưa về đúng trang role
-	if (roleId === 100) return <Navigate to="/student" state={{ from: location }} replace />;
-	if (roleId === 101) return <Navigate to="/teacher" state={{ from: location }} replace />;
-	if (roleId === 102) return <Navigate to="/admin" state={{ from: location }} replace />;
+	// Không có quyền -> redirect về dashboard của role hiện tại
+	const redirectPath = getRoleRoute(userRoleName);
 
-	// fallback
-	return <Navigate to="/login" replace />;
+	return (
+		<Navigate
+			to={redirectPath}
+			state={{ from: location, unauthorized: true }}
+			replace
+		/>
+	);
 };
 
 export default ProtectedRoute;

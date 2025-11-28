@@ -23,6 +23,7 @@ import { useEffect, useState } from "react";
 import api from "../utils/axiosInstance";
 import { Card, Skeleton } from "antd";
 import { useAuth } from "../context/authContext";
+import { API_URL } from "../utils/api";
 
 export default function LayoutDefault() {
   const navigate = useNavigate();
@@ -66,7 +67,7 @@ export default function LayoutDefault() {
     (async () => {
       try {
         const res = await fetch(
-          `http://localhost:4000/api/v1/course-sections/${courseId}`
+          `${API_URL}/api/v1/course-sections/${courseId}`
         );
         const json = await res.json();
         if (mounted) {

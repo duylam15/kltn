@@ -1,6 +1,6 @@
 // src/modules/Profile/profile.controller.ts
 import { Request, Response } from "express";
-import { prisma } from "@/prisma/client";
+import { prisma } from "../../prisma/client";
 import cloudinary from "../../config/cloudinary";
 import { uploadAvatar } from "../../middlewares/uploadAvatar";
 import { mapUserToProfile } from "./profile.dto";

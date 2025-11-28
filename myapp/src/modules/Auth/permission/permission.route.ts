@@ -1,12 +1,41 @@
 import { Router } from "express";
 import * as permissionController from "./permission.controller";
+import { requirePermission } from "../../../middlewares/requirePermission";
 
 const router = Router();
 
-router.post("/", permissionController.createPermission);
-router.get("/", permissionController.listPermissions);
-router.get("/:id", permissionController.getPermission);
-router.put("/:id", permissionController.updatePermission);
-router.delete("/:id", permissionController.deletePermission);
+// Tất cả API cần đăng nhập
+
+// tạo permission → cần quyền "permission.create"
+router.post(
+    "/",
+    requirePermission(["permission.create"]),
+    permissionController.createPermission
+);
+
+// xem danh sách → cần quyền "permission.view"
+router.get(
+    "/",
+    requirePermission(["notification:viewxx", "notification:dexxlete"]),
+    permissionController.listPermissions
+);
+
+// xem 1 permission
+router.get(
+    "/:id",
+    permissionController.getPermission
+);
+
+// update
+router.put(
+    "/:id",
+    permissionController.updatePermission
+);
+
+// delete
+router.delete(
+    "/:id",
+    permissionController.deletePermission
+);
 
 export default router;

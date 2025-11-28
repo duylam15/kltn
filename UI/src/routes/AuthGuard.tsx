@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import axios from "axios";
 
 import type { JSX } from "react/jsx-runtime";
+import instance from "../utils/axiosInstance";
 
 type User = {
 	id: number;
@@ -16,7 +16,7 @@ export default function AuthGuard() {
 	useEffect(() => {
 		async function checkAuth() {
 			try {
-				const res = await axios.get("http://localhost:4000/api/v1/auths/me", {
+				const res = await instance.get("http://localhost:4000/api/v1/auths/me", {
 					withCredentials: true,
 				});
 

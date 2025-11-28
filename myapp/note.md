@@ -2,6 +2,22 @@ npx prisma migrate reset
 npx prisma migrate dev --name add_
 npx prisma generate
 
+npx prisma studio
+
+
+📝 Test Accounts:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Admin:
+  Email: admin@university.edu
+  Password: Password123!
+
+Teacher:
+  Email: teacher1@university.edu
+  Password: Password123!
+
+Student:
+  Email: (check database for student emails)     
+  Password: Password123!
 
 - Tạo câu hỏi-) mhoc-chương(có mức độ:khó, dễ, tb).
 với chức năng tự động thì chọn Môn học-) Chương-> nhập số câu, điểm của câu khó, dễ, tb. Nếu không đủ 10đ thì hiện cảnh báo. khi chọn Chương thì nó lấy random câu hỏi

@@ -6,7 +6,7 @@ import {
     updateStudentSchema,
 } from "./student.validation";
 import * as controller from "./student.controller";
-import validate from "@/middlewares/validate";
+import validate from "../../../middlewares/validate";
 
 // import { authenticate, requireRole } from '../../middlewares/auth';
 
@@ -31,4 +31,8 @@ router.delete("/:id", validate(studentIdParamSchema), controller.remove);
 
 // Lấy thông tin sinh viên theo userId
 router.get("/user/:userId", controller.getStudentByUserId);
+
+// Lấy sinh viên theo studentCode (MSSV)
+router.get("/code/:studentCode", controller.getStudentByStudentCode);
+
 export default router;

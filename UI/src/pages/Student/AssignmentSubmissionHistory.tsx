@@ -89,6 +89,7 @@ interface Assignment {
 	type: string;
 	maxScore: number;
 	dueDate: string | null;
+	showAnswersAfterSubmit: boolean;
 }
 
 export default function AssignmentSubmissionHistory() {
@@ -125,6 +126,12 @@ export default function AssignmentSubmissionHistory() {
 
 			if (assignmentData.success) {
 				setAssignment(assignmentData.data);
+
+				// 🔥 Nếu chưa công bố điểm thì dừng lại, không fetch submissions
+				if (assignmentData.data.showAnswersAfterSubmit === false) {
+					setLoading(false);
+					return;
+				}
 			}
 
 			// Fetch submissions
@@ -220,6 +227,9 @@ export default function AssignmentSubmissionHistory() {
 		return "bg-red-50 border-red-200";
 	};
 
+	// 🔥 Kiểm tra xem có được phép hiển thị đáp án không
+	const canShowAnswers = assignment?.showAnswersAfterSubmit === true;
+
 	const renderAnswerResult = (answer: SubmissionAnswer, index: number) => {
 		const question = answer.question;
 		if (!question) return null;
@@ -231,7 +241,7 @@ export default function AssignmentSubmissionHistory() {
 		return (
 			<div
 				key={answer.id}
-				className={`border rounded-lg p-5 ${answer.isCorrect || (answer.score === answer.maxScore)
+				className={`border rounded-lg p-5 ${answer.isCorrect || answer.score === answer.maxScore
 					? "bg-green-50 border-green-200"
 					: "bg-red-50 border-red-200"
 					}`}
@@ -240,10 +250,12 @@ export default function AssignmentSubmissionHistory() {
 				<div className="flex items-start justify-between mb-4">
 					<div className="flex-1">
 						<div className="flex items-center gap-2 mb-2">
-							<span className={`text-white text-sm font-medium px-3 py-1 rounded ${answer.isCorrect || (answer.score === answer.maxScore)
-								? "bg-green-600"
-								: "bg-red-600"
-								}`}>
+							<span
+								className={`text-white text-sm font-medium px-3 py-1 rounded ${answer.isCorrect || answer.score === answer.maxScore
+									? "bg-green-600"
+									: "bg-red-600"
+									}`}
+							>
 								Câu {index + 1}
 							</span>
 							<span className="text-sm font-medium">
@@ -254,7 +266,7 @@ export default function AssignmentSubmissionHistory() {
 									💻 Code
 								</span>
 							)}
-							{answer.isCorrect || (answer.score === answer.maxScore) ? (
+							{answer.isCorrect || answer.score === answer.maxScore ? (
 								<span className="text-green-600 font-medium">✓ Đúng</span>
 							) : (
 								<span className="text-red-600 font-medium">✗ Sai</span>
@@ -515,6 +527,39 @@ export default function AssignmentSubmissionHistory() {
 		);
 	}
 
+	// 🔥 Nếu chưa công bố điểm → Hiển thị thông báo
+	if (!canShowAnswers) {
+		return (
+			<div className="w-full min-h-screen bg-gray-50 flex items-center justify-center p-6">
+				<div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full text-center">
+					<div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+						<span className="text-4xl">🔒</span>
+					</div>
+					<h2 className="text-2xl font-bold text-gray-900 mb-2">
+						Chưa công bố điểm
+					</h2>
+					<p className="text-gray-600 mb-6">
+						Giảng viên chưa công bố điểm cho bài tập này. Bạn chưa thể xem chi tiết đáp án và lịch sử nộp bài.
+					</p>
+					<div className="space-y-3">
+						<button
+							onClick={() => navigate(`/student/courses/${sectionId}/assignments`)}
+							className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
+						>
+							← Quay lại danh sách bài tập
+						</button>
+						<button
+							onClick={() => window.location.reload()}
+							className="w-full px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
+						>
+							🔄 Làm mới trang
+						</button>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="w-full min-h-screen bg-gray-50">
 			{/* Header */}
@@ -598,6 +643,7 @@ export default function AssignmentSubmissionHistory() {
 													)}
 												</div>
 											</div>
+
 											<div className="text-right">
 												<div className={`text-4xl font-bold ${getScoreColor(selectedSubmission.score || 0, selectedSubmission.maxScore)}`}>
 													{selectedSubmission.score || 0} / {selectedSubmission.maxScore}

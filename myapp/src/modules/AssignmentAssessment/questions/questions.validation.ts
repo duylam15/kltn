@@ -6,6 +6,33 @@ const questionChoiceSchema = z.object({
     order: z.number().int().nonnegative().optional(),
 });
 
+// 🆕 Schema cho API lấy câu hỏi "mình + public"
+export const getUserMineAndPublicSchema = z.object({
+    params: z.object({
+        userId: z.string().regex(/^\d+$/),
+    }),
+    query: z.object({
+        page: z.string().regex(/^\d+$/).optional().default("1"),
+        limit: z.string().regex(/^\d+$/).optional().default("20"),
+
+        // Filter theo loại câu hỏi
+        type: z
+            .enum(["multiple_choice", "essay", "coding", "true_false"])
+            .optional(),
+
+        // Filter theo môn học và chương
+        subjectId: z.string().regex(/^\d+$/).optional(),
+        chapterId: z.string().regex(/^\d+$/).optional(),
+
+        // Filter theo độ khó
+        difficulty: z.enum(["easy", "medium", "hard"]).optional(),
+
+        // Search theo nội dung
+        search: z.string().optional(),
+        q: z.string().optional(),
+    }),
+});
+
 // 🔥 Schema linh hoạt hơn cho choice
 const questionChoiceSchemaFlexible = z.object({
     content: z.string().min(1),
@@ -41,10 +68,20 @@ export const createQuestionSchema = z.object({
         chapterId: z.number().int().positive().optional(),
         difficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
         tags: z.string().max(500).optional(),
+        createdBy: z.number().int().positive(),
 
         // Coding question fields
         language: z
-            .enum(["javascript", "python", "java", "cpp", "csharp", "php", "html", "css"])
+            .enum([
+                "javascript",
+                "python",
+                "java",
+                "cpp",
+                "csharp",
+                "php",
+                "html",
+                "css",
+            ])
             .optional(),
         starterCode: z.string().optional(),
         timeLimit: z.number().int().positive().optional(),
@@ -53,6 +90,9 @@ export const createQuestionSchema = z.object({
         // Relations - Dùng schema flexible
         choices: z.array(questionChoiceSchemaFlexible).optional(),
         testCases: z.array(testCaseSchema).optional(),
+
+        // 🆕 Public flag (mặc định false)
+        isPublic: z.boolean().optional().default(false),
     }),
 });
 
@@ -76,7 +116,16 @@ export const updateQuestionSchema = z.object({
         tags: z.string().max(500).optional().nullable(),
 
         language: z
-            .enum(["javascript", "python", "java", "cpp", "csharp"])
+            .enum([
+                "javascript",
+                "python",
+                "java",
+                "cpp",
+                "csharp",
+                "php",
+                "html",
+                "css",
+            ])
             .optional()
             .nullable(),
         starterCode: z.string().optional().nullable(),
@@ -85,6 +134,9 @@ export const updateQuestionSchema = z.object({
 
         choices: z.array(questionChoiceSchemaFlexible).optional(),
         testCases: z.array(testCaseSchema).optional(),
+
+        // 🆕 Allow toggling public flag
+        isPublic: z.boolean().optional(),
     }),
 });
 
@@ -122,5 +174,49 @@ export const getQuestionByIdSchema = z.object({
 export const deleteQuestionSchema = z.object({
     params: z.object({
         id: z.string().regex(/^\d+$/),
+    }),
+});
+
+// 🆕 Schema cho API lấy câu hỏi theo userId
+export const getQuestionsByUserIdSchema = z.object({
+    params: z.object({
+        userId: z.string().regex(/^\d+$/),
+    }),
+    query: z.object({
+        page: z.string().regex(/^\d+$/).optional().default("1"),
+        limit: z.string().regex(/^\d+$/).optional().default("20"),
+
+        // Filter theo loại câu hỏi
+        type: z
+            .enum(["multiple_choice", "essay", "coding", "true_false"])
+            .optional(),
+
+        // Filter theo môn học
+        subjectId: z.string().regex(/^\d+$/).optional(),
+
+        // Filter theo chương
+        chapterId: z.string().regex(/^\d+$/).optional(),
+
+        // Filter theo độ khó
+        difficulty: z.enum(["easy", "medium", "hard"]).optional(),
+
+        // Search theo nội dung
+        search: z.string().optional(),
+        q: z.string().optional(),
+    }),
+});
+
+// 🆕 Schema cho API lấy môn học của user
+export const getUserSubjectsSchema = z.object({
+    params: z.object({
+        userId: z.string().regex(/^\d+$/),
+    }),
+});
+
+// 🆕 Schema cho API lấy chương theo môn học của user
+export const getUserChaptersBySubjectSchema = z.object({
+    params: z.object({
+        userId: z.string().regex(/^\d+$/),
+        subjectId: z.string().regex(/^\d+$/),
     }),
 });

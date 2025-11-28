@@ -23,6 +23,7 @@ import { useEffect, useState } from "react";
 import api from "../utils/axiosInstance";
 import { Card, Skeleton } from "antd";
 import { useAuth } from "../context/authContext";
+import { API_URL } from "../utils/api";
 
 export default function LayoutTeacher() {
   const navigate = useNavigate();
@@ -34,6 +35,7 @@ export default function LayoutTeacher() {
     { to: "/teacher", label: "Màn hình chính", icon: Home, end: true },
     { to: "/teacher/materials", label: "Tài liệu", icon: BookOpen },
     { to: "/teacher/assignments", label: "Bài tập", icon: BookOpen },
+    { to: "/teacher/questions", label: "Câu hỏi", icon: BookOpen },
   ];
 
   const { user, logout } = useAuth();
@@ -65,7 +67,7 @@ export default function LayoutTeacher() {
     (async () => {
       try {
         const res = await fetch(
-          `http://localhost:4000/api/v1/course-sections/${courseId}`
+          `${API_URL}/api/v1/course-sections/${courseId}`
         );
         const json = await res.json();
         if (mounted) {

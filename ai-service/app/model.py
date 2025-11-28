@@ -11,6 +11,7 @@ y_train = df["label"]
 
 # Khởi tạo và train model
 clf = TabPFNClassifier()
+
 clf.fit(X_train, y_train)
 
 def predict_label(input_data: dict):

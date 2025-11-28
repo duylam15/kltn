@@ -6,7 +6,7 @@ import {
     updateTermSchema,
 } from "./term.validation";
 import * as controller from "./term.controller";
-import validate from "@/middlewares/validate";
+import validate from "../../../middlewares/validate";
 
 const router = Router();
 

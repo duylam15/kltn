@@ -3,13 +3,13 @@ import * as attendanceService from "./attendance.service";
 import QRCode from "qrcode";
 import path from "path";
 import fs from "fs";
-import { prisma } from "@/prisma/client";
 import { randomBytes } from "crypto";
 import { getClientIp, getIpGeo, haversineMeters } from "../../../common/net.utils";
 import { verify } from "../../../common/hmac";
 import { UAParser } from "ua-parser-js";
 import crypto from "crypto";
 import { totp } from "otplib";  
+import { prisma } from "../../../prisma/client";
 
 const SECRET = process.env.ATTENDANCE_HMAC_SECRET || "dev-secret";
 

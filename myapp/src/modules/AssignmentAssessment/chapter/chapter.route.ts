@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as controller from "./chapter.controller";
-import validate from "@/middlewares/validate";
+import validate from "../../../middlewares/validate";
 import {
     createChapterSchema,
     listChapterQuerySchema,

@@ -23,7 +23,7 @@ import {
   PictureOutlined,
   PlusOutlined,
 } from "@ant-design/icons";
-import { useAuth } from "../../hooks/useAuth";
+import { useAuth } from "../../context/authContext";
 
 const { Text, Title } = Typography;
 const { Search } = Input;

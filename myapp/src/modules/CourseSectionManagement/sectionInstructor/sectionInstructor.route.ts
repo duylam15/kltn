@@ -6,8 +6,8 @@ import {
     updateSectionInstructorSchema,
 } from "./sectionInstructor.validation";
 import * as controller from "./sectionInstructor.controller";
-import validate from "@/middlewares/validate";
-import { requireAuth } from "@/middlewares/requireAuth";
+import validate from "../../../middlewares/validate";
+import { requireAuth } from "../../../middlewares/requireAuth";
 
 const router = Router();
 

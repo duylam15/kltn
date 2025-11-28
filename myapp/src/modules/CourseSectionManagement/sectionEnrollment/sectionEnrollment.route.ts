@@ -6,7 +6,7 @@ import {
     updateSectionEnrollmentSchema,
 } from "./sectionEnrollment.validation";
 import * as controller from "./sectionEnrollment.controller";
-import validate from "@/middlewares/validate";
+import validate from "../../../middlewares/validate";
 
 const router = Router();
 

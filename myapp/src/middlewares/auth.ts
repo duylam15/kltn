@@ -11,16 +11,31 @@ export function verifyAccessToken(
     next: NextFunction
 ) {
     const token = req.cookies["access_token"];
+
     if (!token) {
-        return res.status(401).json({ success: false, message: "No token" });
+        return res.status(401).json({
+            success: false,
+            message: "No token",
+            code: "NO_TOKEN",
+        });
     }
 
     const { valid, expired, decoded } = verifyJwt(token);
 
+    // Nếu token hết hạn, trả về status 401 với flag expired
+    if (expired) {
+        return res.status(401).json({
+            success: false,
+            message: "Token expired",
+            code: "TOKEN_EXPIRED", // Frontend sẽ dựa vào này để refresh
+        });
+    }
+
     if (!valid) {
         return res.status(401).json({
             success: false,
-            message: expired ? "Token expired" : "Invalid token",
+            message: "Invalid token",
+            code: "INVALID_TOKEN",
         });
     }
 

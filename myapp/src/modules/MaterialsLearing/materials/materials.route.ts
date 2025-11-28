@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as controller from "./materials.controller";
-import upload from "@/middlewares/upload";
+import upload from "../../../middlewares/upload";
 
 const router = Router();
 
