@@ -6,6 +6,33 @@ const questionChoiceSchema = z.object({
     order: z.number().int().nonnegative().optional(),
 });
 
+// 🆕 Schema cho API lấy câu hỏi "mình + public"
+export const getUserMineAndPublicSchema = z.object({
+    params: z.object({
+        userId: z.string().regex(/^\d+$/),
+    }),
+    query: z.object({
+        page: z.string().regex(/^\d+$/).optional().default("1"),
+        limit: z.string().regex(/^\d+$/).optional().default("20"),
+
+        // Filter theo loại câu hỏi
+        type: z
+            .enum(["multiple_choice", "essay", "coding", "true_false"])
+            .optional(),
+
+        // Filter theo môn học và chương
+        subjectId: z.string().regex(/^\d+$/).optional(),
+        chapterId: z.string().regex(/^\d+$/).optional(),
+
+        // Filter theo độ khó
+        difficulty: z.enum(["easy", "medium", "hard"]).optional(),
+
+        // Search theo nội dung
+        search: z.string().optional(),
+        q: z.string().optional(),
+    }),
+});
+
 // 🔥 Schema linh hoạt hơn cho choice
 const questionChoiceSchemaFlexible = z.object({
     content: z.string().min(1),
@@ -45,7 +72,16 @@ export const createQuestionSchema = z.object({
 
         // Coding question fields
         language: z
-            .enum(["javascript", "python", "java", "cpp", "csharp", "php", "html", "css"])
+            .enum([
+                "javascript",
+                "python",
+                "java",
+                "cpp",
+                "csharp",
+                "php",
+                "html",
+                "css",
+            ])
             .optional(),
         starterCode: z.string().optional(),
         timeLimit: z.number().int().positive().optional(),
@@ -54,6 +90,9 @@ export const createQuestionSchema = z.object({
         // Relations - Dùng schema flexible
         choices: z.array(questionChoiceSchemaFlexible).optional(),
         testCases: z.array(testCaseSchema).optional(),
+
+        // 🆕 Public flag (mặc định false)
+        isPublic: z.boolean().optional().default(false),
     }),
 });
 
@@ -95,6 +134,9 @@ export const updateQuestionSchema = z.object({
 
         choices: z.array(questionChoiceSchemaFlexible).optional(),
         testCases: z.array(testCaseSchema).optional(),
+
+        // 🆕 Allow toggling public flag
+        isPublic: z.boolean().optional(),
     }),
 });
 
@@ -135,7 +177,6 @@ export const deleteQuestionSchema = z.object({
     }),
 });
 
-
 // 🆕 Schema cho API lấy câu hỏi theo userId
 export const getQuestionsByUserIdSchema = z.object({
     params: z.object({
@@ -152,10 +193,10 @@ export const getQuestionsByUserIdSchema = z.object({
 
         // Filter theo môn học
         subjectId: z.string().regex(/^\d+$/).optional(),
-        
+
         // Filter theo chương
         chapterId: z.string().regex(/^\d+$/).optional(),
-        
+
         // Filter theo độ khó
         difficulty: z.enum(["easy", "medium", "hard"]).optional(),
 

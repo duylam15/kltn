@@ -1,5 +1,5 @@
-import api from '../utils/api';
 import { User, ApiResponse } from '../types';
+import instance from '../utils/axiosInstance';
 
 export interface LoginRequest {
   email: string;
@@ -18,27 +18,27 @@ export interface RegisterRequest {
 
 export const authService = {
   login: async (credentials: LoginRequest): Promise<ApiResponse<{ user: User; token: string }>> => {
-    const response = await api.post('/auth/login', credentials);
+    const response = await instance.post('/auth/login', credentials);
     return response.data;
   },
 
   register: async (data: RegisterRequest): Promise<ApiResponse<User>> => {
-    const response = await api.post('/auth/register', data);
+    const response = await instance.post('/auth/register', data);
     return response.data;
   },
 
   getProfile: async (): Promise<ApiResponse<User>> => {
-    const response = await api.get('/users/profile');
+    const response = await instance.get('/users/profile');
     return response.data;
   },
 
   updateProfile: async (data: Partial<User>): Promise<ApiResponse<User>> => {
-    const response = await api.put('/users/profile', data);
+    const response = await instance.put('/users/profile', data);
     return response.data;
   },
 
   changePassword: async (oldPassword: string, newPassword: string): Promise<ApiResponse<void>> => {
-    const response = await api.put('/users/change-password', { oldPassword, newPassword });
+    const response = await instance.put('/users/change-password', { oldPassword, newPassword });
     return response.data;
   },
 };

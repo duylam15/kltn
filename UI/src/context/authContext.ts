@@ -1,6 +1,6 @@
-// context/AuthContext.tsx
+// context/AuthContext. tsx
 import React, { createContext, useContext, useEffect, useState } from "react";
-import axios from "axios";
+import instance from "../utils/axiosInstance";
 
 type Permission = { id: number; name: string };
 
@@ -9,6 +9,7 @@ type Role = {
     name: string;
     permissions: Permission[];
 };
+
 type Teacher = {
     id: number;
     userId: number;
@@ -27,6 +28,7 @@ type Student = {
     major: string;
     user?: User;
 };
+
 export interface User {
     id: number;
     email: string;
@@ -37,12 +39,11 @@ export interface User {
     student?: Student | null;
 }
 
-
 interface AuthContextType {
     user: User | null;
     setUser: React.Dispatch<React.SetStateAction<User | null>>;
     loading: boolean;
-    login: (studentCode: string, password: string) => Promise<void>;
+    login: (studentCode: string, password: string) => Promise<User>; // ✅ Trả về User
     logout: () => Promise<void>;
     hasPermission: (permission: string) => boolean;
 }
@@ -55,41 +56,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
 
+    // ✅ Load user khi app khởi động
     useEffect(() => {
-        axios
-            .get("http://localhost:4000/api/v1/auths/me", {
-                withCredentials: true,  
+        instance
+            .get("/auths/me")
+            .then((res: any) => {
+                console.log("✅ User loaded from cookie:", res.user);
+                setUser(res.user);
             })
-            .then((res) => setUser(res.data.user))
-            .catch(() => setUser(null))
+            .catch((err) => {
+                console.log(
+                    "⚠️ No valid session:",
+                    err.response?.data?.message
+                );
+                setUser(null);
+            })
             .finally(() => setLoading(false));
     }, []);
 
-    const login = async (studentCode: string, password: string) => {
-        await axios.post(
-            "http://localhost:4000/api/v1/auths/login",
-            { studentCode, password },
-            { withCredentials: true }
-        );
-        console.log("aaaaaaaaa");
-        const res = await axios.get("http://localhost:4000/api/v1/auths/me", {
-            withCredentials: true,
-        });
-        console.log("res", res.data.user);
+    // ✅ Login và trả về user
+    const login = async (
+        studentCode: string,
+        password: string
+    ): Promise<User> => {
+        // Gọi login API
+        await instance.post("/auths/login", { studentCode, password });
 
-        setUser(res.data.user);
-        console.log(user);
+        // Fetch user info
+        const res: any = await instance.get("/auths/me");
+        const userData = res.user;
+
+        console.log("✅ Login successful:", userData);
+        setUser(userData);
+
+        return userData; // ✅ Trả về user để component dùng
     };
 
+    // ✅ Logout
     const logout = async () => {
-        await axios.post(
-            "http://localhost:4000/api/v1/auths/logout",
-            {},
-            { withCredentials: true }
-        );
-        setUser(null);
+        try {
+            await instance.post("/auths/logout");
+            console.log("✅ Logged out");
+        } catch (err) {
+            console.error("❌ Logout error:", err);
+        } finally {
+            setUser(null);
+        }
     };
 
+    // ✅ Check permission
     const hasPermission = (permission: string) =>
         user?.role?.permissions?.some((p) => p.name === permission) ?? false;
 

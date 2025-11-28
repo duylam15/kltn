@@ -527,7 +527,12 @@ if (typeof factorial === "function") {
             console.error("❌ Lỗi chấm:", err);
         }
     },
-    { connection: { host: "127.0.0.1", port: 6379 } }
+    {
+        connection: {
+            host: process.env.REDIS_HOST,
+            port: Number(process.env.REDIS_PORT),
+        }
+    }
 );
 
 worker.on("ready", () => console.log("✅ Worker started..."));

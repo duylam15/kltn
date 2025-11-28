@@ -1,10 +1,11 @@
+// axiosInstance.ts
 import axios from "axios";
 
 const baseUrl = "http://localhost:4000/api/v1";
 
 const instance = axios.create({
     baseURL: baseUrl,
-    withCredentials: true, // ✅ Quan trọng: gửi cookie tự động
+    withCredentials: true,
 });
 
 let isRefreshing = false;
@@ -37,19 +38,14 @@ instance.interceptors.response.use(
             message: error.response?.data?.message,
         });
 
-        // Kiểm tra nếu là lỗi 401 và token hết hạn
+        // ✅ Kiểm tra nếu là lỗi 401 (BẤT KỲ CODE NÀO)
         if (
             error.response?.status === 401 &&
-            error.response?.data?.code === "TOKEN_EXPIRED" &&
-            !originalRequest._retry
+            !originalRequest._retry &&
+            originalRequest.url !== "/auths/refresh_token" && // ✅ Không retry chính refresh endpoint
+            originalRequest.url !== "/auths/login" && // ✅ Không retry login
+            originalRequest.url !== "/auths/logout" // ✅ Không retry logout
         ) {
-            // Tránh refresh lại chính endpoint refresh
-            if (originalRequest.url === "/auths/refresh_token") {
-                console.log("❌ Refresh token cũng hết hạn, logout...");
-                await handleLogout();
-                return Promise.reject(error);
-            }
-
             originalRequest._retry = true;
 
             // Nếu đang refresh, thêm vào queue
@@ -58,29 +54,28 @@ instance.interceptors.response.use(
                 return new Promise((resolve, reject) => {
                     failedQueue.push({ resolve, reject });
                 })
-                    .then(() => {
-                        return instance(originalRequest);
-                    })
-                    .catch((err) => {
-                        return Promise.reject(err);
-                    });
+                    .then(() => instance(originalRequest))
+                    .catch((err) => Promise.reject(err));
             }
 
             isRefreshing = true;
-            console.log("🔄 Bắt đầu refresh token...");
+            console.log("🔄 Bắt đầu refresh token.. .");
 
             try {
-                const response = await instance.post("/auths/refresh_token");
+                // ✅ Gọi refresh endpoint
+                const refreshRes:any = await instance.post("/auths/refresh_token");
 
-                if (response?.success) {
-                    console.log("✅ Refresh token thành công!");
+                // ✅ Check response
+                if (refreshRes?.success) {
+                    console.log("✅ Refresh token thành công!", refreshRes);
                     isRefreshing = false;
                     processQueue(null);
 
                     // Retry request ban đầu
                     return instance(originalRequest);
                 } else {
-                    throw new Error("Refresh failed");
+                    console.error("❌ Refresh response invalid:", refreshRes);
+                    throw new Error("Refresh failed: Invalid response");
                 }
             } catch (refreshError: any) {
                 console.error("❌ Refresh token thất bại:", refreshError);
@@ -110,7 +105,7 @@ async function handleLogout() {
     sessionStorage.clear();
 
     // Redirect về login
-    console.log("tro ve dang nhap");
+    console.log("🚪 Redirecting to login...");
     if (window.location.pathname !== "/login") {
         window.location.href = "/login";
     }

@@ -3,19 +3,24 @@
         "target": "ES2022",
         "lib": ["ES2022", "DOM", "DOM.Iterable"],
         "jsx": "react-jsx",
+
         "module": "ESNext",
-        "moduleResolution": "node",
-        "skipLibCheck": false,
+        "moduleResolution": "bundler",
+
+        "skipLibCheck": true,
         "strict": false,
-        "noImplicitAny": false,
-        "noUncheckedIndexedAccess": false,
+
         "allowJs": true,
         "checkJs": false,
         "noEmit": true,
-        "esModuleInterop": true,
-        "allowSyntheticDefaultImports": true
-    },
-    "include": ["src"],
-      "types": ["react", "react-dom", "node"]
 
+        "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true,
+
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+
+        "types": ["react", "react-dom", "node"]
+    },
+    "include": ["src"]
 }

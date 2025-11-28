@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as ctl from "./notification.controller";
-import { authenticate } from "@/middlewares/authenticate";
+import { authenticate } from "../../middlewares/authenticate";
 
 const router = Router();
 router.use(authenticate);

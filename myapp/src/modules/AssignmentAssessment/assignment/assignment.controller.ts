@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import * as service from "./assignment.service";
-import { prisma } from "@/prisma/client";
-import { jsonSafe } from "@/utils/bigint";
+import { prisma } from "../../../prisma/client";
+import { jsonSafe } from "../../../utils/bigint";
 import axios from "axios";
 import FormData from "form-data";
 import fs from "fs";

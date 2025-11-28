@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as controller from "./gradeColumn.controller";
 import * as validation from "./gradeColumn.validation";
-import validate from "@/middlewares/validate";
+import validate from "../../../middlewares/validate";
 
 const router = Router();
 

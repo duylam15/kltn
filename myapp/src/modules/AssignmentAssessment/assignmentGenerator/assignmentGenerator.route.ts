@@ -4,7 +4,7 @@ import {
     previewGeneratedQuestionsSchema,
 } from "./assignmentGenerator.validation";
 import * as controller from "./assignmentGenerator.controller";
-import validate from "@/middlewares/validate";
+import validate from "../../../middlewares/validate";
 
 const router = Router();
 

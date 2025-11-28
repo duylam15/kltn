@@ -1,6 +1,6 @@
-import ApiError from "@/utils/ApiError";
+import ApiError from "../../../utils/ApiError";
 import type { InstructorRole } from "@prisma/client";
-import { prisma } from "@/prisma/client";
+import { prisma } from "../../../prisma/client";
 
 export const assignSubjectToTeacher = async (data: {
     subjectId: number;

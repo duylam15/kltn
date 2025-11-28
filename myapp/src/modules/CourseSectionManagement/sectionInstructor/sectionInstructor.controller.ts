@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import * as sectionInstructorService from "./sectionInstructor.service";
-import catchAsync from "@/utils/catchAsync";
-import { sendResponse } from "@/utils/response";
-import ApiError from "@/utils/ApiError";
-import { prisma } from "@/prisma/client";
+import catchAsync from "../../../utils/catchAsync";
+import { sendResponse } from "../../../utils/response";
+import ApiError from "../../../utils/ApiError";
+import { prisma } from "../../../prisma/client";
 
 export const create = catchAsync(async (req: Request, res: Response) => {
     const sectionInstructor =

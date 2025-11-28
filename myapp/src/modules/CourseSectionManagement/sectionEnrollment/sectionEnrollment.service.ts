@@ -1,5 +1,5 @@
-import { prisma } from "@/prisma/client";
-import ApiError from "@/utils/ApiError";
+import { prisma } from "../../../prisma/client";
+import ApiError from "../../../utils/ApiError";
 import type { EnrollmentStatus } from "@prisma/client";
 
 export const createSectionEnrollment = async (data: {

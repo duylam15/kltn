@@ -1,11 +1,11 @@
 import { NextFunction, Request, Response } from "express";
 import * as materialService from "./materials.service";
-import { prisma } from "@/prisma/client";
-import { jsonSafe } from "@/utils/bigint";
+import { prisma } from "../../../prisma/client";
+import { jsonSafe } from "../../../utils/bigint";
 import { log } from "node:console";
-import catchAsync from "@/utils/catchAsync";
-import ApiError from "@/utils/ApiError";
-import { sendResponse } from "@/utils/response";
+import catchAsync from "../../../utils/catchAsync";
+import ApiError from "../../../utils/ApiError";
+import { sendResponse } from "../../../utils/response";
 
 export async function getMaterials(req: Request, res: Response) {
     try {

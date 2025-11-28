@@ -1,5 +1,5 @@
-import { prisma } from "@/prisma/client";
-import ApiError from "@/utils/ApiError";
+import { prisma } from "../../../prisma/client";
+import ApiError from "../../../utils/ApiError";
 
 export const createSubject = async (data: {
     subjectCode: string;

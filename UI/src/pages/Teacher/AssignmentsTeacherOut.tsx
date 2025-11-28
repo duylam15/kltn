@@ -21,6 +21,7 @@ import {
   Statistic,
   InputNumber,
   Switch,
+  Alert,
 } from "antd";
 import {
   ReloadOutlined,
@@ -93,6 +94,7 @@ type Question = {
   points?: number;
   subjectId?: number;
   chapterId?: number;
+  isPublic?: boolean;
   subject?: {
     id: number;
     subjectCode: string;
@@ -102,6 +104,10 @@ type Question = {
     id: number;
     chapterCode: string;
     chapterName: string;
+  };
+  createdByUser?: {
+    id: number;
+    fullName: string;
   };
 };
 
@@ -151,6 +157,12 @@ export default function AssignmentsTeacherOut() {
   const [autoGenForm] = Form.useForm<any>();
   const [generatingQuestions, setGeneratingQuestions] = useState(false);
 
+  // 🔥 Quick add modal states
+  const [quickAddModalOpen, setQuickAddModalOpen] = useState(false);
+  const [quickAddForm] = Form.useForm<any>();
+  const [addingQuestions, setAddingQuestions] = useState(false);
+  const [quickAddChapters, setQuickAddChapters] = useState<Chapter[]>([]);
+
   const [filterPublic, setFilterPublic] = useState<boolean | null>(null);
   const [filterType, setFilterType] = useState<string | null>(null);
 
@@ -167,8 +179,11 @@ export default function AssignmentsTeacherOut() {
   }, []);
 
   useEffect(() => {
-    fetchQuestions();
-  }, [selectedSubjectId, selectedChapterId, selectedDifficulty, selectedType]);
+    // 🔥 Fetch mine + public when modal is open
+    if (modalOpen && userId) {
+      fetchQuestionsMineAndPublic();
+    }
+  }, [selectedSubjectId, selectedChapterId, selectedDifficulty, selectedType, modalOpen]);
 
   useEffect(() => {
     if (selectedSubjectId) {
@@ -257,21 +272,30 @@ export default function AssignmentsTeacherOut() {
     }
   }
 
-  async function fetchChaptersBySubject(subjectId: number) {
+  async function fetchChaptersBySubject(subjectId: number): Promise<Chapter[]> {
     try {
       const res = await axios.get<{ success: boolean; data: Chapter[] }>(
         `${API_BASE}/questions/${subjectId}/chapters`
       );
       if (res.data.success) {
         setChapters(res.data.data || []);
+        return res.data.data || []; // 🔥 Thêm return
       }
+      return []; // 🔥 Thêm return khi không success
     } catch {
       toast.error("Không tải được danh sách chương");
       setChapters([]);
+      return []; // 🔥 Thêm return khi error
     }
   }
 
-  async function fetchQuestions() {
+  // 🔥 Fetch mine + public questions
+  async function fetchQuestionsMineAndPublic() {
+    if (!userId) {
+      toast.error("Không tìm thấy thông tin người dùng");
+      return;
+    }
+
     try {
       setLoadingQuestions(true);
       const params: any = { page: 1, limit: 1000 };
@@ -283,17 +307,15 @@ export default function AssignmentsTeacherOut() {
 
       const res = await axios.get<{
         success: boolean;
-        data: Question[] | { items: Question[] };
-      }>(`${API_BASE}/questions`, { params });
+        data: { items: Question[] };
+      }>(`${API_BASE}/questions/user/${userId}/mine-and-public`, { params });
 
       if (res.data.success) {
-        const items = Array.isArray(res.data.data)
-          ? res.data.data
-          : (res.data.data as any).items || [];
+        const items = (res.data.data as any).items || res.data.data || [];
         setQuestions(items);
       }
     } catch (error) {
-      console.error("Error fetching questions:", error);
+      console.error("Error fetching mine & public questions:", error);
       toast.error("Không tải được danh sách câu hỏi");
     } finally {
       setLoadingQuestions(false);
@@ -519,6 +541,13 @@ export default function AssignmentsTeacherOut() {
     setAutoGenModalOpen(true);
   };
 
+  // 🔥 Open quick add modal
+  const openQuickAddModal = () => {
+    quickAddForm.resetFields();
+    setQuickAddChapters([]);
+    setQuickAddModalOpen(true);
+  };
+
   const handleAutoGenerate = async () => {
     try {
       const values = await autoGenForm.validateFields();
@@ -548,6 +577,92 @@ export default function AssignmentsTeacherOut() {
       toast.error(err?.response?.data?.message || "Không thể tự động tạo câu hỏi");
     } finally {
       setGeneratingQuestions(false);
+    }
+  };
+
+  // 🔥 Handle quick add questions
+  const handleQuickAddQuestions = async () => {
+    try {
+      const values = await quickAddForm.validateFields();
+      if (!userId) {
+        toast.error("Không tìm thấy thông tin người dùng");
+        return;
+      }
+
+      setAddingQuestions(true);
+
+      // Fetch all questions from subject (mine + public)
+      const params: any = { page: 1, limit: 10000 };
+      if (values.subjectId) params.subjectId = values.subjectId;
+
+      const res = await axios.get<{
+        success: boolean;
+        data: { items: Question[] };
+      }>(`${API_BASE}/questions/user/${userId}/mine-and-public`, { params });
+
+      if (!res.data.success) {
+        toast.error("Không thể tải danh sách câu hỏi");
+        return;
+      }
+
+      const allQuestions = (res.data.data as any).items || res.data.data || [];
+      const chapterRules = values.chapterRules || [];
+      const selectedQuestionIds: number[] = [];
+
+      // Process each chapter rule
+      for (const rule of chapterRules) {
+        const chapterId = rule.chapterId;
+        const chapterQuestions = allQuestions.filter(
+          (q: Question) => q.chapterId === chapterId
+        );
+
+        // Process each difficulty
+        for (const difficulty of ['easy', 'medium', 'hard']) {
+          const difficultyRule = rule[difficulty];
+          if (!difficultyRule || !difficultyRule.count) continue;
+
+          const count = Number(difficultyRule.count);
+          const pointPerQuestion = Number(difficultyRule.pointPerQuestion || 1);
+
+          // Filter by difficulty and points
+          const filteredQuestions = chapterQuestions.filter(
+            (q: Question) =>
+              q.difficulty === difficulty &&
+              q.points === pointPerQuestion &&
+              !tempSelectedQuestionIds.includes(q.id) // Don't select already selected
+          );
+
+          // Shuffle and take required count
+          const shuffled = filteredQuestions.sort(() => 0.5 - Math.random());
+          const selected = shuffled.slice(0, count);
+
+          selected.forEach((q: Question) => {
+            if (!selectedQuestionIds.includes(q.id)) {
+              selectedQuestionIds.push(q.id);
+            }
+          });
+        }
+      }
+
+      if (selectedQuestionIds.length === 0) {
+        toast.error("Không tìm thấy câu hỏi phù hợp với tiêu chí đã chọn");
+        return;
+      }
+
+      // Add to selection
+      setTempSelectedQuestionIds((prev) => [...prev, ...selectedQuestionIds]);
+
+      toast.success(`Đã thêm ${selectedQuestionIds.length} câu hỏi vào bài tập`);
+      setQuickAddModalOpen(false);
+      quickAddForm.resetFields();
+      setQuickAddChapters([]);
+
+    } catch (err: any) {
+      if (err?.errorFields) return;
+      console.error("Quick add error:", err);
+      toast.error(err?.response?.data?.message || "Lỗi khi thêm câu hỏi nhanh");
+    } finally {
+      setAddingQuestions(false);
     }
   };
 
@@ -766,7 +881,7 @@ export default function AssignmentsTeacherOut() {
             <FileQuestion /> Quản lý Bài tập
           </div>
         </Title>
-     
+
         <div style={{ display: "flex", gap: 8 }}>
           <Select
             allowClear
@@ -826,6 +941,7 @@ export default function AssignmentsTeacherOut() {
         />
       )}
 
+      {/* Modal thêm/sửa - Tiếp theo ở phần 2 */}
       {/* Modal thêm/sửa */}
       <Modal
         title={editing ? "Sửa thông tin bài tập" : "Thêm bài tập mới"}
@@ -981,8 +1097,18 @@ export default function AssignmentsTeacherOut() {
 
           <Col span={14}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <Title level={5} style={{ margin: 0 }}>Câu hỏi</Title>
+              <Title level={5} style={{ margin: 0 }}>Câu hỏi (Của bạn + Public)</Title>
               <Space>
+                {/* 🔥 Quick Add Button */}
+                <Button
+                  icon={<ThunderboltOutlined />}
+                  size="small"
+                  type="primary"
+                  ghost
+                  onClick={openQuickAddModal}
+                >
+                  Thêm câu hỏi nhanh
+                </Button>
                 <Button
                   icon={<ClearOutlined />}
                   size="small"
@@ -1094,6 +1220,8 @@ export default function AssignmentsTeacherOut() {
               ) : (
                 filteredQuestions.map((q) => {
                   const checked = tempSelectedQuestionIds.includes(q.id);
+                  const isPublicQuestion = q.isPublic && q.createdByUser?.id !== userId;
+
                   return (
                     <label
                       key={q.id}
@@ -1142,6 +1270,11 @@ export default function AssignmentsTeacherOut() {
                                 {q.chapter.chapterCode}
                               </Tag>
                             )}
+                            {isPublicQuestion && (
+                              <Tag color="green" icon={<GlobalOutlined />}>
+                                Public - {q.createdByUser?.fullName}
+                              </Tag>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1152,6 +1285,130 @@ export default function AssignmentsTeacherOut() {
             </div>
           </Col>
         </Row>
+      </Modal>
+
+      {/* 🔥 Modal thêm câu hỏi nhanh (Quick Add) */}
+      <Modal
+        title={
+          <Space>
+            <ThunderboltOutlined />
+            Thêm câu hỏi nhanh
+          </Space>
+        }
+        open={quickAddModalOpen}
+        onCancel={() => {
+          setQuickAddModalOpen(false);
+          quickAddForm.resetFields();
+          setQuickAddChapters([]);
+        }}
+        onOk={handleQuickAddQuestions}
+        okText="Thêm câu hỏi"
+        cancelText="Hủy"
+        confirmLoading={addingQuestions}
+        width={800}
+        centered
+      >
+        <Alert
+          message="Hướng dẫn"
+          description="Chọn môn học và cấu hình số lượng câu hỏi theo chương, độ khó và điểm. Hệ thống sẽ tự động chọn ngẫu nhiên các câu hỏi phù hợp từ câu hỏi của bạn và câu hỏi công khai."
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+
+        <Form form={quickAddForm} layout="vertical">
+          <Form.Item
+            label="Môn học"
+            name="subjectId"
+            rules={[{ required: true, message: "Vui lòng chọn môn học" }]}
+          >
+            <Select
+              placeholder="Chọn môn học"
+              onChange={async (value) => {
+                const chaps = await fetchChaptersBySubject(value);
+                setQuickAddChapters(chaps);
+                quickAddForm.setFieldValue("chapterRules", []);
+              }}
+            >
+              {questionSubjects.map((s) => (
+                <Option key={s.id} value={s.id}>
+                  {s.subjectCode} - {s.subjectName}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Divider>Cấu hình câu hỏi theo chương</Divider>
+
+          <Form.List name="chapterRules">
+            {(fields, { add, remove }) => (
+              <>
+                {fields.map(({ key, name, ...restField }) => (
+                  <Card key={key} size="small" style={{ marginBottom: 12 }}>
+                    <Row gutter={16}>
+                      <Col span={24}>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "chapterId"]}
+                          label="Chương"
+                          rules={[{ required: true }]}
+                        >
+                          <Select placeholder="Chọn chương">
+                            {quickAddChapters.map((c) => (
+                              <Option key={c.id} value={c.id}>
+                                {c.chapterCode} - {c.chapterName}
+                              </Option>
+                            ))}
+                          </Select>
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Row gutter={8}>
+                      <Col span={8}>
+                        <Text strong>Dễ:</Text>
+                        <Form.Item {...restField} name={[name, "easy", "count"]} label="Số câu">
+                          <InputNumber min={0} style={{ width: "100%" }} placeholder="0" />
+                        </Form.Item>
+                        <Form.Item {...restField} name={[name, "easy", "pointPerQuestion"]} label="Điểm/câu">
+                          <InputNumber min={0} step={0.5} style={{ width: "100%" }} placeholder="1" />
+                        </Form.Item>
+                      </Col>
+
+                      <Col span={8}>
+                        <Text strong>Trung bình:</Text>
+                        <Form.Item {...restField} name={[name, "medium", "count"]} label="Số câu">
+                          <InputNumber min={0} style={{ width: "100%" }} placeholder="0" />
+                        </Form.Item>
+                        <Form.Item {...restField} name={[name, "medium", "pointPerQuestion"]} label="Điểm/câu">
+                          <InputNumber min={0} step={0.5} style={{ width: "100%" }} placeholder="1" />
+                        </Form.Item>
+                      </Col>
+
+                      <Col span={8}>
+                        <Text strong>Khó:</Text>
+                        <Form.Item {...restField} name={[name, "hard", "count"]} label="Số câu">
+                          <InputNumber min={0} style={{ width: "100%" }} placeholder="0" />
+                        </Form.Item>
+                        <Form.Item {...restField} name={[name, "hard", "pointPerQuestion"]} label="Điểm/câu">
+                          <InputNumber min={0} step={0.5} style={{ width: "100%" }} placeholder="1" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Button danger size="small" onClick={() => remove(name)}>
+                      Xóa chương
+                    </Button>
+                  </Card>
+                ))}
+
+                <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+                  Thêm chương
+                </Button>
+              </>
+            )}
+          </Form.List>
+        </Form>
       </Modal>
 
       {/* Modal tự động tạo câu hỏi */}

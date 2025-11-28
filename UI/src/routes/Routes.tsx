@@ -53,7 +53,6 @@ import OverviewStudent from "../pages/Student/OverviewStudent";
 import DashboardStudent from "../pages/Student/DashboardStudent";
 import AssignmentsDetailsStudent from "../pages/Student/AssignmentsDetailsStudent";
 import AssignmentsTeacherOut from "../pages/Teacher/AssignmentsTeacherOut";
-import VRPage from "../pages/VRPage";
 import AssignmentSubmissionHistory from "../pages/Student/AssignmentSubmissionHistory";
 import AssignmentsScore from "../pages/Student/AssignmentsScore";
 
@@ -70,11 +69,12 @@ import TestRefreshToken from "../pages/Admin/TestRefreshToken";
 import QuestionsTeacher from "../pages/Teacher/QuestionsTeacher";
 import JoinClassByInvite from "../pages/Teacher/JoinClassByInvite";
 import MaterialsStudent from "../pages/Student/MaterialsStudent";
+import instance from "../utils/axiosInstance";
 
 // Helper function để check auth và redirect
 const checkAuthAndRedirect = async () => {
   try {
-    const res = await axios.get("http://localhost:4000/api/v1/auths/me", {
+    const res = await instance.get("http://localhost:4000/api/v1/auths/me", {
       withCredentials: true,
     });
 
@@ -111,10 +111,6 @@ export const router = createBrowserRouter([
         <Register />
       </PublicRoute>
     ),
-  },
-  {
-    path: "/qr",
-    element: <VRPage />,
   },
   {
     path: "/diemdanh",

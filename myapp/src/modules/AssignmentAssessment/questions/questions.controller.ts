@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import * as service from "./questions.service";
-import catchAsync from "@/utils/catchAsync";
-import { sendResponse } from "@/utils/response";
+import catchAsync from "../../../utils/catchAsync";
+import { sendResponse } from "../../../utils/response";
 
 // question.controller.ts
 export const create = catchAsync(async (req: Request, res: Response) => {
@@ -19,6 +19,49 @@ export const create = catchAsync(async (req: Request, res: Response) => {
     );
 });
 
+export async function getPublicQuestions(req: Request, res: Response, next: NextFunction) {
+  try {
+    const filter = req.query || {};
+    const result = await service.getPublicQuestions(filter);
+    return res.status(200).json(result);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+
+export const getMineAndPublicQuestions = catchAsync(
+    async (req: Request, res: Response) => {
+        const { params, query } = (req as any).validated;
+        const userId = Number(params.userId);
+
+        console.log("📊 Get mine + public questions:", {
+            userId,
+            page: query.page,
+            limit: query.limit,
+            subjectId: query.subjectId,
+            chapterId: query.chapterId,
+            difficulty: query.difficulty,
+            type: query.type,
+            search: query.search || query.q,
+        });
+
+        const result = await service.getMineAndPublicQuestions(userId, query);
+
+        sendResponse(res, {
+            success: true,
+            data: result.items,
+            meta: {
+                page: result.page,
+                limit: result.limit,
+                total: result.total,
+                totalPages: result.totalPages,
+            },
+        });
+    }
+);
+
+// ... các handler khác (create, getById, getAllQuestions, ...) giữ nguyên
 // 🆕 CẬP NHẬT: Thêm log debug
 export const getAllQuestions = catchAsync(
     async (req: Request, res: Response) => {

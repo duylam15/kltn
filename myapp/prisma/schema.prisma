@@ -450,6 +450,7 @@ model Question {
   chapterId   Int?
   difficulty  DifficultyLevel @default(medium)
   tags        String?         @db.VarChar(500)
+  isPublic    Boolean  @default(true)
 
   language    ProgrammingLanguage?
   starterCode String?              @db.Text

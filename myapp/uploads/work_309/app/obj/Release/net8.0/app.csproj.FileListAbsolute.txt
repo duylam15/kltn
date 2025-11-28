@@ -1,4 +1,0 @@
-/workspace/app/obj/Release/net8.0/app.GeneratedMSBuildEditorConfig.editorconfig
-/workspace/app/obj/Release/net8.0/app.AssemblyInfoInputs.cache
-/workspace/app/obj/Release/net8.0/app.AssemblyInfo.cs
-/workspace/app/obj/Release/net8.0/app.csproj.CoreCompileInputs.cache

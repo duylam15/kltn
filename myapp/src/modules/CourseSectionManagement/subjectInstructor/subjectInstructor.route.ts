@@ -11,7 +11,7 @@ import {
     removeTeachersSchema, // Thêm
 } from "./subjectInstructor.validation";
 import * as controller from "./subjectInstructor.controller";
-import validate from "@/middlewares/validate";
+import validate from "../../../middlewares/validate";
 
 const router = Router();
 

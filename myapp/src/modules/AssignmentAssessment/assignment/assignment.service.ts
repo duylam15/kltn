@@ -1,5 +1,5 @@
-import { queue } from "@/middlewares/queue";
-import { prisma } from "@/prisma/client";
+import { queue } from "../../../middlewares/queue";
+import { prisma } from "../../../prisma/client";
 import { AssignmentType, ProgrammingLanguage } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
 

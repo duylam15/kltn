@@ -6,7 +6,7 @@ import {
     updateTeacherSchema
 } from "./teacher.validation";
 import * as controller from "./teacher.controller";
-import validate from "@/middlewares/validate";
+import validate from "../../../middlewares/validate";
 
 // import { authenticate, requireRole } from '../../middlewares/auth';
 

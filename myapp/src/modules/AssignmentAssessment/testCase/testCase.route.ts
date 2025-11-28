@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as controller from "./testCase.controller";
-import validate from "@/middlewares/validate";
+import validate from "../../../middlewares/validate";
 import {
     createTestCaseSchema,
     listTestCaseQuerySchema,

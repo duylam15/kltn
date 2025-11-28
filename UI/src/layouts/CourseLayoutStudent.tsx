@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useParams } from "react-router-dom";
 import { Card, Tabs, Tag, Skeleton, Typography } from "antd";
+import { API_URL } from "../utils/api";
 
 const tabDefs = [
 	{ key: "overview", label: "Tổng quan" },          // cái nhìn chung
@@ -28,7 +29,7 @@ const CourseLayoutStudent: React.FC = () => {
 		(async () => {
 			try {
 				const res = await fetch(
-					`http://localhost:4000/api/v1/course-sections/${courseId}`
+					`${API_URL}/api/v1/course-sections/${courseId}`
 				);
 				const json = await res.json();
 				if (mounted) {

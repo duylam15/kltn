@@ -2,7 +2,7 @@ import QRCode from "qrcode";
 import path from "path";
 import crypto from "crypto";
 import fs from "fs";
-import { prisma } from "@/prisma/client";
+import { prisma } from "../../../prisma/client";
 
 function calculateDistance(
     lat1: number,

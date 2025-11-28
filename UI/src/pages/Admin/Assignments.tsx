@@ -42,6 +42,7 @@ import toast from "react-hot-toast";
 import { FileQuestion } from "lucide-react";
 import { useAuth } from "../../context/authContext";
 import { v4 as uuidv4 } from "uuid";
+import instance from "../../utils/axiosInstance";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -229,13 +230,18 @@ export default function Assignments() {
 	async function fetchAssignments() {
 		try {
 			setLoading(true);
-			const res = await axios.get<{ success: boolean; data: Assignment[] }>(
-				`${API_BASE}/assignments`
+
+			// ✅ Dùng instance thay vì axios
+			const res:any = await instance.get<{ success: boolean; data: Assignment[] }>(
+				"/assignments" // ✅ Không cần `${API_BASE}` vì baseURL đã set
 			);
-			if (res.data.success) {
-				setAssignments(res.data.data || []);
+
+			// ✅ res đã là data (do interceptor return response. data)
+			if (res.success) {
+				setAssignments(res.data || []);
 			}
-		} catch {
+		} catch (error) {
+			console.error("❌ Fetch assignments error:", error);
 			toast.error("Không tải được danh sách bài tập");
 		} finally {
 			setLoading(false);

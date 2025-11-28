@@ -1,4 +1,4 @@
-import { prisma } from "@/prisma/client";
+import { prisma } from "../../../prisma/client";
 
 export async function createChoice(questionId: number, data: any) {
     return prisma.questionChoice.create({

@@ -1,8 +1,8 @@
+// pages/Login.tsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Lock, LogIn, User, AlertCircle } from "lucide-react";
+import { Lock, LogIn, User as UserIcon, AlertCircle } from "lucide-react";
 import { useAuth } from "../../context/authContext";
-import instance from "../../utils/axiosInstance";
 
 export default function Login() {
 	const navigate = useNavigate();
@@ -19,19 +19,11 @@ export default function Login() {
 		setLoading(true);
 
 		try {
-			// Gọi login từ context
-			await login(studentCode, password);
+			// ✅ Chỉ gọi login 1 lần và nhận user trả về
+			const user = await login(studentCode, password);
+			const roleId = user?.role?.id;
 
-			// Fetch lại user để có roleId mới nhất
-			// const res = await fetch("http://localhost:4000/api/v1/auths/me", {
-			// 	credentials: "include",
-			// });
-			const res = await instance.post("/auths/login", {
-				studentCode,
-				password,
-			});
-			const data = res.data;
-			const roleId = data.user?.role?.id;
+			console.log("✅ User logged in, roleId:", roleId);
 
 			// Navigate dựa trên roleId
 			if (roleId === 24) {
@@ -43,9 +35,8 @@ export default function Login() {
 			} else {
 				navigate("/", { replace: true });
 			}
-
 		} catch (err: any) {
-			console.error("Login error:", err);
+			console.error("❌ Login error:", err);
 			const errorMessage =
 				err?.response?.data?.message ||
 				err?.message ||
@@ -89,7 +80,7 @@ export default function Login() {
 								Mã số sinh viên / Mã giảng viên
 							</label>
 							<div className="relative">
-								<User className="h-5 w-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+								<UserIcon className="h-5 w-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
 								<input
 									id="studentCode"
 									type="text"

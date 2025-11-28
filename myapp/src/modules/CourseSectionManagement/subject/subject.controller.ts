@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import * as subjectService from "./subject.service";
-import catchAsync from "@/utils/catchAsync";
-import { sendResponse } from "@/utils/response";
-import ApiError from "@/utils/ApiError";
+import catchAsync from "../../../utils/catchAsync";
+import { sendResponse } from "../../../utils/response";
+import ApiError from "../../../utils/ApiError";
 
 export const create = catchAsync(async (req: Request, res: Response) => {
     const subject = await subjectService.createSubject(req.body);

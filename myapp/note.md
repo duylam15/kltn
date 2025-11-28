@@ -2,6 +2,9 @@ npx prisma migrate reset
 npx prisma migrate dev --name add_
 npx prisma generate
 
+npx prisma studio
+
+
 📝 Test Accounts:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Admin:

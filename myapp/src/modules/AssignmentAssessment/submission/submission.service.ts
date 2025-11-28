@@ -1,4 +1,4 @@
-import { prisma } from "@/prisma/client";
+import { prisma } from "../../../prisma/client";
 
 /**
  * 🔹 Lấy lịch sử nộp bài (tất cả các lần)

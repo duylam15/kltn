@@ -7,7 +7,7 @@ import {
     me,
     refreshFromCookie,
 } from "./auth.controller";
-import { verifyAccessToken } from "@/middlewares/auth";
+import { verifyAccessToken } from "../../../middlewares/auth";
 
 const router = Router();
 

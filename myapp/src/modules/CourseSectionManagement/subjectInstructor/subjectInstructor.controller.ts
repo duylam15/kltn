@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import * as subjectInstructorService from "./subjectInstructor.service";
-import catchAsync from "@/utils/catchAsync";
-import { sendResponse } from "@/utils/response";
-import ApiError from "@/utils/ApiError";
+import catchAsync from "../../../utils/catchAsync";
+import { sendResponse } from "../../../utils/response";
+import ApiError from "../../../utils/ApiError";
 
 // Extend Express Request interface to include user property
 declare global {

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as controller from "./sectionAssignment.controller";
 import * as validation from "./sectionAssignment.validation";
-import validate from "@/middlewares/validate";
+import validate from "../../../middlewares/validate";
 
 const router = Router();
 

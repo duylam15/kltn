@@ -1,12 +1,17 @@
 import { Router } from "express";
 import * as validation from "./questions.validation";
 import * as controller from "./questions.controller";
-import validate from "@/middlewares/validate";
+import validate from "../../../middlewares/validate";
 
 const router = Router();
 
 // Admin/Teacher
 router.post("/", validate(validation.createQuestionSchema), controller.create);
+
+router.get(
+    "/public",
+    controller.getPublicQuestions
+);
 
 // 🆕 API lấy câu hỏi của giảng viên theo userId
 router.get(
@@ -53,7 +58,11 @@ router.get(
     validate(validation.getQuestionByIdSchema),
     controller.getById
 );
-
+router.get(
+    "/user/:userId/mine-and-public",
+    validate(validation.getUserMineAndPublicSchema),
+    controller.getMineAndPublicQuestions
+);
 router.get("/:id/chapters", controller.getChapters);
 
 export default router;

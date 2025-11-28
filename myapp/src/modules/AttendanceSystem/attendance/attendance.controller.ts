@@ -3,11 +3,11 @@ import * as attendanceService from "./attendance.service";
 import QRCode from "qrcode";
 import path from "path";
 import fs from "fs";
-import { prisma } from "@/prisma/client";
+import { prisma } from "../../../prisma/client";
 import { listStudentAttendance } from "./attendance.service";
-import catchAsync from "@/utils/catchAsync";
-import ApiError from "@/utils/ApiError";
-import { sendResponse } from "@/utils/response";
+import catchAsync from "../../../utils/catchAsync";
+import ApiError from "../../../utils/ApiError";
+import { sendResponse } from "../../../utils/response";
 
 // Tạo session + QR code
 export async function createSession(req: Request, res: Response) {

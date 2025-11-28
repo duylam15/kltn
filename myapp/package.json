@@ -12,6 +12,9 @@
         "prisma:studio": "prisma studio",
         "worker": "ts-node src/worker.ts"
     },
+    "prisma": {
+        "seed": "ts-node prisma/seed.ts"
+    },
     "keywords": [],
     "author": "",
     "license": "ISC",

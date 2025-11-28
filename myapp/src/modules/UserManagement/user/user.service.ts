@@ -1,6 +1,6 @@
-import { prisma } from "@/prisma/client";
-import ApiError from "@/utils/ApiError";
-import { hashPassword } from "@/utils/password";
+import { prisma } from "../../../prisma/client";
+import ApiError from "../../../utils/ApiError";
+import { hashPassword } from "../../../utils/password";
 
 interface CreateUserInput {
     email: string;
@@ -108,7 +108,6 @@ export const updateUser = async (
         },
     });
 };
-
 
 export const deleteUser = async (id: number) => {
     await prisma.user.delete({ where: { id } });

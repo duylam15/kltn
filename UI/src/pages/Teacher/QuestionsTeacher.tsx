@@ -19,6 +19,7 @@ import {
 	Row,
 	Col,
 	Radio,
+	Switch,
 } from "antd";
 import {
 	ReloadOutlined,
@@ -116,6 +117,7 @@ type Question = {
 	chapter?: Chapter;
 	createdAt?: string;
 	updatedAt?: string;
+	isPublic?: boolean; // 🆕 show/public flag
 };
 
 export default function QuestionsTeacher() {
@@ -351,6 +353,7 @@ export default function QuestionsTeacher() {
 				difficulty: values.difficulty || "medium",
 				createdBy: userId,
 				language: values.type === "coding" ? values.language : undefined,
+				isPublic: Boolean(values.isPublic), // 🆕 include isPublic in payload
 			};
 
 			// Validate cho multiple choice
@@ -535,6 +538,20 @@ export default function QuestionsTeacher() {
 		return <Tag color={diff.color}>{diff.text}</Tag>;
 	};
 
+	// 🆕 Toggle public state for a question
+	const toggleIsPublic = async (questionId: number, current: boolean | undefined) => {
+		try {
+			const newValue = !Boolean(current);
+			await axios.put(`${API_BASE}/questions/${questionId}`, { isPublic: newValue });
+			setQuestions((prev) => prev.map((q) => (q.id === questionId ? { ...q, isPublic: newValue } : q)));
+			toast.success(newValue ? "Đã bật chế độ công khai" : "Đã tắt chế độ công khai");
+		} catch (err: any) {
+			console.error("Error toggling isPublic:", err.response?.data || err);
+			const msg = err?.response?.data?.message || "Lỗi khi thay đổi trạng thái công khai";
+			toast.error(msg);
+		}
+	};
+
 	const columns = [
 		{
 			title: "Nội dung câu hỏi",
@@ -607,6 +624,22 @@ export default function QuestionsTeacher() {
 			sorter: (a: Question, b: Question) => a.points - b.points,
 			render: (points: number) => <Tag color="green">{points}</Tag>,
 		},
+		// 🆕 Public column with Switch
+		{
+			title: "Công khai",
+			key: "isPublic",
+			align: "center" as const,
+			width: "10%",
+			render: (_: any, record: Question) => (
+				<div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+					<Switch
+						checked={Boolean(record.isPublic)}
+						onChange={() => toggleIsPublic(record.id, record.isPublic)}
+					/>
+					{record.isPublic ? <Tag color="green">Public</Tag> : <Tag>Private</Tag>}
+				</div>
+			),
+		},
 		{
 			title: "Hành động",
 			key: "actions",
@@ -637,6 +670,7 @@ export default function QuestionsTeacher() {
 									chapterId: record.chapterId,
 									tags: record.tags,
 									language: record.language,
+									isPublic: record.isPublic, // 🆕 set isPublic when editing
 								});
 
 								if (record.subjectId) {
@@ -744,7 +778,7 @@ export default function QuestionsTeacher() {
 						<div className="mt-1">
 							<BookOpen />
 						</div>{" "}
-						Câu hỏi của tôi
+						Câu hỏi của tôixx
 					</div>
 				</Title>
 				<div style={{ display: "flex", gap: 8 }}>
@@ -757,6 +791,13 @@ export default function QuestionsTeacher() {
 						onClick={() => {
 							setEditing(null);
 							form.resetFields();
+							// set default values for new question
+							form.setFieldsValue({
+								type: "multiple_choice",
+								points: 1,
+								difficulty: "easy",
+								isPublic: false, // 🆕 default not public
+							});
 							setChoices([{ content: "", isCorrect: false, order: 1 }]);
 							setTestCases([]);
 							setQuestionType("multiple_choice");
@@ -890,7 +931,11 @@ export default function QuestionsTeacher() {
 					overflowX: "hidden",
 				}}
 			>
-				<Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+				<Form
+					form={form}
+					layout="vertical"
+					style={{ marginTop: 16 }}
+				>
 					{/* Question Type Selection */}
 					<Form.Item
 						label="Loại câu hỏi"
@@ -1037,6 +1082,13 @@ export default function QuestionsTeacher() {
 							</Form.Item>
 						</Col>
 					</Row>
+
+					{/* 🆕 Public checkbox */}
+					<Form.Item name="isPublic" valuePropName="checked">
+						<Checkbox>
+							<Text>Cho phép chia sẻ công khai (Giáo viên khác có thể thêm câu hỏi này vào bài tập của họ)</Text>
+						</Checkbox>
+					</Form.Item>
 
 					{/* Multiple Choice Answers */}
 					{questionType === "multiple_choice" && (
@@ -1321,6 +1373,18 @@ export default function QuestionsTeacher() {
 								</div>
 							</div>
 						)}
+
+						{/* Show Public status in details */}
+						<div style={{ marginBottom: 16 }}>
+							<Text strong>Trạng thái chia sẻ:</Text>
+							<div style={{ marginTop: 8 }}>
+								{selectedQuestion.isPublic ? (
+									<Tag color="green">Công khai (Public)</Tag>
+								) : (
+									<Tag>Riêng tư (Private)</Tag>
+								)}
+							</div>
+						</div>
 
 						{selectedQuestion.type === "multiple_choice" && (
 							<>

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import * as gradeService from "./grade.service";
-import { prisma } from "@/prisma/client";
+import { prisma } from "../../../prisma/client";
 
 // ========== GRADE COLUMN ==========
 
