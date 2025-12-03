@@ -12,21 +12,24 @@ import {
   Input,
   Select,
   message,
-  Dropdown,      // THÊM DÒNG NÀY
-  Popconfirm,    // THÊM DÒNG NÀY
+  Dropdown,
+  Popconfirm,
+  InputNumber,
 } from "antd";
 import { useNavigate } from "react-router-dom";
 import {
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
-  SettingOutlined,  // THÊM DÒNG NÀY
-  EditOutlined,     // THÊM DÒNG NÀY
-  DeleteOutlined,   // THÊM DÒNG NÀY
+  SettingOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  EyeOutlined,
+  EyeInvisibleOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import { Layers } from "lucide-react";
 import { useAuth } from "../../context/authContext";
+import instance from "../../utils/axiosInstance";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -79,6 +82,7 @@ type SubjectAssignment = {
 };
 
 export default function Dashboard() {
+  const path = window.location.pathname;
   const [data, setData] = useState<Section[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
   const [assignedSubjects, setAssignedSubjects] = useState<SubjectAssignment[]>([]);
@@ -96,12 +100,15 @@ export default function Dashboard() {
   const [editingSection, setEditingSection] = useState<Section | null>(null);
   const [editForm] = Form.useForm();
 
+  // State để toggle hiển thị môn chưa có lớp
+  const [showUnassignedSubjects, setShowUnassignedSubjects] = useState(false);
+
   // Fetch các môn học được phân công
   const fetchAssignedSubjects = async () => {
     if (!user?.teacher?.id) return;
 
     try {
-      const res = await axios.get(
+      const res = await instance.get(
         `http://localhost:4000/api/v1/subject-instructors/teacher/${user.teacher.id}`
       );
 
@@ -119,8 +126,8 @@ export default function Dashboard() {
 
     setLoading(true);
     try {
-      const res = await axios.get(
-        `http://localhost:4000/api/v1/sections-instructors?teacher_id=${user.teacher.id}`
+      const res = await instance.get(
+        `/sections-instructors?teacher_id=${user.teacher.id}`
       );
 
       if (res.data.success) {
@@ -135,7 +142,7 @@ export default function Dashboard() {
 
   const fetchTerms = async () => {
     try {
-      const res = await axios.get("http://localhost:4000/api/v1/terms");
+      const res = await instance.get("/terms");
       if (res.data.success) setTerms(res.data.data || []);
     } catch (err) {
       console.error("Lỗi khi gọi terms:", err);
@@ -162,20 +169,20 @@ export default function Dashboard() {
       const payload = {
         subjectId,
         termId,
-        sectionCode: `${subjectCode}.${String(nextIndex).padStart(2, '0')}`,
+        sectionCode: `${subjectCode}. ${String(nextIndex).padStart(2, "0")}`,
         sectionName: `Nhóm ${nextIndex}`,
         maxStudents: 50,
         status: "planned",
       };
 
-      const res = await axios.post(
-        "http://localhost:4000/api/v1/course-sections",
+      const res = await instance.post(
+        "/course-sections",
         payload
       );
 
       if (res.data.success) {
         // Tự động phân công giảng viên vào section vừa tạo
-        await axios.post("http://localhost:4000/api/v1/sections-instructors", {
+        await instance.post("/sections-instructors", {
           sectionId: res.data.data.id,
           teacherId: user?.teacher?.id,
           role: "owner",
@@ -214,14 +221,14 @@ export default function Dashboard() {
         status: values.status || "planned",
       };
 
-      const res = await axios.post(
-        "http://localhost:4000/api/v1/course-sections",
+      const res = await instance.post(
+        "/course-sections",
         payload
       );
 
       if (res.data.success) {
         // Tự động phân công giảng viên vào section vừa tạo
-        await axios.post("http://localhost:4000/api/v1/sections-instructors", {
+        await instance.post("/sections-instructors", {
           sectionId: res.data.data.id,
           teacherId: user?.teacher?.id,
           role: "owner",
@@ -241,7 +248,7 @@ export default function Dashboard() {
   // Xóa section
   const handleDelete = async (sectionId: number) => {
     try {
-      await axios.delete(`http://localhost:4000/api/v1/course-sections/${sectionId}`);
+      await instance.delete(`/course-sections/${sectionId}`);
       message.success("Xóa học phần thành công!");
       fetchSections();
     } catch (err: any) {
@@ -253,7 +260,7 @@ export default function Dashboard() {
   // Thay đổi trạng thái
   const handleChangeStatus = async (sectionId: number, newStatus: string) => {
     try {
-      await axios.patch(`http://localhost:4000/api/v1/course-sections/${sectionId}`, {
+      await instance.patch(`/course-sections/${sectionId}`, {
         status: newStatus,
       });
       message.success("Cập nhật trạng thái thành công!");
@@ -281,8 +288,8 @@ export default function Dashboard() {
     try {
       const values = await editForm.validateFields();
 
-      await axios.patch(
-        `http://localhost:4000/api/v1/course-sections/${editingSection?.id}`,
+      await instance.patch(
+        `/course-sections/${editingSection?.id}`,
         values
       );
 
@@ -295,6 +302,27 @@ export default function Dashboard() {
       console.error("Lỗi khi cập nhật:", err);
       message.error(err.response?.data?.message || "Cập nhật thất bại!");
     }
+  };
+
+  // Dịch trạng thái
+  const getStatusLabel = (status: string) => {
+    const statusMap: { [key: string]: string } = {
+      planned: "Kế hoạch",
+      ongoing: "Đang học",
+      finished: "Kết thúc",
+      completed: "Hoàn thành",
+    };
+    return statusMap[status] || status;
+  };
+
+  const getStatusColor = (status: string) => {
+    const colorMap: { [key: string]: string } = {
+      planned: "blue",
+      ongoing: "green",
+      finished: "volcano",
+      completed: "default",
+    };
+    return colorMap[status] || "default";
   };
 
   if (loading) return <Spin tip="Đang tải..." fullscreen />;
@@ -343,9 +371,125 @@ export default function Dashboard() {
     return acc;
   }, {});
 
+  // Đếm số môn chưa có lớp
+  const unassignedSubjectsCount = assignedSubjects.filter(
+    (assignment) =>
+      assignment.isActive &&
+      !data.some((s) => s.subject.id === assignment.subjectId)
+  ).length;
+
   return (
-    <div className="pl-3 pr-3">
+    <div className="dashboard-container" style={{ padding: "8px 12px" }}>
+      <style>
+        {`
+          /* Mobile styles */
+          @media (max-width: 768px) {
+            .dashboard-header {
+              flex-direction: column ! important;
+              align-items: flex-start !important;
+              gap: 12px !important;
+            }
+
+            .dashboard-title {
+              font-size: 18px !important;
+              margin-bottom: 0 !important;
+            }
+
+            .dashboard-filters {
+              width: 100% !important;
+              flex-direction: column !important;
+              gap: 8px !important;
+            }
+
+            .dashboard-filters . ant-input,
+            .dashboard-filters .ant-select,
+            .dashboard-filters .ant-btn {
+              width: 100% !important;
+            }
+
+            .dashboard-filters .filter-group {
+              display: flex;
+              gap: 8px;
+              width: 100%;
+            }
+
+            .dashboard-filters .filter-group > * {
+              flex: 1;
+            }
+
+            .section-title {
+              font-size: 14px !important;
+              padding: 8px 12px !important;
+              flex-direction: column !important;
+              align-items: flex-start !important;
+              gap: 4px !important;
+            }
+
+            .section-card-body {
+              padding: 12px !important;
+            }
+
+            .section-card-title {
+              font-size: 14px !important;
+            }
+
+            .section-info-row {
+              font-size: 12px !important;
+            }
+
+            .quick-add-card {
+              min-height: 120px !important;
+            }
+
+            .quick-add-card . anticon {
+              font-size: 24px !important;
+            }
+
+            .assigned-subject-card {
+              font-size: 13px !important;
+            }
+
+            .ant-modal {
+              max-width: calc(100vw - 16px) !important;
+              margin: 8px !important;
+            }
+          }
+
+          /* Tablet styles */
+          @media (min-width: 769px) and (max-width: 1024px) {
+            .dashboard-filters {
+              flex-wrap: wrap !important;
+            }
+
+            .dashboard-filters . ant-input {
+              width: 200px !important;
+            }
+
+            .dashboard-filters .ant-select {
+              width: 180px !important;
+            }
+          }
+
+          /* Smooth transitions */
+          .section-card {
+            transition: all 0. 3s ease !important;
+          }
+
+          .section-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          }
+
+          @media (max-width: 768px) {
+            .section-card:hover {
+              transform: none;
+            }
+          }
+        `}
+      </style>
+
       <div
+        className="dashboard-header"
         style={{
           display: "flex",
           justifyContent: "space-between",
@@ -353,179 +497,218 @@ export default function Dashboard() {
           marginBottom: 16,
         }}
       >
-        <Title level={3} className="mt-2">
+        <Title level={3} className="dashboard-title mt-2 mb-0">
           <div className="flex items-center gap-2">
-            <Layers /> Lớp học phần của tôi
+            <Layers size={20} /> Lớp học phần của tôi
           </div>
         </Title>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="dashboard-filters" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Input
             allowClear
             prefix={<SearchOutlined />}
-            placeholder="Tìm kiếm"
+            placeholder="Tìm kiếm..."
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             style={{ width: 150 }}
           />
 
-          <Select
-            allowClear
-            placeholder="Lọc theo trạng thái"
-            style={{ width: 150 }}
-            value={statusFilter ?? undefined}
-            onChange={(value) => setStatusFilter(value)}
-          >
-            <Option value="planned">Planned</Option>
-            <Option value="ongoing">Ongoing</Option>
-            <Option value="finished">Finished</Option>
-            <Option value="completed">Completed</Option>
-          </Select>
+          <div className="filter-group">
+            <Select
+              allowClear
+              placeholder="Trạng thái"
+              style={{ width: 130 }}
+              value={statusFilter ?? undefined}
+              onChange={(value) => setStatusFilter(value)}
+            >
+              <Option value="planned">Kế hoạch</Option>
+              <Option value="ongoing">Đang học</Option>
+              <Option value="finished">Kết thúc</Option>
+              <Option value="completed">Hoàn thành</Option>
+            </Select>
 
-          <Select
-            allowClear
-            placeholder="Lọc theo học kỳ"
-            style={{ width: 150 }}
-            value={termFilter ?? undefined}
-            onChange={(value) => setTermFilter(value)}
-          >
-            {terms.map((t) => (
-              <Option key={t.id} value={t.id}>
-                {t.name}
-              </Option>
-            ))}
-          </Select>
+            <Select
+              allowClear
+              placeholder="Học kỳ"
+              style={{ width: 130 }}
+              value={termFilter ?? undefined}
+              onChange={(value) => setTermFilter(value)}
+            >
+              {terms.map((t) => (
+                <Option key={t.id} value={t.id}>
+                  {t.name}
+                </Option>
+              ))}
+            </Select>
+          </div>
 
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={() => {
-              setKeyword("");
-              setStatusFilter(null);
-              setTermFilter(null);
-              fetchSections();
-            }}
-          >
-            Làm mới
-          </Button>
+          <div className="filter-group">
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={() => {
+                setKeyword("");
+                setStatusFilter(null);
+                setTermFilter(null);
+                fetchSections();
+              }}
+            >
+              <span className="btn-text">Làm mới</span>
+            </Button>
 
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => setModalVisible(true)}
-          >
-            Thêm học phần
-          </Button>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => setModalVisible(true)}
+            >
+              <span className="btn-text">Thêm</span>
+            </Button>
+          </div>
         </div>
       </div>
 
+      {/* Nút toggle hiển thị môn chưa có lớp */}
+      {unassignedSubjectsCount > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <Button
+            icon={showUnassignedSubjects ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+            onClick={() => setShowUnassignedSubjects(!showUnassignedSubjects)}
+            type={showUnassignedSubjects ? "default" : "dashed"}
+          >
+            {showUnassignedSubjects ? "Ẩn" : "Hiển thị"} môn học chưa có lớp ({unassignedSubjectsCount})
+          </Button>
+        </div>
+      )}
+
       {/* Hiển thị các môn được phân công nhưng chưa có section */}
-      {assignedSubjects.filter(
-        (assignment) =>
-          assignment.isActive &&
-          !data.some((s) => s.subject.id === assignment.subjectId)
-      ).length > 0 && (
-          <div style={{ marginBottom: 24 }}>
-            <Title level={4} style={{ marginBottom: 16 }}>
-              📚 Môn học được phân công (chưa có lớp)
-            </Title>
-            <Row gutter={[16, 16]}>
-              {assignedSubjects
-                .filter(
-                  (assignment) =>
-                    assignment.isActive &&
-                    !data.some((s) => s.subject.id === assignment.subjectId)
-                )
-                .map((assignment) => (
-                  <Col xs={24} sm={12} md={8} lg={6} key={assignment.id}>
-                    <Card
-                      style={{
-                        borderRadius: 12,
-                        border: "2px dashed #1890ff",
-                        background: "#f0f5ff",
-                      }}
-                    >
-                      <Title level={5} style={{ color: "#1890ff", marginBottom: 8 }}>
-                        {assignment.subject.subjectCode}
-                      </Title>
-                      <Text strong>{assignment.subject.subjectName}</Text>
-                      <div style={{ marginTop: 8 }}>
-                        <Tag color="blue">{assignment.subject.credits} TC</Tag>
-                        <Tag color="green">
-                          {assignment.role === "owner" ? "Chủ nhiệm" : assignment.role}
-                        </Tag>
-                      </div>
-                      <div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
-                        Click "Thêm học phần" để tạo lớp mới
-                      </div>
-                    </Card>
-                  </Col>
-                ))}
-            </Row>
-          </div>
-        )}
+      {showUnassignedSubjects && unassignedSubjectsCount > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <Title level={4} style={{ marginBottom: 16, fontSize: 16 }}>
+            📚 Môn học được phân công (chưa có lớp)
+          </Title>
+          <Row gutter={[12, 12]}>
+            {assignedSubjects
+              .filter(
+                (assignment) =>
+                  assignment.isActive &&
+                  !data.some((s) => s.subject.id === assignment.subjectId)
+              )
+              .map((assignment) => (
+                <Col xs={24} sm={12} md={8} lg={6} key={assignment.id}>
+                  <Card
+                    className="assigned-subject-card"
+                    hoverable
+                    style={{
+                      borderRadius: 12,
+                      border: "2px dashed #1890ff",
+                      background: "#f0f5ff",
+                    }}
+                    bodyStyle={{ padding: 16 }}
+                  >
+                    <Title level={5} style={{ color: "#1890ff", marginBottom: 8, fontSize: 14 }}>
+                      {assignment.subject.subjectCode}
+                    </Title>
+                    <Text strong style={{ fontSize: 13 }}>
+                      {assignment.subject.subjectName}
+                    </Text>
+                    <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                      <Tag color="blue">{assignment.subject.credits} Tín chỉ</Tag>
+                      <Tag color="green">
+                        {assignment.role === "owner" ? "Chủ nhiệm" : assignment.role}
+                      </Tag>
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 11, color: "#666" }}>
+                      Nhấn "Thêm" để tạo lớp mới
+                    </div>
+                  </Card>
+                </Col>
+              ))}
+          </Row>
+        </div>
+      )}
 
       {/* Danh sách nhóm */}
       {Object.keys(grouped).length === 0 ? (
-        <Card style={{ textAlign: "center", padding: 40 }}>
+        <Card
+          style={{
+            textAlign: "center",
+            padding: "24px 16px",
+            border: "1px solid #d9d9d9",
+            borderRadius: 8,
+          }}
+        >
           <Text type="secondary">
             Chưa có lớp học phần nào. Hãy thêm lớp học phần mới từ các môn được phân công!
           </Text>
         </Card>
       ) : (
         Object.values(grouped).map((subject: any, idx) => (
-          <div key={idx} style={{ marginBottom: 40 }}>
+          <div key={idx} style={{ marginBottom: 32 }}>
             <Title
               level={4}
+              className="section-title"
               style={{
-                marginBottom: 16,
-                padding: "8px 16px",
+                marginBottom: 12,
+                padding: "10px 16px",
                 borderRadius: 8,
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
                 backgroundColor: "#f0f5ff",
+                fontSize: 15,
+                border: "1px solid #d6e4ff",
               }}
             >
               <span>
-                {subject.subjectCode} - {subject.subjectName} ({subject.termName})
+                {subject.subjectCode} - {subject.subjectName}
               </span>
+              <Tag color="blue">{subject.termName}</Tag>
             </Title>
 
-            <Row gutter={[16, 16]} wrap>
+            <Row gutter={[12, 12]}>
               {subject.sections.map((section: Section) => (
                 <Col xs={24} sm={12} md={8} lg={6} key={section.id}>
                   <Card
                     hoverable
+                    className="section-card"
                     style={{
                       borderRadius: 12,
                       transition: "all 0.3s",
+                      border: "2px solid #1890ff",
+                      boxShadow: "0 2px 8px rgba(24, 144, 255, 0.1)",
                     }}
-                    className="bg-white rounded-xl shadow border transition hover:shadow-xl border-blue-200"
                     bodyStyle={{ padding: 16 }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 8 }}>
                       <div
                         style={{ flex: 1, cursor: "pointer" }}
                         onClick={() => navigate(`/teacher/courses/${section.id}`)}
                       >
-                        <Title level={5} style={{ marginBottom: 8, color: "#1d39c4" }}>
+                        <Title
+                          level={5}
+                          className="section-card-title"
+                          style={{ marginBottom: 8, color: "#1d39c4", fontSize: 15 }}
+                        >
                           {section.sectionName}
                         </Title>
                         <div
+                          className="section-info-row"
                           style={{
                             display: "flex",
                             justifyContent: "space-between",
                             marginBottom: 6,
+                            fontSize: 13,
                           }}
                         >
                           <Text strong>Mã lớp:</Text>
                           <Text>{section.sectionCode}</Text>
                         </div>
                         <div
+                          className="section-info-row"
                           style={{
                             display: "flex",
                             justifyContent: "space-between",
                             marginBottom: 6,
+                            fontSize: 13,
                           }}
                         >
                           <Text strong>Sĩ số:</Text>
@@ -534,21 +717,16 @@ export default function Dashboard() {
                           </Text>
                         </div>
                         <div
-                          style={{ display: "flex", justifyContent: "space-between" }}
+                          className="section-info-row"
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            fontSize: 13,
+                          }}
                         >
                           <Text strong>Trạng thái:</Text>
-                          <Tag
-                            color={
-                              section.status === "ongoing"
-                                ? "green"
-                                : section.status === "planned"
-                                  ? "blue"
-                                  : section.status === "finished"
-                                    ? "volcano"
-                                    : "default"
-                            }
-                          >
-                            {section.status}
+                          <Tag color={getStatusColor(section.status)}>
+                            {getStatusLabel(section.status)}
                           </Tag>
                         </div>
                       </div>
@@ -569,22 +747,22 @@ export default function Dashboard() {
                               children: [
                                 {
                                   key: "planned",
-                                  label: "Planned",
+                                  label: "Kế hoạch",
                                   onClick: () => handleChangeStatus(section.id, "planned"),
                                 },
                                 {
                                   key: "ongoing",
-                                  label: "Ongoing",
+                                  label: "Đang học",
                                   onClick: () => handleChangeStatus(section.id, "ongoing"),
                                 },
                                 {
                                   key: "finished",
-                                  label: "Finished",
+                                  label: "Kết thúc",
                                   onClick: () => handleChangeStatus(section.id, "finished"),
                                 },
                                 {
                                   key: "completed",
-                                  label: "Completed",
+                                  label: "Hoàn thành",
                                   onClick: () => handleChangeStatus(section.id, "completed"),
                                 },
                               ],
@@ -617,7 +795,7 @@ export default function Dashboard() {
                           type="text"
                           icon={<SettingOutlined />}
                           onClick={(e) => e.stopPropagation()}
-                          style={{ marginLeft: 8 }}
+                          size="small"
                         />
                       </Dropdown>
                     </div>
@@ -629,6 +807,7 @@ export default function Dashboard() {
               <Col xs={24} sm={12} md={8} lg={6}>
                 <Card
                   hoverable
+                  className="quick-add-card"
                   style={{
                     borderRadius: 12,
                     border: "2px dashed #1890ff",
@@ -642,6 +821,7 @@ export default function Dashboard() {
                     background: "#fafafa",
                     minHeight: 150,
                   }}
+                  bodyStyle={{ width: "100%", padding: 16 }}
                   onClick={() =>
                     handleQuickAdd(
                       subject.subjectId,
@@ -672,6 +852,7 @@ export default function Dashboard() {
         okText="Thêm"
         cancelText="Hủy"
         centered
+        style={{ maxWidth: "calc(100vw - 16px)" }}
         bodyStyle={{
           maxHeight: "70vh",
           overflowY: "auto",
@@ -718,15 +899,15 @@ export default function Dashboard() {
           </Form.Item>
 
           <Form.Item
-            label="Mã lớp (sectionCode)"
+            label="Mã lớp"
             name="sectionCode"
             rules={[{ required: true, message: "Vui lòng nhập mã lớp" }]}
           >
-            <Input placeholder="VD: IT100.01" />
+            <Input placeholder="VD: IT100. 01" />
           </Form.Item>
 
           <Form.Item
-            label="Tên lớp (sectionName)"
+            label="Tên lớp"
             name="sectionName"
             rules={[{ required: true, message: "Vui lòng nhập tên lớp" }]}
           >
@@ -734,14 +915,14 @@ export default function Dashboard() {
           </Form.Item>
 
           <Form.Item label="Sĩ số tối đa" name="maxStudents" initialValue={50}>
-            <Input type="number" min={1} />
+            <InputNumber min={1} style={{ width: "100%" }} />
           </Form.Item>
 
           <Form.Item label="Trạng thái" name="status" initialValue="planned">
             <Select>
-              <Option value="planned">Planned</Option>
-              <Option value="ongoing">Ongoing</Option>
-              <Option value="finished">Finished</Option>
+              <Option value="planned">Kế hoạch</Option>
+              <Option value="ongoing">Đang học</Option>
+              <Option value="finished">Kết thúc</Option>
             </Select>
           </Form.Item>
         </Form>
@@ -760,10 +941,11 @@ export default function Dashboard() {
         okText="Cập nhật"
         cancelText="Hủy"
         centered
+        style={{ maxWidth: "calc(100vw - 16px)" }}
       >
         <Form layout="vertical" form={editForm}>
           <Form.Item
-            label="Mã lớp (sectionCode)"
+            label="Mã lớp"
             name="sectionCode"
             rules={[{ required: true, message: "Vui lòng nhập mã lớp" }]}
           >
@@ -771,7 +953,7 @@ export default function Dashboard() {
           </Form.Item>
 
           <Form.Item
-            label="Tên lớp (sectionName)"
+            label="Tên lớp"
             name="sectionName"
             rules={[{ required: true, message: "Vui lòng nhập tên lớp" }]}
           >
@@ -779,15 +961,15 @@ export default function Dashboard() {
           </Form.Item>
 
           <Form.Item label="Sĩ số tối đa" name="maxStudents">
-            <Input type="number" min={1} />
+            <InputNumber min={1} style={{ width: "100%" }} />
           </Form.Item>
 
           <Form.Item label="Trạng thái" name="status">
             <Select>
-              <Option value="planned">Planned</Option>
-              <Option value="ongoing">Ongoing</Option>
-              <Option value="finished">Finished</Option>
-              <Option value="completed">Completed</Option>
+              <Option value="planned">Kế hoạch</Option>
+              <Option value="ongoing">Đang học</Option>
+              <Option value="finished">Kết thúc</Option>
+              <Option value="completed">Hoàn thành</Option>
             </Select>
           </Form.Item>
         </Form>

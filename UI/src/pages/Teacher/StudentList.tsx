@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
 	Table,
 	Button,
@@ -34,15 +34,14 @@ import {
 	CopyOutlined,
 	LinkOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import dayjs from "dayjs";
 import type { InputRef } from "antd";
 import toast from "react-hot-toast";
 import * as XLSX from "xlsx";
 import { QRCodeSVG } from "qrcode.react";
+import instance from "../../utils/axiosInstance";
 
 const { Option } = Select;
-const API_BASE = "http://localhost:4000/api/v1";
 
 type User = {
 	id: number;
@@ -137,6 +136,10 @@ export default function StudentList() {
 	// Invite states
 	const [inviteCode, setInviteCode] = useState<InviteCode | null>(null);
 
+	const [foundStudent, setFoundStudent] = useState<Student | null>(null);
+	const [searchingStudent, setSearchingStudent] = useState(false);
+	const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
 	const [form] = Form.useForm();
 	const [addForm] = Form.useForm();
 	const [groupForm] = Form.useForm();
@@ -153,11 +156,11 @@ export default function StudentList() {
 		try {
 			setLoading(true);
 			const [enrollmentsRes, groupsRes] = await Promise.all([
-				axios.get<{ success: boolean; data: Enrollment[] }>(
-					`${API_BASE}/sections-enrollments/section/${sectionId}/students`
+				instance.get<{ success: boolean; data: Enrollment[] }>(
+					`/sections-enrollments/section/${sectionId}/students`
 				),
-				axios.get<{ success: boolean; data: Group[] }>(
-					`${API_BASE}/sections-enrollments/section/${sectionId}/groups`
+				instance.get<{ success: boolean; data: Group[] }>(
+					`/sections-enrollments/section/${sectionId}/groups`
 				),
 			]);
 
@@ -193,6 +196,112 @@ export default function StudentList() {
 		}
 	};
 
+	const searchStudentByCode = useCallback(async (studentCode: string) => {
+		const trimmedCode = studentCode.trim();
+
+		// Nếu xóa hoặc nhập lại, reset foundStudent
+		if (!trimmedCode || trimmedCode.length < 6) {
+			setFoundStudent(null);
+			addForm.setFieldsValue({
+				fullName: "",
+				email: "",
+				className: "",
+				major: "",
+			});
+			return;
+		}
+
+		// Chỉ tìm kiếm khi đủ 6-12 ký tự
+		if (trimmedCode.length < 6 || trimmedCode.length > 12 || !/^[0-9]+$/.test(trimmedCode)) {
+			setFoundStudent(null);
+			return;
+		}
+
+		try {
+			// Chỉ set loading khi thực sự gọi API
+			setSearchingStudent(true);
+			const res = await instance.get(`/students? studentCode=${trimmedCode}`);
+
+			if (res.data.success && res.data.data && res.data.data.length > 0) {
+				// So sánh chính xác MSSV
+				const exactMatch = res.data.data.find(
+					(s: Student) => s.studentCode.trim() === trimmedCode
+				);
+
+				if (exactMatch) {
+					setFoundStudent(exactMatch);
+
+					// Tự động điền thông tin
+					addForm.setFieldsValue({
+						fullName: exactMatch.user.fullName,
+						email: exactMatch.user.email,
+						className: exactMatch.className,
+						major: "Information Technology",
+					});
+
+					toast.success("Đã tìm thấy sinh viên trong hệ thống!");
+				} else {
+					setFoundStudent(null);
+					addForm.setFieldsValue({
+						fullName: "",
+						email: "",
+						className: "",
+						major: "",
+					});
+				}
+			} else {
+				setFoundStudent(null);
+				addForm.setFieldsValue({
+					fullName: "",
+					email: "",
+					className: "",
+					major: "",
+				});
+			}
+		} catch (error) {
+			console.error("Error searching student:", error);
+			setFoundStudent(null);
+			addForm.setFieldsValue({
+				fullName: "",
+				email: "",
+				className: "",
+				major: "",
+			});
+		} finally {
+			setSearchingStudent(false);
+		}
+	}, [addForm]);
+
+	// Hàm debounce - KHÔNG set loading ở đây
+	const debouncedSearchStudent = useCallback((studentCode: string) => {
+		// Clear timeout cũ
+		if (searchTimeoutRef.current) {
+			clearTimeout(searchTimeoutRef.current);
+		}
+
+		const trimmedCode = studentCode.trim();
+
+		// Nếu xóa hết hoặc < 6 ký tự, reset ngay lập tức
+		if (!trimmedCode || trimmedCode.length < 6) {
+			setFoundStudent(null);
+			setSearchingStudent(false); // Tắt loading nếu có
+			addForm.setFieldsValue({
+				fullName: "",
+				email: "",
+				className: "",
+				major: "",
+			});
+			return;
+		}
+
+		// KHÔNG set loading ở đây, để người dùng nhập tự do
+		// Đặt timeout mới (500ms)
+		searchTimeoutRef.current = setTimeout(() => {
+			searchStudentByCode(trimmedCode);
+		}, 2000);
+	}, [searchStudentByCode, addForm]);
+
+
 	const refresh = () => {
 		setKeyword("");
 		fetchData();
@@ -201,9 +310,40 @@ export default function StudentList() {
 	const handleAdd = async () => {
 		try {
 			const values = await addForm.validateFields();
+			const studentCode = values.studentCode?.trim();
 
+			// Nếu đã tìm thấy sinh viên, chỉ đăng ký vào lớp
+			if (foundStudent) {
+				const enrollmentPayload = {
+					sectionId,
+					studentId: foundStudent.id,
+				};
+
+				const enrollmentRes = await instance.post(
+					`/sections-enrollments`,
+					enrollmentPayload
+				);
+
+				if (enrollmentRes.data.success) {
+					toast.success("Đăng ký sinh viên vào lớp thành công!");
+					setAddModalOpen(false);
+					addForm.resetFields();
+					setFoundStudent(null);
+					fetchData();
+				} else {
+					const msg = enrollmentRes.data.message || "Không thể đăng ký sinh viên vào lớp";
+					if (msg.includes("already enrolled") || msg.includes("đã đăng ký")) {
+						toast.error("Sinh viên đã có trong lớp này!");
+					} else {
+						toast.error(msg);
+					}
+				}
+				return;
+			}
+
+			// Nếu chưa tìm thấy, tạo sinh viên mới
 			const studentPayload = {
-				studentCode: values.studentCode?.trim(),
+				studentCode,
 				password: "123456",
 				fullName: values.fullName?.trim(),
 				email: values.email?.trim(),
@@ -211,7 +351,7 @@ export default function StudentList() {
 				major: values.major?.trim() || "Information Technology",
 			};
 
-			const studentRes = await axios.post(`${API_BASE}/students`, studentPayload);
+			const studentRes = await instance.post(`/students`, studentPayload);
 
 			if (!studentRes.data.success) {
 				const msg = studentRes.data.message || "Không thể tạo sinh viên";
@@ -235,15 +375,17 @@ export default function StudentList() {
 				sectionId,
 				studentId: createdStudent.student.id,
 			};
-			const enrollmentRes = await axios.post(
-				`${API_BASE}/sections-enrollments`,
+
+			const enrollmentRes = await instance.post(
+				`/sections-enrollments`,
 				enrollmentPayload
 			);
 
 			if (enrollmentRes.data.success) {
-				toast.success("Thêm sinh viên vào lớp thành công");
+				toast.success("Thêm sinh viên mới vào lớp thành công!");
 				setAddModalOpen(false);
 				addForm.resetFields();
+				setFoundStudent(null);
 				fetchData();
 			} else {
 				toast.error(
@@ -301,8 +443,8 @@ export default function StudentList() {
 				phone: values.phone?.trim() || null,
 			};
 
-			const res = await axios.patch(
-				`${API_BASE}/users/${editing.student.user.id}`,
+			const res = await instance.patch(
+				`/users/${editing.student.user.id}`,
 				userPayload
 			);
 			if (res.data.success) {
@@ -324,7 +466,7 @@ export default function StudentList() {
 
 	const handleDelete = async (id: number) => {
 		try {
-			const res = await axios.delete(`${API_BASE}/sections-enrollments/${id}`);
+			const res = await instance.delete(`/sections-enrollments/${id}`);
 			if (res.data.success) {
 				toast.success("Xóa sinh viên thành công");
 				setEnrollments((prev) => prev.filter((e) => e.id !== id));
@@ -342,8 +484,8 @@ export default function StudentList() {
 			const values = await groupForm.validateFields();
 			if (!assigningStudent) return;
 
-			const res = await axios.patch(
-				`${API_BASE}/sections-enrollments/${assigningStudent.id}/assign-group`,
+			const res = await instance.patch(
+				`/sections-enrollments/${assigningStudent.id}/assign-group`,
 				{
 					groupId: values.groupId || null,
 				}
@@ -453,7 +595,7 @@ export default function StudentList() {
 	const normalizePhoneNumber = (phone: any): string | undefined => {
 		if (!phone) return undefined;
 
-		let phoneStr = String(phone).trim().replace(/[\s\-\.]/g, '');
+		let phoneStr = String(phone).trim().replace(/[\s\-.]/g, '');
 		phoneStr = phoneStr.replace(/[^\d+]/g, '');
 
 		if (phoneStr.startsWith('+84')) {
@@ -570,7 +712,7 @@ export default function StudentList() {
 
 		let allStudents: any[] = [];
 		try {
-			const allStudentsRes = await axios.get(`${API_BASE}/students?limit=1000`);
+			const allStudentsRes = await instance.get(`/students?limit=1000`);
 			if (allStudentsRes.data.success && allStudentsRes.data.data) {
 				allStudents = allStudentsRes.data.data;
 			}
@@ -606,7 +748,7 @@ export default function StudentList() {
 
 				if (!existingStudent) {
 					try {
-						const searchByCodeRes = await axios.get(`${API_BASE}/students?studentCode=${student.studentCode}`);
+						const searchByCodeRes = await instance.get(`/students?studentCode=${student.studentCode}`);
 
 						if (searchByCodeRes.data.success && searchByCodeRes.data.data && searchByCodeRes.data.data.length > 0) {
 							existingStudent = searchByCodeRes.data.data.find(
@@ -616,7 +758,7 @@ export default function StudentList() {
 
 						if (!existingStudent) {
 							try {
-								const searchByEmailRes = await axios.get(`${API_BASE}/students?email=${student.email}`);
+								const searchByEmailRes = await instance.get(`/students?email=${student.email}`);
 
 								if (searchByEmailRes.data.success && searchByEmailRes.data.data && searchByEmailRes.data.data.length > 0) {
 									existingStudent = searchByEmailRes.data.data.find(
@@ -659,7 +801,7 @@ export default function StudentList() {
 							studentPayload.dateOfBirth = student.dateOfBirth;
 						}
 
-						const studentRes = await axios.post(`${API_BASE}/students`, studentPayload);
+						const studentRes = await instance.post(`/students`, studentPayload);
 
 						if (studentRes.data.success) {
 							studentId = studentRes.data.data.student.id;
@@ -677,7 +819,7 @@ export default function StudentList() {
 
 						if (createErrorMsg.includes("already exists") || createErrorMsg.includes("đã tồn tại")) {
 							try {
-								const fetchRes = await axios.get(`${API_BASE}/students?studentCode=${student.studentCode}`);
+								const fetchRes = await instance.get(`/students?studentCode=${student.studentCode}`);
 								if (fetchRes.data.success && fetchRes.data.data && fetchRes.data.data.length > 0) {
 									existingStudent = fetchRes.data.data[0];
 									studentId = existingStudent.id;
@@ -701,8 +843,8 @@ export default function StudentList() {
 							studentId,
 						};
 
-						const enrollmentRes = await axios.post(
-							`${API_BASE}/sections-enrollments`,
+						const enrollmentRes = await instance.post(
+							`/sections-enrollments`,
 							enrollmentPayload
 						);
 
@@ -819,7 +961,6 @@ export default function StudentList() {
 			title: "MSSV",
 			key: "studentCode",
 			width: 120,
-			fixed: "left" as const,
 			sorter: (a: Enrollment, b: Enrollment) =>
 				(a.student?.studentCode || "").localeCompare(b.student?.studentCode || ""),
 			render: (_: any, record: Enrollment) => (
@@ -992,25 +1133,6 @@ export default function StudentList() {
 						<span>Tổng SV:</span>
 						<strong>{stats.totalStudents}</strong>
 					</div>
-
-					<div
-						style={{
-							display: "flex",
-							alignItems: "center",
-							gap: 6,
-							fontSize: 12,
-							color: "#000",
-							border: "1px solid #ddd",
-							borderRadius: 6,
-							padding: "6px 10px",
-							background: "#fff",
-						}}
-					>
-						<CheckCircleOutlined style={{ fontSize: 14, color: "#52c41a" }} />
-						<span>Đã có nhóm:</span>
-						<strong style={{ color: "#52c41a" }}>{stats.studentsWithGroup}</strong>
-					</div>
-
 					{stats.studentsWithoutGroup > 0 && (
 						<div
 							style={{
@@ -1037,10 +1159,10 @@ export default function StudentList() {
 					<Input
 						allowClear
 						prefix={<SearchOutlined />}
-						placeholder="Tìm theo MSSV, tên, email, lớp, nhóm..."
+						placeholder="Tìm sinh viên"
 						value={keyword}
 						onChange={(e) => setKeyword(e.target.value)}
-						style={{ width: 280 }}
+						style={{ width: 200 }}
 					/>
 					<Button icon={<ReloadOutlined />} onClick={refresh}>
 						Refresh
@@ -1087,15 +1209,22 @@ export default function StudentList() {
 
 			{/* Modal thêm sinh viên */}
 			<Modal
-				title="Thêm sinh viên mới"
+				title={foundStudent ? "Đăng ký sinh viên vào lớp" : "Thêm sinh viên mới"}
 				open={addModalOpen}
 				onCancel={() => {
 					setAddModalOpen(false);
 					addForm.resetFields();
+					setFoundStudent(null);
 				}}
 				onOk={handleAdd}
-				okText="Thêm mới"
+				okText={foundStudent ? "Đăng ký vào lớp" : "Thêm mới"}
 				width={600}
+				centered
+				bodyStyle={{
+					maxHeight: "70vh",
+					overflowY: "auto",
+					overflowX: "hidden",
+				}}
 			>
 				<Form form={addForm} layout="vertical" validateTrigger="onBlur">
 					<Form.Item
@@ -1109,42 +1238,76 @@ export default function StudentList() {
 							},
 						]}
 					>
-						<Input ref={studentCodeRef} placeholder="VD: 2021001234" />
+						<Input
+							ref={studentCodeRef}
+							placeholder="VD: 2021001234"
+							onChange={(e) => {
+								// KHÔNG trim() ở đây, giữ nguyên value để không bị ngắt
+								const value = e.target.value;
+								debouncedSearchStudent(value);
+							}}
+							suffix={searchingStudent ? <Spin size="small" /> : null}
+						/>
 					</Form.Item>
+					{foundStudent && (
+						<Alert
+							message="Sinh viên đã tồn tại trong hệ thống"
+							description={
+								<div>
+									<p><strong>Họ tên:</strong> {foundStudent.user.fullName}</p>
+									<p><strong>Email:</strong> {foundStudent.user.email}</p>
+									<p><strong>Lớp:</strong> {foundStudent.className}</p>
+									<p style={{ marginBottom: 0, color: '#52c41a' }}>
+										Nhấn "Đăng ký vào lớp" để thêm sinh viên này vào lớp học
+									</p>
+								</div>
+							}
+							type="success"
+							showIcon
+							style={{ marginBottom: 16 }}
+						/>
+					)}
 
 					<Form.Item
 						name="fullName"
 						label="Họ và tên"
-						rules={[{ required: true, message: "Vui lòng nhập họ tên" }]}
 					>
-						<Input placeholder="VD: Nguyễn Văn A" />
+						<Input
+							placeholder="VD: Nguyễn Văn A"
+							disabled={!!foundStudent}
+						/>
 					</Form.Item>
 
 					<Form.Item
 						name="email"
 						label="Email"
-						rules={[
-							{ required: true, message: "Vui lòng nhập email" },
-							{ type: "email", message: "Email không hợp lệ" },
-						]}
+
 					>
-						<Input ref={emailRef} placeholder="VD: student@university.edu.vn" />
+						<Input
+							ref={emailRef}
+							placeholder="VD: student@university.edu. vn"
+							disabled={!!foundStudent}
+						/>
 					</Form.Item>
 
 					<Form.Item
 						name="className"
 						label="Mã lớp"
-						rules={[{ required: true, message: "Vui lòng nhập mã lớp" }]}
 					>
-						<Input placeholder="VD: DCT1221" />
+						<Input
+							placeholder="VD: DCT1221"
+							disabled={!!foundStudent}
+						/>
 					</Form.Item>
 
 					<Form.Item
 						name="major"
 						label="Chuyên ngành"
-						rules={[{ required: true, message: "Vui lòng nhập chuyên ngành" }]}
 					>
-						<Input placeholder="VD: Information Technology, Software Engineering" />
+						<Input
+							placeholder="VD: Information Technology, Software Engineering"
+							disabled={!!foundStudent}
+						/>
 					</Form.Item>
 				</Form>
 			</Modal>
@@ -1391,7 +1554,9 @@ export default function StudentList() {
 					</Space>
 				)}
 			</Modal>
-			{/* Modal Import Excel */} <Modal title="Import danh sách sinh viên từ Excel" open={importModalOpen} onCancel={handleCloseImportModal} footer={[<Button key="download" icon={<DownloadOutlined />} onClick={downloadTemplate}> Tải file mẫu </Button>, <Button key="cancel" onClick={handleCloseImportModal}> Đóng </Button>, <Button key="import" type="primary" loading={importLoading} disabled={importData.length === 0} onClick={handleImport} > Import {importData.length > 0 && `(${importData.length} SV)`} </Button>,]} width={1000} > <Space direction="vertical" style={{ width: "100%" }} size="large"> <Alert message="Hướng dẫn" description={<ul style={{ marginBottom: 0, paddingLeft: 20 }}> <li>Tải file mẫu và điền thông tin sinh viên theo định dạng</li> <li> File Excel phải chứa các cột: <strong>Mã SV</strong>, <strong>Họ lót</strong>, <strong>Tên</strong>, <strong>Email</strong>, <strong>Điện thoại</strong>, <strong>Mã lớp</strong>, <strong>Tên lớp</strong> </li> <li><strong>Nếu sinh viên đã có tài khoản:</strong> Chỉ thêm vào lớp, không tạo tài khoản mới</li> <li><strong>Nếu sinh viên chưa có tài khoản:</strong> Tạo tài khoản mới và thêm vào lớp</li> <li>Sinh viên đã có trong lớp sẽ được bỏ qua</li> <li>Số điện thoại phải có định dạng: 10-11 số, bắt đầu bằng 0 (VD: 0901234567)</li> <li>Mật khẩu mặc định cho tài khoản mới: <strong>123456</strong></li> </ul>} type="info" showIcon /> <Upload accept=".xlsx,.xls" beforeUpload={handleFileUpload} maxCount={1} onRemove={() => { setImportFile(null); setImportData([]); setImportResult(null); }} > <Button icon={<UploadOutlined />} block size="large"> Chọn file Excel </Button> </Upload> {importData.length > 0 && !importResult && (<Alert message={`Đã đọc được ${importData.length} sinh viên`} type="success" showIcon />)} {importResult && (<div> <Alert message="Kết quả import" description={<div> <p> <CheckCircleOutlined style={{ color: "#52c41a" }} /> Thành công: {importResult.success} </p> {importResult.skipped > 0 && (<p style={{ color: "#1890ff" }}> ℹ️ Đã có trong lớp (bỏ qua): {importResult.skipped} </p>)} {importResult.failed > 0 && (<p> <WarningOutlined style={{ color: "#ff4d4f" }} /> Thất bại: {importResult.failed} </p>)} </div>} type={importResult.failed > 0 ? "warning" : "success"} showIcon /> {importResult.errors.length > 0 && (<div style={{ marginTop: 16 }}> <Typography.Title level={5}>Chi tiết lỗi:</Typography.Title> <div style={{ maxHeight: 300, overflowY: "auto", border: "1px solid #d9d9d9", borderRadius: 6, padding: 12, }} > {importResult.errors.map((error, index) => (<div key={index} style={{ marginBottom: 8, padding: 8, backgroundColor: "#fff2e8", borderRadius: 4, }} > <strong>Dòng {error.row}:</strong> {error.studentCode} -{" "} {error.fullName} <br /> <span style={{ color: "#ff4d4f" }}>{error.error}</span> </div>))} </div> </div>)} </div>)} {importData.length > 0 && !importResult && (<div> <Typography.Title level={5}> Danh sách sinh viên sẽ import: </Typography.Title> <div style={{ maxHeight: 400, overflowY: "auto", border: "1px solid #d9d9d9", borderRadius: 6, }} > <Table dataSource={importData} columns={[{ title: "MSSV", dataIndex: "studentCode", key: "studentCode", width: 120, }, { title: "Họ và tên", dataIndex: "fullName", key: "fullName", width: 180, }, { title: "Email", dataIndex: "email", key: "email", width: 220, }, { title: "Số điện thoại", dataIndex: "phone", key: "phone", width: 130, render: (phone) => phone || <Tag color="default">Chưa có</Tag>, }, { title: "Mã lớp", dataIndex: "className", key: "className", width: 100, },]} rowKey="studentCode" pagination={false} size="small" scroll={{ x: 750 }} /> </div> </div>)} </Space> </Modal>
+			<Modal title="Import danh sách sinh viên từ Excel" open={importModalOpen} onCancel={handleCloseImportModal} footer={[<Button key="download" icon={<DownloadOutlined />} onClick={downloadTemplate}> Tải file mẫu
+			</Button>,
+			<Button key="cancel" onClick={handleCloseImportModal}> Đóng </Button>, <Button key="import" type="primary" loading={importLoading} disabled={importData.length === 0} onClick={handleImport} > Import {importData.length > 0 && `(${importData.length} SV)`} </Button>,]} width={1000} > <Space direction="vertical" style={{ width: "100%" }} size="large"> <Alert message="Hướng dẫn" description={<ul style={{ marginBottom: 0, paddingLeft: 20 }}> <li>Tải file mẫu và điền thông tin sinh viên theo định dạng</li> <li> File Excel phải chứa các cột: <strong>Mã SV</strong>, <strong>Họ lót</strong>, <strong>Tên</strong>, <strong>Email</strong>, <strong>Điện thoại</strong>, <strong>Mã lớp</strong>, <strong>Tên lớp</strong> </li> <li><strong>Nếu sinh viên đã có tài khoản:</strong> Chỉ thêm vào lớp, không tạo tài khoản mới</li> <li><strong>Nếu sinh viên chưa có tài khoản:</strong> Tạo tài khoản mới và thêm vào lớp</li> <li>Sinh viên đã có trong lớp sẽ được bỏ qua</li> <li>Số điện thoại phải có định dạng: 10-11 số, bắt đầu bằng 0 (VD: 0901234567)</li> <li>Mật khẩu mặc định cho tài khoản mới: <strong>123456</strong></li> </ul>} type="info" showIcon /> <Upload accept=".xlsx,.xls" beforeUpload={handleFileUpload} maxCount={1} onRemove={() => { setImportFile(null); setImportData([]); setImportResult(null); }} > <Button icon={<UploadOutlined />} block size="large"> Chọn file Excel </Button> </Upload> {importData.length > 0 && !importResult && (<Alert message={`Đã đọc được ${importData.length} sinh viên`} type="success" showIcon />)} {importResult && (<div> <Alert message="Kết quả import" description={<div> <p> <CheckCircleOutlined style={{ color: "#52c41a" }} /> Thành công: {importResult.success} </p> {importResult.skipped > 0 && (<p style={{ color: "#1890ff" }}> ℹ️ Đã có trong lớp (bỏ qua): {importResult.skipped} </p>)} {importResult.failed > 0 && (<p> <WarningOutlined style={{ color: "#ff4d4f" }} /> Thất bại: {importResult.failed} </p>)} </div>} type={importResult.failed > 0 ? "warning" : "success"} showIcon /> {importResult.errors.length > 0 && (<div style={{ marginTop: 16 }}> <Typography.Title level={5}>Chi tiết lỗi:</Typography.Title> <div style={{ maxHeight: 300, overflowY: "auto", border: "1px solid #d9d9d9", borderRadius: 6, padding: 12, }} > {importResult.errors.map((error, index) => (<div key={index} style={{ marginBottom: 8, padding: 8, backgroundColor: "#fff2e8", borderRadius: 4, }} > <strong>Dòng {error.row}:</strong> {error.studentCode} -{" "} {error.fullName} <br /> <span style={{ color: "#ff4d4f" }}>{error.error}</span> </div>))} </div> </div>)} </div>)} {importData.length > 0 && !importResult && (<div> <Typography.Title level={5}> Danh sách sinh viên sẽ import: </Typography.Title> <div style={{ maxHeight: 400, overflowY: "auto", border: "1px solid #d9d9d9", borderRadius: 6, }} > <Table dataSource={importData} columns={[{ title: "MSSV", dataIndex: "studentCode", key: "studentCode", width: 120, }, { title: "Họ và tên", dataIndex: "fullName", key: "fullName", width: 180, }, { title: "Email", dataIndex: "email", key: "email", width: 220, }, { title: "Số điện thoại", dataIndex: "phone", key: "phone", width: 130, render: (phone) => phone || <Tag color="default">Chưa có</Tag>, }, { title: "Mã lớp", dataIndex: "className", key: "className", width: 100, },]} rowKey="studentCode" pagination={false} size="small" scroll={{ x: 750 }} /> </div> </div>)} </Space> </Modal>
 		</div>
 	);
 }

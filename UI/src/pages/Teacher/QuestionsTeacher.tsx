@@ -35,19 +35,20 @@ import {
 	CodeOutlined,
 	FormOutlined,
 	UnorderedListOutlined,
+	FolderOpenOutlined,
+	GlobalOutlined,
+	LockOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import { BookOpen } from "lucide-react";
 import { useAuth } from "../../context/authContext";
+import instance from "../../utils/axiosInstance";
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 const { Option } = Select;
-const API_BASE = "http://localhost:4000/api/v1";
 
-// 🆕 Enum Programming Language
 enum ProgrammingLanguage {
 	javascript = "javascript",
 	python = "python",
@@ -59,7 +60,6 @@ enum ProgrammingLanguage {
 	css = "css",
 }
 
-// 🆕 Labels cho các ngôn ngữ
 const ProgrammingLanguageLabels: Record<ProgrammingLanguage, string> = {
 	[ProgrammingLanguage.javascript]: "JavaScript",
 	[ProgrammingLanguage.python]: "Python",
@@ -117,7 +117,7 @@ type Question = {
 	chapter?: Chapter;
 	createdAt?: string;
 	updatedAt?: string;
-	isPublic?: boolean; // 🆕 show/public flag
+	isPublic?: boolean;
 };
 
 export default function QuestionsTeacher() {
@@ -125,18 +125,15 @@ export default function QuestionsTeacher() {
 	const [questions, setQuestions] = useState<Question[]>([]);
 	const [keyword, setKeyword] = useState("");
 
-	// Data for filters
 	const [subjects, setSubjects] = useState<Subject[]>([]);
 	const [chapters, setChapters] = useState<Chapter[]>([]);
 	const [allChapters, setAllChapters] = useState<Chapter[]>([]);
 
-	// Filter states
 	const [filterSubject, setFilterSubject] = useState<number | null>(null);
 	const [filterChapter, setFilterChapter] = useState<number | null>(null);
 	const [filterDifficulty, setFilterDifficulty] = useState<string | null>(null);
 	const [filterType, setFilterType] = useState<string | null>(null);
 
-	// modal thêm/sửa
 	const [form] = Form.useForm<any>();
 	const [modalOpen, setModalOpen] = useState(false);
 	const [editing, setEditing] = useState<Question | null>(null);
@@ -146,11 +143,9 @@ export default function QuestionsTeacher() {
 	const [testCases, setTestCases] = useState<TestCase[]>([]);
 	const [questionType, setQuestionType] = useState<string>("multiple_choice");
 
-	// Chapters for selected subject in form
 	const [formChapters, setFormChapters] = useState<Chapter[]>([]);
 	const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null);
 
-	// modal xem chi tiết
 	const [detailModalOpen, setDetailModalOpen] = useState(false);
 	const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null);
 	const [detailTestCases, setDetailTestCases] = useState<TestCase[]>([]);
@@ -173,8 +168,8 @@ export default function QuestionsTeacher() {
 
 		try {
 			setLoading(true);
-			const res = await axios.get<{ success: boolean; data: Question[] }>(
-				`${API_BASE}/questions/user/${userId}`
+			const res = await instance.get<{ success: boolean; data: Question[] }>(
+				`/questions/user/${userId}`
 			);
 			if (res.data.success) {
 				setQuestions(res.data.data || []);
@@ -189,15 +184,15 @@ export default function QuestionsTeacher() {
 
 	async function fetchSubjects() {
 		try {
-			const res = await axios.get<{ success: boolean; data: Subject[] }>(
-				`${API_BASE}/subjects`
+			const res = await instance.get<{ success: boolean; data: Subject[] }>(
+				`/subjects`
 			);
 			if (res.data.success) {
 				setSubjects(res.data.data || []);
 
 				const chaptersPromises = res.data.data.map((subject) =>
-					axios.get<{ success: boolean; data: { items: Chapter[] } }>(
-						`${API_BASE}/chapters?subject_id=${subject.id}`
+					instance.get<{ success: boolean; data: { items: Chapter[] } }>(
+						`/chapters?  subject_id=${subject.id}`
 					)
 				);
 
@@ -214,8 +209,8 @@ export default function QuestionsTeacher() {
 
 	async function fetchChaptersBySubject(subjectId: number) {
 		try {
-			const res = await axios.get<{ success: boolean; data: Chapter[] }>(
-				`${API_BASE}/chapters?subject_id=${subjectId}`
+			const res = await instance.get<{ success: boolean; data: Chapter[] }>(
+				`/chapters?  subject_id=${subjectId}`
 			);
 			if (res.data.success) {
 				return res.data.data || [];
@@ -229,8 +224,8 @@ export default function QuestionsTeacher() {
 
 	async function fetchTestCases(questionId: number) {
 		try {
-			const res = await axios.get<{ success: boolean; data: TestCase[] }>(
-				`${API_BASE}/test-cases/question/${questionId}`
+			const res = await instance.get<{ success: boolean; data: TestCase[] }>(
+				`/test-cases/question/${questionId}`
 			);
 			if (res.data.success) {
 				return res.data.data || [];
@@ -285,7 +280,7 @@ export default function QuestionsTeacher() {
 
 	const handleDelete = async (id: number) => {
 		try {
-			await axios.delete(`${API_BASE}/questions/${id}`);
+			await instance.delete(`/questions/${id}`);
 			toast.success("Đã xóa câu hỏi");
 			setQuestions((prev) => prev.filter((q) => q.id !== id));
 		} catch (err) {
@@ -293,35 +288,27 @@ export default function QuestionsTeacher() {
 		}
 	};
 
-	// 🔥 HÀM MỚI - Xử lý update/create choices riêng biệt
 	const handleChoicesUpdate = async (questionId: number, newChoices: Choice[]) => {
 		try {
-			// Nếu đang edit, lấy danh sách choices hiện tại
 			const existingChoices = editing?.choices || [];
-
-			// Tạo map để dễ so sánh
 			const existingMap = new Map(existingChoices.map((c) => [c.id, c]));
 			const newMap = new Map(newChoices.filter((c) => c.id).map((c) => [c.id, c]));
 
-			// 1. Xóa các choices không còn trong danh sách mới
 			for (const existingChoice of existingChoices) {
 				if (existingChoice.id && !newMap.has(existingChoice.id)) {
-					await axios.delete(`${API_BASE}/questions-choices/choices/${existingChoice.id}`);
+					await instance.delete(`/questions-choices/choices/${existingChoice.id}`);
 				}
 			}
 
-			// 2. Update hoặc Create choices
 			for (const choice of newChoices) {
 				if (choice.id) {
-					// Update existing choice
-					await axios.put(`${API_BASE}/questions-choices/choices/${choice.id}`, {
+					await instance.put(`/questions-choices/choices/${choice.id}`, {
 						content: choice.content.trim(),
 						isCorrect: choice.isCorrect,
 						order: choice.order,
 					});
 				} else {
-					// Create new choice
-					await axios.post(`${API_BASE}/choices`, {
+					await instance.post(`/questions-choices/${questionId}/choices`, {
 						questionId,
 						content: choice.content.trim(),
 						isCorrect: choice.isCorrect,
@@ -342,8 +329,7 @@ export default function QuestionsTeacher() {
 		try {
 			const values = await form.validateFields();
 
-			// 🔥 Payload không còn chứa choices
-			let payload: any = {
+			const payload: any = {
 				type: values.type || "multiple_choice",
 				content: values.content.trim(),
 				points: values.points ? Number(values.points) : 5,
@@ -353,10 +339,9 @@ export default function QuestionsTeacher() {
 				difficulty: values.difficulty || "medium",
 				createdBy: userId,
 				language: values.type === "coding" ? values.language : undefined,
-				isPublic: Boolean(values.isPublic), // 🆕 include isPublic in payload
+				isPublic: Boolean(values.isPublic),
 			};
 
-			// Validate cho multiple choice
 			if (values.type === "multiple_choice") {
 				if (choices.length < 2) {
 					toast.error("Cần ít nhất 2 đáp án");
@@ -376,27 +361,23 @@ export default function QuestionsTeacher() {
 				}
 			}
 
-			console.log("Request body:", payload);
-
 			let questionId: number;
 
-			// 1️⃣ Tạo/Update Question trước (KHÔNG có choices trong payload)
 			if (editing) {
-				await axios.put(`${API_BASE}/questions/${editing.id}`, payload);
+				await instance.put(`/questions/${editing.id}`, payload);
 				questionId = editing.id;
 				toast.success("Đã cập nhật câu hỏi");
 			} else {
-				const res = await axios.post(`${API_BASE}/questions`, payload);
+				const res = await instance.post(`/questions`, payload);
 				questionId = res.data.data.id;
 				toast.success("Đã thêm câu hỏi mới");
 			}
 
-			// 2️⃣ Xử lý Choices riêng (nếu là multiple choice)
 			if (values.type === "multiple_choice") {
 				const validChoices = choices
 					.filter((c) => c.content.trim())
 					.map((c, idx) => ({
-						id: c.id, // giữ id nếu đang edit
+						id: c.id,
 						content: c.content.trim(),
 						isCorrect: c.isCorrect,
 						order: idx + 1,
@@ -405,18 +386,17 @@ export default function QuestionsTeacher() {
 				await handleChoicesUpdate(questionId, validChoices);
 			}
 
-			// 3️⃣ Xử lý Test Cases (nếu là coding)
 			if (values.type === "coding" && testCases.length > 0) {
 				try {
 					if (editing) {
 						const existingTestCases = await fetchTestCases(questionId);
 						for (const tc of existingTestCases) {
-							await axios.delete(`${API_BASE}/test-cases/${tc.id}`);
+							await instance.delete(`/test-cases/${tc.id}`);
 						}
 					}
 
 					for (const tc of testCases) {
-						await axios.post(`${API_BASE}/test-cases`, {
+						await instance.post(`/test-cases`, {
 							questionId,
 							input: tc.input,
 							expectedOutput: tc.expectedOutput,
@@ -432,7 +412,6 @@ export default function QuestionsTeacher() {
 				}
 			}
 
-			// Reset form và đóng modal
 			setModalOpen(false);
 			setEditing(null);
 			form.resetFields();
@@ -538,11 +517,10 @@ export default function QuestionsTeacher() {
 		return <Tag color={diff.color}>{diff.text}</Tag>;
 	};
 
-	// 🆕 Toggle public state for a question
 	const toggleIsPublic = async (questionId: number, current: boolean | undefined) => {
 		try {
-			const newValue = !Boolean(current);
-			await axios.put(`${API_BASE}/questions/${questionId}`, { isPublic: newValue });
+			const newValue = !current;
+			await instance.put(`/questions/${questionId}`, { isPublic: newValue });
 			setQuestions((prev) => prev.map((q) => (q.id === questionId ? { ...q, isPublic: newValue } : q)));
 			toast.success(newValue ? "Đã bật chế độ công khai" : "Đã tắt chế độ công khai");
 		} catch (err: any) {
@@ -557,11 +535,12 @@ export default function QuestionsTeacher() {
 			title: "Nội dung câu hỏi",
 			dataIndex: "content",
 			key: "content",
-			width: "25%",
+			width: 250,
+			fixed: "left" as const,
 			render: (text: string, record: Question) => (
 				<div>
-					<Text strong style={{ cursor: "pointer" }} onClick={() => viewDetails(record)}>
-						{text.length > 80 ? text.substring(0, 80) + "..." : text}
+					<Text strong style={{ cursor: "pointer", fontSize: 14 }} onClick={() => viewDetails(record)}>
+						{text.length > 60 ? text.substring(0, 60) + "..." : text}
 					</Text>
 				</div>
 			),
@@ -570,22 +549,24 @@ export default function QuestionsTeacher() {
 			title: "Loại",
 			dataIndex: "type",
 			key: "type",
+			width: 110,
 			align: "center" as const,
-			width: "10%",
 			render: renderTypeTag,
 		},
 		{
 			title: "Môn học",
 			key: "subject",
-			width: "12%",
+			width: 140,
 			render: (_: any, record: Question) =>
 				record.subject ? (
 					<div>
-						<Tag color="blue" icon={<BookOutlined />}>
+						<Tag color="blue" icon={<BookOutlined />} style={{ fontSize: 11 }}>
 							{record.subject.subjectCode}
 						</Tag>
-						<div style={{ fontSize: 12, color: "#666" }}>
-							{record.subject.subjectName}
+						<div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>
+							{record.subject.subjectName.length > 15
+								? record.subject.subjectName.substring(0, 15) + "..."
+								: record.subject.subjectName}
 						</div>
 					</div>
 				) : (
@@ -595,11 +576,11 @@ export default function QuestionsTeacher() {
 		{
 			title: "Chương",
 			key: "chapter",
-			width: "10%",
+			width: 100,
 			render: (_: any, record: Question) =>
 				record.chapter ? (
 					<Tooltip title={record.chapter.chapterName}>
-						<Tag color="purple" icon={<FileTextOutlined />}>
+						<Tag color="purple" icon={<FileTextOutlined />} style={{ fontSize: 11 }}>
 							{record.chapter.chapterCode}
 						</Tag>
 					</Tooltip>
@@ -611,40 +592,39 @@ export default function QuestionsTeacher() {
 			title: "Độ khó",
 			dataIndex: "difficulty",
 			key: "difficulty",
+			width: 100,
 			align: "center" as const,
-			width: "8%",
 			render: renderDifficultyTag,
 		},
 		{
 			title: "Điểm",
 			dataIndex: "points",
 			key: "points",
+			width: 80,
 			align: "center" as const,
-			width: "7%",
 			sorter: (a: Question, b: Question) => a.points - b.points,
 			render: (points: number) => <Tag color="green">{points}</Tag>,
 		},
-		// 🆕 Public column with Switch
 		{
 			title: "Công khai",
 			key: "isPublic",
+			width: 110,
 			align: "center" as const,
-			width: "10%",
 			render: (_: any, record: Question) => (
-				<div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-					<Switch
-						checked={Boolean(record.isPublic)}
-						onChange={() => toggleIsPublic(record.id, record.isPublic)}
-					/>
-					{record.isPublic ? <Tag color="green">Public</Tag> : <Tag>Private</Tag>}
-				</div>
+				<Switch
+					checked={Boolean(record.isPublic)}
+					onChange={() => toggleIsPublic(record.id, record.isPublic)}
+					size="small"
+					checkedChildren={<GlobalOutlined />}
+					unCheckedChildren={<LockOutlined />}
+				/>
 			),
 		},
 		{
 			title: "Hành động",
 			key: "actions",
+			width: 150,
 			align: "center" as const,
-			width: "13%",
 			render: (_: any, record: Question) => (
 				<Space size="small">
 					<Tooltip title="Xem chi tiết">
@@ -670,7 +650,7 @@ export default function QuestionsTeacher() {
 									chapterId: record.chapterId,
 									tags: record.tags,
 									language: record.language,
-									isPublic: record.isPublic, // 🆕 set isPublic when editing
+									isPublic: record.isPublic,
 								});
 
 								if (record.subjectId) {
@@ -683,7 +663,7 @@ export default function QuestionsTeacher() {
 									setChoices(
 										record.choices && record.choices.length > 0
 											? record.choices.map((c) => ({
-												id: c.id, // 🔥 Giữ id để update
+												id: c.id,
 												content: c.content,
 												isCorrect: c.isCorrect,
 												order: c.order,
@@ -707,7 +687,7 @@ export default function QuestionsTeacher() {
 					<Tooltip title="Xóa">
 						<Popconfirm
 							title="Xóa câu hỏi"
-							description="Bạn có chắc muốn xóa câu hỏi này?"
+							description="Bạn có chắc muốn xóa?"
 							okText="Xóa"
 							cancelText="Hủy"
 							okButtonProps={{ danger: true }}
@@ -752,6 +732,22 @@ export default function QuestionsTeacher() {
 		await fetchQuestions();
 	};
 
+	const getStatistics = () => {
+		const totalQuestions = questions.length;
+		const publicQuestions = questions.filter((q) => q.isPublic).length;
+		const privateQuestions = totalQuestions - publicQuestions;
+		const multipleChoice = questions.filter((q) => q.type === "multiple_choice").length;
+
+		return {
+			totalQuestions,
+			publicQuestions,
+			privateQuestions,
+			multipleChoice,
+		};
+	};
+
+	const stats = getStatistics();
+
 	if (!userId) {
 		return (
 			<div style={{ textAlign: "center", padding: 60 }}>
@@ -764,39 +760,242 @@ export default function QuestionsTeacher() {
 	}
 
 	return (
-		<div className="pl-3 pr-3">
+		<div className="questions-container" style={{ padding: "8px 12px" }}>
+			<style>
+				{`
+					@media (max-width: 768px) {
+						.questions-title {
+							font-size: 18px ! important;
+							margin-bottom: 0 !important;
+						}
+
+						.stats-container {
+							display: none !important;
+						}
+
+						.header-actions {
+							flex-direction: column !important;
+							gap: 8px !important;
+							width: 100%;
+							padding-top: 8px !important;
+						}
+
+						.header-actions > div {
+							width: 100% ! important;
+						}
+
+						.header-actions . ant-btn {
+							width: 100% !important;
+						}
+
+						.hide-on-mobile {
+							display: none !important;
+						}
+
+
+						.filter-card {
+							padding: 8px !important;
+						}
+
+						.filter-card .ant-row {
+							gap: 8px;
+						}
+
+						.filter-card .ant-col {
+							flex: 0 0 100% !important;
+							max-width: 100% ! important;
+						}
+
+						.ant-modal {
+							max-width: calc(100vw - 16px) !important;
+							margin: 8px ! important;
+						}
+						
+						.ant-table-wrapper::after {
+							content: "← Vuốt để xem thêm →";
+							display: block;
+							text-align: center;
+							font-size: 11px;
+							color: #999;
+							padding: 8px 0 4px;
+							font-style: italic;
+						}
+					}
+
+					@media (min-width: 769px) and (max-width: 1024px) {
+						.stats-container > div:nth-child(n+4) {
+							display: none ! important;
+						}
+					}
+
+					@media (min-width: 1025px) {
+						.questions-container {
+							padding: 16px !important;
+						}
+					}
+					
+					.ant-table-body::-webkit-scrollbar {
+						height: 8px;
+					}
+					
+					. ant-table-body::-webkit-scrollbar-track {
+						background: #f1f1f1;
+						border-radius: 4px;
+					}
+					
+					. ant-table-body::-webkit-scrollbar-thumb {
+						background: #888;
+						border-radius: 4px;
+					}
+					
+					.ant-table-body::-webkit-scrollbar-thumb:hover {
+						background: #555;
+					}
+				`}
+			</style>
+
+			{/* Header */}
+			<Title level={3} className="questions-title" style={{ margin: 0, marginBottom: 16 }}>
+				<div className="flex items-center gap-2">
+					<BookOpen size={20} /> Câu hỏi của tôi
+				</div>
+			</Title>
+
+			{/* Header Wrapper */}
 			<div
 				style={{
 					display: "flex",
 					justifyContent: "space-between",
-					alignItems: "center",
+					alignItems: "flex-start",
 					marginBottom: 16,
+					flexWrap: "wrap",
+					gap: 12,
 				}}
 			>
-				<Title level={3} className="mt-2">
-					<div className="flex items-center gap-2">
-						<div className="mt-1">
-							<BookOpen />
-						</div>{" "}
-						Câu hỏi của tôixx
+				{/* Statistics Badges */}
+				<div
+					className="stats-container hide-on-mobile"
+					style={{
+						display: "flex",
+						gap: 8,
+						flexWrap: "wrap",
+						flex: "1 1 auto",
+					}}
+				>
+					{/* Tổng câu hỏi */}
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 12,
+							color: "#000",
+							border: "1px solid #ddd",
+							borderRadius: 6,
+							padding: "6px 10px",
+							background: "#fff",
+							whiteSpace: "nowrap",
+						}}
+					>
+						<FolderOpenOutlined style={{ fontSize: 14, color: "#1890ff" }} />
+						<span>Tổng câu hỏi:</span>
+						<strong>{stats.totalQuestions}</strong>
 					</div>
-				</Title>
-				<div style={{ display: "flex", gap: 8 }}>
+				</div>
+
+				{/* FILTERS + ACTIONS (giống Material) */}
+				<div
+					className="header-actions"
+					style={{
+						display: "flex",
+						gap: 8,
+						alignItems: "center",
+						flexWrap: "wrap",
+					}}
+				>
+					{/* Search */}
+					<Input
+						allowClear
+						prefix={<SearchOutlined />}
+						placeholder="Tìm câu hỏi..."
+						value={keyword}
+						onChange={(e) => setKeyword(e.target.value)}
+						style={{ width: 200 }}
+					/>
+
+					{/* Filter Loại */}
+					<Select
+						allowClear
+						placeholder="Loại"
+						style={{ width: 100 }}
+						value={filterType}
+						onChange={setFilterType}
+					>
+						<Option value="multiple_choice">Trắc nghiệm</Option>
+						<Option value="essay">Tự luận</Option>
+						<Option value="coding">Lập trình</Option>
+					</Select>
+
+					{/* Filter Môn */}
+					<Select
+						allowClear
+						placeholder="Môn học"
+						style={{ width: 100 }}
+						value={filterSubject}
+						onChange={handleFilterSubjectChange}
+					>
+						{subjects.map((s) => (
+							<Option key={s.id} value={s.id}>
+								{s.subjectCode}
+							</Option>
+						))}
+					</Select>
+
+					{/* Filter Chương */}
+					<Select
+						allowClear
+						placeholder="Chương"
+						style={{ width: 100 }}
+						value={filterChapter}
+						onChange={setFilterChapter}
+						disabled={!filterSubject}
+					>
+						{chapters.map((c) => (
+							<Option key={c.id} value={c.id}>
+								{c.chapterCode}
+							</Option>
+						))}
+					</Select>
+
+					{/* Filter Độ khó */}
+					<Select
+						allowClear
+						placeholder="Độ khó"
+						style={{ width: 100 }}
+						value={filterDifficulty}
+						onChange={setFilterDifficulty}
+					>
+						<Option value="easy">Dễ</Option>
+						<Option value="medium">Trung bình</Option>
+						<Option value="hard">Khó</Option>
+					</Select>
+
+					{/* Action Buttons */}
 					<Button icon={<ReloadOutlined />} onClick={handleReload}>
-						Làm mới
+						<span className="btn-text">Làm mới</span>
 					</Button>
+
 					<Button
 						type="primary"
 						icon={<PlusOutlined />}
 						onClick={() => {
 							setEditing(null);
 							form.resetFields();
-							// set default values for new question
 							form.setFieldsValue({
 								type: "multiple_choice",
 								points: 1,
 								difficulty: "easy",
-								isPublic: false, // 🆕 default not public
+								isPublic: false,
 							});
 							setChoices([{ content: "", isCorrect: false, order: 1 }]);
 							setTestCases([]);
@@ -806,103 +1005,39 @@ export default function QuestionsTeacher() {
 							setModalOpen(true);
 						}}
 					>
-						Thêm câu hỏi
+						<span className="btn-text">Thêm</span>
 					</Button>
 				</div>
 			</div>
 
-			<Card style={{ marginBottom: 16 }}>
-				<Row gutter={16}>
-					<Col span={6}>
-						<Input
-							allowClear
-							prefix={<SearchOutlined />}
-							placeholder="Tìm kiếm theo nội dung, môn học, chương..."
-							value={keyword}
-							onChange={(e) => setKeyword(e.target.value)}
-						/>
-					</Col>
-					<Col span={4}>
-						<Select
-							allowClear
-							placeholder="Lọc theo loại"
-							style={{ width: "100%" }}
-							value={filterType}
-							onChange={setFilterType}
-						>
-							<Option value="multiple_choice">Trắc nghiệm</Option>
-							<Option value="essay">Tự luận</Option>
-							<Option value="coding">Code</Option>
-						</Select>
-					</Col>
-					<Col span={5}>
-						<Select
-							allowClear
-							placeholder="Lọc theo môn học"
-							style={{ width: "100%" }}
-							value={filterSubject}
-							onChange={handleFilterSubjectChange}
-						>
-							{subjects.map((s) => (
-								<Option key={s.id} value={s.id}>
-									{s.subjectCode} - {s.subjectName}
-								</Option>
-							))}
-						</Select>
-					</Col>
-					<Col span={5}>
-						<Select
-							allowClear
-							placeholder="Lọc theo chương"
-							style={{ width: "100%" }}
-							value={filterChapter}
-							onChange={setFilterChapter}
-							disabled={!filterSubject}
-						>
-							{chapters.map((c) => (
-								<Option key={c.id} value={c.id}>
-									{c.chapterCode} - {c.chapterName}
-								</Option>
-							))}
-						</Select>
-					</Col>
-					<Col span={4}>
-						<Select
-							allowClear
-							placeholder="Lọc theo độ khó"
-							style={{ width: "100%" }}
-							value={filterDifficulty}
-							onChange={setFilterDifficulty}
-						>
-							<Option value="easy">Dễ</Option>
-							<Option value="medium">Trung bình</Option>
-							<Option value="hard">Khó</Option>
-						</Select>
-					</Col>
-				</Row>
-			</Card>
 
+
+			{/* Table */}
 			{loading ? (
 				<div style={{ textAlign: "center", padding: 60 }}>
 					<Spin size="large" tip="Đang tải danh sách câu hỏi..." />
 				</div>
 			) : (
-				<Table<Question>
-					dataSource={filteredQuestions}
-					columns={columns}
-					rowKey="id"
-					bordered
-					pagination={{
-						pageSize: 10,
-						showSizeChanger: true,
-						showTotal: (total) => `Tổng ${total} câu hỏi`,
-					}}
-					locale={{ emptyText: "Chưa có câu hỏi nào" }}
-					scroll={{ x: 1500 }}
-				/>
+				<div style={{ overflowX: "auto" }}>
+					<Table<Question>
+						dataSource={filteredQuestions}
+						columns={columns}
+						rowKey="id"
+						bordered
+						pagination={{
+							pageSize: 10,
+							showSizeChanger: true,
+							showTotal: (total) => `Tổng ${total} câu hỏi`,
+							responsive: true,
+						}}
+						scroll={{ x: 1050 }}
+						size="middle"
+						locale={{ emptyText: "Chưa có câu hỏi nào" }}
+					/>
+				</div>
 			)}
 
-			{/* Modal thêm/sửa */}
+			{/* Modals giữ nguyên code cũ của bạn với thêm maxWidth responsive */}
 			<Modal
 				title={
 					<Space>
@@ -924,6 +1059,7 @@ export default function QuestionsTeacher() {
 				okText={editing ? "Lưu thay đổi" : "Tạo mới"}
 				cancelText="Hủy"
 				width={900}
+				style={{ maxWidth: "calc(100vw - 16px)" }}
 				centered
 				bodyStyle={{
 					maxHeight: "70vh",
@@ -1263,10 +1399,9 @@ export default function QuestionsTeacher() {
 							</Text>
 						</Card>
 					)}
-				</Form>
-			</Modal>
+				</Form>			</Modal>
 
-			{/* Modal xem chi tiết - GIỐNG CODE CŨ */}
+			{/* Detail Modal giữ nguyên với maxWidth responsive */}
 			<Modal
 				title={
 					<Space>
@@ -1286,6 +1421,13 @@ export default function QuestionsTeacher() {
 					</Button>,
 				]}
 				width={800}
+				style={{ maxWidth: "calc(100vw - 16px)" }}
+				centered
+				bodyStyle={{
+					maxHeight: "70vh",
+					overflowY: "auto",
+					overflowX: "hidden",
+				}}
 			>
 				{selectedQuestion && (
 					<div>
@@ -1523,8 +1665,14 @@ export default function QuestionsTeacher() {
 							</Row>
 						</div>
 					</div>
-				)}
-			</Modal>
+				)}			</Modal>
+
+
 		</div>
+
+
 	);
 }
+
+
+

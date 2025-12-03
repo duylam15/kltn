@@ -10,7 +10,7 @@ import {
   Tooltip,
   Form,
   DatePicker,
-  Space,InputNumber
+  Space, InputNumber
 } from "antd";
 import {
   ReloadOutlined,
@@ -27,14 +27,13 @@ import {
   ClockCircleOutlined,
   GlobalOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/authContext";
-import { DynamicQr } from "../../pages/Teacher/DynamicQr"; 
+import { DynamicQr } from "../../pages/Teacher/DynamicQr";
+import instance from "../../utils/axiosInstance";
 
 const { Title } = Typography;
-const API_BASE = "http://localhost:4000/api/v1";
 
 type Session = {
   id: number;
@@ -49,7 +48,7 @@ type Session = {
   updatedAt?: string;
   attendances?: Attendance[];
   expiresAt?: string | Dayjs | null;
-   totpSecretBase32?: string | null;
+  totpSecretBase32?: string | null;
   totpPeriod?: number | null;
   totpDigits?: number | null;
   sessionScore?: number | null;
@@ -116,45 +115,45 @@ export default function RollCall() {
     fetchSessions();
   }, [sectionId]);
 
- const fetchSessions = async () => {
-  try {
-    setLoading(true);
-    const listRes = await axios.get(
-      `${API_BASE}/attendance/sections/${sectionId}/sessions`
-    );
+  const fetchSessions = async () => {
+    try {
+      setLoading(true);
+      const listRes = await instance.get(
+        `/attendance/sections/${sectionId}/sessions`
+      );
 
-    if (!listRes.data.success) throw new Error("Failed");
+      if (!listRes.data.success) throw new Error("Failed");
 
-    const sessionsBasic = listRes.data.data;
+      const sessionsBasic = listRes.data.data;
 
-    // Lấy chi tiết từng session để có totpSecretBase32
-    const sessionsWithTotp = await Promise.all(
-      sessionsBasic.map(async (s: Session) => {
-        try {
-          const detailRes = await axios.get(
-            `${API_BASE}/attendance/sessions/${s.id}`
-          );
-          return detailRes.data.success ? detailRes.data.data : s;
-        } catch {
-          return s; // fallback nếu lỗi
-        }
-      })
-    );
+      // Lấy chi tiết từng session để có totpSecretBase32
+      const sessionsWithTotp = await Promise.all(
+        sessionsBasic.map(async (s: Session) => {
+          try {
+            const detailRes = await instance.get(
+              `/attendance/sessions/${s.id}`
+            );
+            return detailRes.data.success ? detailRes.data.data : s;
+          } catch {
+            return s; // fallback nếu lỗi
+          }
+        })
+      );
 
-    setSessions(sessionsWithTotp);
-  } catch (err) {
-    console.error(err);
-    toast.error("Không tải được danh sách phiên điểm danh");
-  } finally {
-    setLoading(false);
-  }
-};
+      setSessions(sessionsWithTotp);
+    } catch (err) {
+      console.error(err);
+      toast.error("Không tải được danh sách phiên điểm danh");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchStudents = async (sessionId: number) => {
     try {
       const [enrollRes, sessionRes] = await Promise.all([
-        axios.get(`${API_BASE}/sections-enrollments/section/${sectionId}/students`),
-        axios.get(`${API_BASE}/attendance/sessions/${sessionId}`),
+        instance.get(`/sections-enrollments/section/${sectionId}/students`),
+        instance.get(`/attendance/sessions/${sessionId}`),
       ]);
 
       if (!enrollRes.data?.success) throw new Error("Enrollments failed");
@@ -197,8 +196,7 @@ export default function RollCall() {
       const MAX_ALLOWED_ACCURACY_FOR_TEACHER = 100; // mét
       if (accuracy == null || accuracy > MAX_ALLOWED_ACCURACY_FOR_TEACHER) {
         toast.error(
-          `Không thể lấy vị trí chính xác (Sai số: ${
-            Math.round(accuracy || 0)
+          `Không thể lấy vị trí chính xác (Sai số: ${Math.round(accuracy || 0)
           }m > ${MAX_ALLOWED_ACCURACY_FOR_TEACHER}m). Vui lòng tắt->bật lại Wi-Fi THỬ.`
         );
         return;
@@ -215,7 +213,7 @@ export default function RollCall() {
         sessionScore: Number(values.sessionScore),
       };
 
-      const res = await axios.post(`${API_BASE}/attendance/sessions`, payload);
+      const res = await instance.post(`/attendance/sessions`, payload);
 
       if (res.data.success) {
         toast.success("Tạo phiên điểm danh thành công");
@@ -237,12 +235,12 @@ export default function RollCall() {
       const values = await form.validateFields();
       const payload = {
         ...values,
-         radius: Number(values.radius),
+        radius: Number(values.radius),
         expiresAt: values.expiresAt ? dayjs(values.expiresAt).toISOString() : null,
         sessionScore: Number(values.sessionScore),
       };
 
-      await axios.put(`${API_BASE}/attendance/sessions/${editing.id}`, payload);
+      await instance.put(`/attendance/sessions/${editing.id}`, payload);
       toast.success("Cập nhật phiên điểm danh thành công");
       setEditModalOpen(false);
       setEditing(null);
@@ -256,7 +254,7 @@ export default function RollCall() {
 
   const deleteSession = async (id: number) => {
     try {
-      await axios.delete(`${API_BASE}/attendance/sessions/${id}`);
+      await instance.delete(`/attendance/sessions/${id}`);
       toast.success("Xóa phiên điểm danh thành công");
       setSessions((prev) => prev.filter((s) => s.id !== id));
     } catch (err) {
@@ -277,7 +275,7 @@ export default function RollCall() {
     }
 
     try {
-      const res = await axios.post(`${API_BASE}/attendance/manual-check-in`, {
+      const res = await instance.post(`/attendance/manual-check-in`, {
         sessionId: selectedSession.id,
         studentCode,
         teacherId,
@@ -325,7 +323,7 @@ export default function RollCall() {
     }
 
     try {
-      const res = await axios.post(`${API_BASE}/attendance/cancel`, {
+      const res = await instance.post(`/attendance/cancel`, {
         sessionId: selectedSession.id,
         studentCode,
         teacherId,
@@ -396,23 +394,23 @@ export default function RollCall() {
       sorter: (a: Session, b: Session) =>
         (a.sessionCode || "").localeCompare(b.sessionCode || ""),
       render: (text: string) => text || <Tag color="default">N/A</Tag>,
-    },{
-    title: "Điểm buổi",
-    dataIndex: "sessionScore",
-    key: "sessionScore",
-    width: 110,
-    align: "center" as const,
-    sorter: (a: Session, b: Session) =>
-      (a.sessionScore ?? 0) - (b.sessionScore ?? 0),
-    render: (v: number | null | undefined) =>
-      v != null ? (
-        <Tag color="blue" style={{ fontWeight: 500 }}>
-          {v.toFixed(1)}
-        </Tag>
-      ) : (
-        <span style={{ color: "#999" }}>—</span>
-      ),
-  },
+    }, {
+      title: "Điểm buổi",
+      dataIndex: "sessionScore",
+      key: "sessionScore",
+      width: 110,
+      align: "center" as const,
+      sorter: (a: Session, b: Session) =>
+        (a.sessionScore ?? 0) - (b.sessionScore ?? 0),
+      render: (v: number | null | undefined) =>
+        v != null ? (
+          <Tag color="blue" style={{ fontWeight: 500 }}>
+            {v.toFixed(1)}
+          </Tag>
+        ) : (
+          <span style={{ color: "#999" }}>—</span>
+        ),
+    },
     {
       title: "Bán kính (m)",
       dataIndex: "radius",
@@ -463,14 +461,14 @@ export default function RollCall() {
           typeof a.expiresAt === "string"
             ? a.expiresAt
             : a.expiresAt
-            ? a.expiresAt.toISOString()
-            : "0";
+              ? a.expiresAt.toISOString()
+              : "0";
         const bTime =
           typeof b.expiresAt === "string"
             ? b.expiresAt
             : b.expiresAt
-            ? b.expiresAt.toISOString()
-            : "0";
+              ? b.expiresAt.toISOString()
+              : "0";
         return new Date(aTime).getTime() - new Date(bTime).getTime();
       },
       render: (v: string) => (v ? dayjs(v).format("DD/MM/YYYY HH:mm") : "—"),
@@ -936,52 +934,51 @@ export default function RollCall() {
       />
 
       {/* Modal QR */}
-<Modal
-  title="QR Code điểm danh (Động - Cập nhật mỗi 10 giây)"
-  open={qrModalOpen}
-  onCancel={() => setQrModalOpen(false)}
-  footer={null}
-  width={500}
-  centered // ← Ant Design tự động căn giữa theo chiều dọc
-  bodyStyle={{ 
-    padding: 24,
-    display: "flex",
-    justifyContent: "center",  // ← Căn giữa ngang
-    alignItems: "center",      // ← Căn giữa dọc
-    minHeight: 400,            // Đảm bảo Modal đủ cao
-  }}
->
-  {selectedSession?.totpSecretBase32 ? (
-    <DynamicQr
-    sessionId={selectedSession.sectionId}
-      secretBase32={selectedSession.totpSecretBase32}
-      period={selectedSession.totpPeriod ?? 10}
-      digits={selectedSession.totpDigits ?? 6}
-      size={320}
-    />
-  ) : selectedSession?.qrCodeUrl ? (
-    <div style={{ textAlign: "center" }}>
-      <img
-        src={`http://localhost:4000${selectedSession.qrCodeUrl}`}
-        alt="QR Code động"
-        width={320}
-        height={320}
-      />
-      <p style={{ color: "orange", marginTop: 8 }}>
-        Warning: Không có TOTP → đang dùng QR tĩnh
-      </p>
-    </div>
-  ) : (
-    <p>Không có QR để hiển thị</p>
-  )}
-</Modal>
+      <Modal
+        title="QR Code điểm danh (Động - Cập nhật mỗi 10 giây)"
+        open={qrModalOpen}
+        onCancel={() => setQrModalOpen(false)}
+        footer={null}
+        width={500}
+        centered // ← Ant Design tự động căn giữa theo chiều dọc
+        bodyStyle={{
+          padding: 24,
+          display: "flex",
+          justifyContent: "center",  // ← Căn giữa ngang
+          alignItems: "center",      // ← Căn giữa dọc
+          minHeight: 400,            // Đảm bảo Modal đủ cao
+        }}
+      >
+        {selectedSession?.totpSecretBase32 ? (
+          <DynamicQr
+            sessionId={selectedSession.sectionId}
+            secretBase32={selectedSession.totpSecretBase32}
+            period={selectedSession.totpPeriod ?? 10}
+            digits={selectedSession.totpDigits ?? 6}
+            size={320}
+          />
+        ) : selectedSession?.qrCodeUrl ? (
+          <div style={{ textAlign: "center" }}>
+            <img
+              src={`http://localhost:4000${selectedSession.qrCodeUrl}`}
+              alt="QR Code động"
+              width={320}
+              height={320}
+            />
+            <p style={{ color: "orange", marginTop: 8 }}>
+              Warning: Không có TOTP → đang dùng QR tĩnh
+            </p>
+          </div>
+        ) : (
+          <p>Không có QR để hiển thị</p>
+        )}
+      </Modal>
 
 
       {/* Modal danh sách sinh viên */}
       <Modal
-        title={`Danh sách điểm danh - ${
-          selectedSession?.name || `Phiên #${selectedSession?.id}`
-        }`}
+        title={`Danh sách điểm danh - ${selectedSession?.name || `Phiên #${selectedSession?.id}`
+          }`}
         open={listModalOpen}
         onCancel={() => setListModalOpen(false)}
         footer={null}
@@ -1001,140 +998,146 @@ export default function RollCall() {
 
       {/* Modal sửa phiên */}
       <Modal
-  title="Chỉnh sửa phiên điểm danh"
-  open={editModalOpen}
-  onCancel={() => setEditModalOpen(false)}
-  onOk={updateSession}
-  okText="Lưu"
->
-  <Form form={form} layout="vertical">
-    <Form.Item label="Mã phiên" name="sessionCode">
-      <Input disabled />
-    </Form.Item>
+        title="Chỉnh sửa phiên điểm danh"
+        open={editModalOpen}
+        onCancel={() => setEditModalOpen(false)}
+        onOk={updateSession}
+        okText="Lưu"
+      >
+        <Form form={form} layout="vertical">
+          <Form.Item label="Mã phiên" name="sessionCode">
+            <Input disabled />
+          </Form.Item>
 
-    <Form.Item label="Tên phiên" name="name">
-      <Input placeholder="VD: Buổi học CSDL ngày 25/09" />
-    </Form.Item>
+          <Form.Item label="Tên phiên" name="name">
+            <Input placeholder="VD: Buổi học CSDL ngày 25/09" />
+          </Form.Item>
 
-    <Form.Item
-      label="Bán kính cho phép (m)"
-      name="radius"
-      rules={[
-        { required: true, message: "Vui lòng nhập bán kính" },
-        {
-          type: "number",
-          transform: (v) => Number(v),
-          min: 20,
-          max: 500,
-          message: "20–500 m",
-        },
-      ]}
-    >
-      <InputNumber
-        style={{ width: "100%" }}
-        min={20}
-        max={500}
-        placeholder="VD: 100"
-      />
-    </Form.Item>
+          <Form.Item
+            label="Bán kính cho phép (m)"
+            name="radius"
+            rules={[
+              { required: true, message: "Vui lòng nhập bán kính" },
+              {
+                type: "number",
+                transform: (v) => Number(v),
+                min: 20,
+                max: 500,
+                message: "20–500 m",
+              },
+            ]}
+          >
+            <InputNumber
+              style={{ width: "100%" }}
+              min={20}
+              max={500}
+              placeholder="VD: 100"
+            />
+          </Form.Item>
 
-    <Form.Item label="Ngày hết hạn" name="expiresAt">
-      <DatePicker showTime style={{ width: "100%" }} />
-    </Form.Item>
+          <Form.Item label="Ngày hết hạn" name="expiresAt">
+            <DatePicker showTime style={{ width: "100%" }} />
+          </Form.Item>
 
-    {/* ⬇️ Thêm điểm buổi */}
-    <Form.Item
-      label="Điểm buổi"
-      name="sessionScore"
-      rules={[
-        { required: true, message: "Vui lòng nhập điểm" },
-        {
-          type: "number",
-          transform: (v) => Number(v),
-          min: 0,
-          max: 10,
-          message: "0–10 điểm",
-        },
-      ]}
-    >
-      <InputNumber
-        style={{ width: "100%" }}
-        min={0}
-        max={10}
-        step={0.5}
-        placeholder="VD: 10"
-      />
-    </Form.Item>
-  </Form>
-</Modal>
+          {/* ⬇️ Thêm điểm buổi */}
+          <Form.Item
+            label="Điểm buổi"
+            name="sessionScore"
+            rules={[
+              { required: true, message: "Vui lòng nhập điểm" },
+              {
+                type: "number",
+                transform: (v) => Number(v),
+                min: 0,
+                max: 10,
+                message: "0–10 điểm",
+              },
+            ]}
+          >
+            <InputNumber
+              style={{ width: "100%" }}
+              min={0}
+              max={10}
+              step={0.5}
+              placeholder="VD: 10"
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
 
 
 
       {/* Modal tạo phiên */}
-     <Modal
-  title="Tạo phiên điểm danh mới"
-  open={createModalOpen}
-  onCancel={() => setCreateModalOpen(false)}
-  onOk={createSession}
-  okText="Tạo mới"
->
-  <Form
-    form={createForm}
-    layout="vertical"
-    initialValues={{ radius: 100, sessionScore: 10 }}  // ⬅️ mặc định 10
-  >
-    <Form.Item
-      label="Tên phiên điểm danh"
-      name="name"
-      rules={[{ required: true, message: "Vui lòng nhập tên phiên điểm danh" }]}
-    >
-      <Input placeholder="VD: Buổi học CSDL ngày 25/09" />
-    </Form.Item>
+      <Modal
+        title="Tạo phiên điểm danh mới"
+        open={createModalOpen}
+        onCancel={() => setCreateModalOpen(false)}
+        onOk={createSession}
+        okText="Tạo mới"
+        centered
+        bodyStyle={{
+          maxHeight: "70vh",
+          overflowY: "auto",
+          overflowX: "hidden",
+        }}
+      >
+        <Form
+          form={createForm}
+          layout="vertical"
+          initialValues={{ radius: 100, sessionScore: 10 }}  // ⬅️ mặc định 10
+        >
+          <Form.Item
+            label="Tên phiên điểm danh"
+            name="name"
+            rules={[{ required: true, message: "Vui lòng nhập tên phiên điểm danh" }]}
+          >
+            <Input placeholder="VD: Buổi học CSDL ngày 25/09" />
+          </Form.Item>
 
-    <Form.Item
-      label="Ngày hết hạn"
-      name="expiresAt"
-      rules={[{ required: true, message: "Vui lòng nhập ngày hết hạn" }]}
-    >
-      <DatePicker showTime style={{ width: "100%" }} />
-    </Form.Item>
+          <Form.Item
+            label="Ngày hết hạn"
+            name="expiresAt"
+            rules={[{ required: true, message: "Vui lòng nhập ngày hết hạn" }]}
+          >
+            <DatePicker showTime style={{ width: "100%" }} />
+          </Form.Item>
 
-    <Form.Item
-      label="Bán kính cho phép (m)"
-      name="radius"
-      rules={[
-        { required: true, message: "Vui lòng nhập bán kính" },
-        {
-          type: "number",
-          transform: (v) => Number(v),
-          min: 20,
-          max: 500,
-          message: "20–500 m",
-        },
-      ]}
-    >
-      <Input type="number" placeholder="VD: 100" />
-    </Form.Item>
+          <Form.Item
+            label="Bán kính cho phép (m)"
+            name="radius"
+            rules={[
+              { required: true, message: "Vui lòng nhập bán kính" },
+              {
+                type: "number",
+                transform: (v) => Number(v),
+                min: 20,
+                max: 500,
+                message: "20–500 m",
+              },
+            ]}
+          >
+            <Input type="number" placeholder="VD: 100" />
+          </Form.Item>
 
-    {/* ⬇️ Điểm buổi */}
-    <Form.Item
-      label="Điểm buổi (tối đa)"
-      name="sessionScore"
-      rules={[
-        { required: true, message: "Vui lòng nhập điểm" },
-        {
-          type: "number",
-          transform: (v) => Number(v),
-          min: 0,
-          max: 10,
-          message: "0–10 điểm",
-        },
-      ]}
-    >
-      <Input type="number" step="0.5" placeholder="VD: 10" />
-    </Form.Item>
-  </Form>
-</Modal>
+          {/* ⬇️ Điểm buổi */}
+          <Form.Item
+            label="Điểm buổi (tối đa)"
+            name="sessionScore"
+            rules={[
+              { required: true, message: "Vui lòng nhập điểm" },
+              {
+                type: "number",
+                transform: (v) => Number(v),
+                min: 0,
+                max: 10,
+                message: "0–10 điểm",
+              },
+            ]}
+          >
+            <Input type="number" step="0.5" placeholder="VD: 10" />
+          </Form.Item>
+        </Form>
+      </Modal>
 
     </div>
   );

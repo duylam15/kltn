@@ -1,5 +1,4 @@
 import { createBrowserRouter, redirect } from "react-router-dom";
-import axios from "axios";
 
 // Layouts
 import LayoutDefault from "../layouts/LayoutDefault";
@@ -21,26 +20,26 @@ import RollCall from "../pages/Teacher/RollCall";
 import RollCallCheckIn from "../pages/Teacher/RollCallCheckIn";
 import StudentList from "../pages/Teacher/StudentList";
 import TeacherDashboard from "../pages/Teacher/Dashboard";
-import AssignmentsTeacher from "../pages/Teacher/AssignmentsTeacher";
+import AssignmentsTeacher from "../pages/Teacher/Assigment/AssignmentsTeacher";
 
 // Admin pages
-import Notifications from "../pages/Admin/Notifications";
-import Reports from "../pages/Admin/Reports";
-import Roles from "../pages/Admin/Roles";
+import Notifications from "../pages/Admin/NotificationsAdmin";
+import Reports from "../pages/Admin/ReportsAdmin";
+import Roles from "../pages/Admin/RolesAdmin";
 import CoursesAdmin from "../pages/Admin/CoursesAdmin";
 import AdminStats from "../pages/Admin/AdminStats";
 
 
 
 // Route guards
-import Students from "../pages/Admin/Students";
-import Teachers from "../pages/Admin/Teachers";
+import Students from "../pages/Admin/StudentsAdmin";
+import Teachers from "../pages/Admin/TeachersAdmin";
 import MaterialsTeacher from "../pages/Teacher/MaterialsTeacher";
 import OverviewAdmin from "../pages/Admin/OverviewAdmin";
-import Instructors from "../pages/Admin/Instructors";
-import Assignments from "../pages/Admin/Assignments";
-import Questions from "../pages/Admin/Questions";
-import Subjects from "../pages/Admin/Subjects";
+import Instructors from "../pages/Admin/InstructorsAdmin";
+import Assignments from "../pages/Admin/AssignmentsAdmin";
+import Questions from "../pages/Admin/QuestionsAdmin";
+import Subjects from "../pages/Admin/SubjectsAdmin";
 import Chat from "../pages/Teacher/Chat";
 import GradesTeacher from "../pages/Teacher/GradesTeacher";
 import GroupList from "../pages/Teacher/GroupList";
@@ -71,10 +70,12 @@ import JoinClassByInvite from "../pages/Teacher/JoinClassByInvite";
 import MaterialsStudent from "../pages/Student/MaterialsStudent";
 import instance from "../utils/axiosInstance";
 import ProfilePage from "../pages/Profile/ProfilePage";
+import AssignmentManagement from "../pages/Teacher/Assigment/AssignmentManagement";
+import AssignmentGrading from "../pages/Teacher/Assigment/AssignmentGrading";
 // Helper function để check auth và redirect
 const checkAuthAndRedirect = async () => {
   try {
-    const res = await instance.get("http://localhost:4000/api/v1/auths/me", {
+    const res = await instance.get("/auths/me", {
       withCredentials: true,
     });
 
@@ -177,13 +178,26 @@ export const router = createBrowserRouter([
           { path: "materials", element: <Materials /> },
           { path: "roll-call", element: <RollCall /> },
           { path: "chat", element: <Chat /> },
-          { path: "assignments", element: <AssignmentsTeacher /> },
-          { path: "grades", element: <GradesTeacher /> },
+          // Route cho teacher assignments
+          {
+            path: "assignments",
+            children: [
+              {
+                index: true,
+                element: <AssignmentManagement />, // File 1: Danh sách và CRUD
+              },
+              {
+                path: ":assignmentId/grading",
+                element: <AssignmentGrading />, // File 2: Bảng điểm và lịch sử nộp bài
+              },
+            ],
+          },          { path: "grades", element: <GradesTeacher /> },
         ],
       },
       { path: "materials", element: <MaterialsTeacher /> },
       { path: "assignments", element: <AssignmentsTeacherOut /> },
       { path: "questions", element: <QuestionsTeacher /> },
+      { path: "profile", element: <ProfilePage /> },
 
     ],
   },
@@ -228,18 +242,18 @@ export const router = createBrowserRouter([
       {
         path: "students",
         lazy: async () => {
-          const { default: Students } = await import("../pages/Admin/Students");
+          const { default: Students } = await import("../pages/Admin/StudentsAdmin");
           const { default: RequirePermission } = await import("./RequirePermission");
           return {
             element: (
-              <RequirePermission permission="user.read">
                 <Students />
-              </RequirePermission>
             ),
           };
         },
       },
       { path: "teachers", element: <Teachers /> },
+      { path: "profile", element: <ProfilePage /> },
+
     ],
   },
 

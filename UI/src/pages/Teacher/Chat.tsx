@@ -4,7 +4,7 @@ import { io, Socket } from "socket.io-client";
 import { useAuth } from "../../context/authContext";
 import { MoreVertical, Send, Users, Smile } from "lucide-react";
 import EmojiPicker, { type EmojiClickData } from "emoji-picker-react";
-import axios from "axios";
+import instance from "../../utils/axiosInstance";
 
 type Sender = {
   id: number;
@@ -40,8 +40,8 @@ export default function Chat() {
   useEffect(() => {
     const fetchRoomId = async () => {
       try {
-        const response = await axios.get(
-          `http://localhost:4000/api/v1/chats/by-context`,
+        const response = await instance.get(
+          `/chats/by-context`,
           { params: { sectionId } }
         );
         if (response.data.success && response.data.data) {
@@ -65,8 +65,8 @@ export default function Chat() {
 
     const fetchMessages = async () => {
       try {
-        const response = await axios.get(
-          `http://localhost:4000/api/v1/chats/${roomId}/messages`
+        const response = await instance.get(
+          `/chats/${roomId}/messages`
         );
         if (response.data.success) {
           setMessages(response.data.data);
@@ -107,8 +107,8 @@ export default function Chat() {
     if (!content.trim() || !roomId) return;
 
     try {
-      await axios.post(
-        `http://localhost:4000/api/v1/chats/${roomId}/messages`,
+      await instance.post(
+        `/chats/${roomId}/messages`,
         { senderId: currentUserId, content }
       );
       setContent("");

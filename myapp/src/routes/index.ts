@@ -20,8 +20,8 @@ import assignmentQuestionRoute from "../modules/AssignmentAssessment/assignmentQ
 import questionChoiceRoute from "../modules/AssignmentAssessment/questionChoice/questionChoice.route";
 import chatRoutes from "../modules/chat/chat.route";
 import notificationRoute from "../modules/notification/notification.route";
-import gradeColumnRoute from "../modules/GradeManagement/gradeColumn/gradeColumn.route";
-import gradeRoute from "../modules/GradeManagement/grade/grade.route";
+
+import gradeRoute from "../modules/GradeManagement/student-grade/student-grade.route";
 import chapterRoute from "../modules/AssignmentAssessment/chapter/chapter.route";
 import assignmentGeneratorRouter from "../modules/AssignmentAssessment/assignmentGenerator/assignmentGenerator.route";
 import subjectInstructorRoute from "../modules/CourseSectionManagement/subjectInstructor/subjectInstructor.route";
@@ -32,7 +32,9 @@ import submissionAnswerRoutes from "../modules/AssignmentAssessment/submissionAn
 import codeSubmissionResultRoutes from "../modules/AssignmentAssessment/codeSubmissionResult/codeSubmissionResult.route";
 import submissionRoutes from "../modules/AssignmentAssessment/submission/submission.route";
 import profileRoutes from "../modules/Profile/profile.routes";
-
+import gradeCalculationRoute from "../modules/GradeManagement/grade-calculation/grade-calculation.route";
+import  studentsGradeRoute from "../modules/GradeManagement/student-grade/student-grade.route";
+import gradeColumnRoute from "../modules/GradeManagement/grade-column/grade-column.route";
 const router = Router();
 
 router.get("/health", (_req, res) => res.json({ status: "ok" }));
@@ -58,7 +60,8 @@ router.use("/questions-choices", questionChoiceRoute);
 router.use("/chats", chatRoutes);
 router.use("/notifications", notificationRoute);
 router.use("/grade-columns", gradeColumnRoute);
-router.use("/grades", gradeRoute);
+router.use("/grade-calculation", gradeCalculationRoute);
+router.use("/students-grades", studentsGradeRoute);
 router.use("/chapters", chapterRoute);
 router.use("/assignment-generator", assignmentGeneratorRouter);
 router.use("/subject-instructors", subjectInstructorRoute);

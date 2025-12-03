@@ -20,8 +20,8 @@ import {
   SearchOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import { Layers } from "lucide-react";
+import instance from "../../utils/axiosInstance";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -78,7 +78,7 @@ export default function CoursesAdmin() {
   const fetchSections = async () => {
     setLoading(true);
     try {
-      const res = await axios.get("http://localhost:4000/api/v1/course-sections");
+      const res = await instance.get("/course-sections");
       if (res.data.success) setData(res.data.data);
       console.log(data);
     } catch (err) {
@@ -90,7 +90,7 @@ export default function CoursesAdmin() {
 
   const fetchTerms = async () => {
     try {
-      const res = await axios.get("http://localhost:4000/api/v1/terms");
+      const res = await instance.get("/terms");
       if (res.data.success) setTerms(res.data.data);
     } catch (err) {
       console.error("Lỗi khi gọi terms:", err);
@@ -99,7 +99,7 @@ export default function CoursesAdmin() {
 
   const fetchSubjects = async () => {
     try {
-      const res = await axios.get("http://localhost:4000/api/v1/subjects");
+      const res = await instance.get("/subjects");
       if (res.data.success) setSubjects(res.data.data);
     } catch (err) {
       console.error("Lỗi khi gọi subjects:", err);
@@ -130,7 +130,7 @@ export default function CoursesAdmin() {
         status: "planned",
       };
 
-      const res = await axios.post("http://localhost:4000/api/v1/course-sections", payload);
+      const res = await instance.post("/course-sections", payload);
       if (res.data.success) {
         message.success(`Đã thêm ${payload.sectionName}`);
         fetchSections();
@@ -146,7 +146,7 @@ export default function CoursesAdmin() {
     try {
       await Promise.all(
         sections.map((s) =>
-          axios.patch(`http://localhost:4000/api/v1/course-sections/${s.id}`, {
+          instance.patch(`/course-sections/${s.id}`, {
             status: newStatus,
           })
         )
@@ -173,7 +173,7 @@ export default function CoursesAdmin() {
         status: values.status || "planned",
       };
 
-      const res = await axios.post("http://localhost:4000/api/v1/course-sections", payload);
+      const res = await instance.post("/course-sections", payload);
       if (res.data.success) {
         message.success("Thêm học phần thành công!");
         setModalVisible(false);

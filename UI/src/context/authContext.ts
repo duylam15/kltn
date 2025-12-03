@@ -56,14 +56,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
-
     // ✅ Load user khi app khởi động
     useEffect(() => {
         instance
             .get("/auths/me")
             .then((res: any) => {
-                console.log("✅ User loaded from cookie:", res.user);
-                setUser(res.user);
+                console.log("✅ User loaded from cookie:", res.data.user);
+                setUser(res.data.user);
             })
             .catch((err) => {
                 console.log(
@@ -85,7 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
         // Fetch user info
         const res: any = await instance.get("/auths/me");
-        const userData = res.user;
+        const userData = res.data.user;
 
         console.log("✅ Login successful:", userData);
         setUser(userData);
@@ -106,8 +105,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     };
 
     // ✅ Check permission
-    const hasPermission = (permission: string) =>
-        user?.role?.permissions?.some((p) => p.name === permission) ?? false;
+   const hasPermission = (permission: string) => {
+       if (!user) return false;
+
+       const perms = user.role?.permissions || [];
+
+       // Nếu có quyền "*" => mở toàn bộ
+       if (perms.some((p) => p.name === "*")) {
+           return true;
+       }
+
+       // Nếu có quyền đúng tên permission
+       return perms.some((p) => p.name === permission);
+   };
 
     return React.createElement(
         AuthContext.Provider,

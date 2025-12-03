@@ -1,7 +1,15 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { CheckCircle, XCircle, ArrowLeft, Sparkles, AlertTriangle } from "lucide-react";
 import dayjs from "dayjs";
+
+interface Choice {
+	id: number;
+	questionId: number;
+	content: string;
+	isCorrect: boolean;
+	order: number;
+}
 
 export default function AssignmentsScore() {
 	const { state } = useLocation() as { state: any };
@@ -12,80 +20,128 @@ export default function AssignmentsScore() {
 
 	const [recommendation, setRecommendation] = useState<any>(null);
 	const [loadingRecommend, setLoadingRecommend] = useState(false);
+	const [choicesMap, setChoicesMap] = useState<Map<number, Choice>>(new Map());
+	const [loadingChoices, setLoadingChoices] = useState(true);
 
-	// 🔥 Nếu không có state hoặc showAnswersAfterSubmit = false → không được vào trang này
+	const { submission, summary, answers, showAnswersAfterSubmit } = state;
+
+	// 🔥 Fetch tất cả choices khi component mount
+	useEffect(() => {
+		const fetchAllChoices = async () => {
+			if (!answers || answers.length === 0) {
+				setLoadingChoices(false);
+				return;
+			}
+
+			setLoadingChoices(true);
+
+			try {
+				const allChoiceIds = new Set<number>();
+
+				answers.forEach((ans: any) => {
+					if (Array.isArray(ans.selectedChoices)) {
+						ans.selectedChoices.forEach((id: number) =>
+							allChoiceIds.add(id)
+						);
+					}
+				});
+
+				const choicesData = await Promise.all(
+					[...allChoiceIds].map(async (choiceId) => {
+						try {
+							const res = await fetch(
+								`http://localhost:4000/api/v1/questions-choices/choices/${choiceId}`,
+								{ credentials: "include" }
+							);
+							const data = await res.json();
+							return data.success ? data.data : null;
+						} catch {
+							return null;
+						}
+					})
+				);
+
+				const map = new Map<number, Choice>();
+				choicesData.forEach((choice) => {
+					if (choice) map.set(choice.id, choice);
+				});
+
+				setChoicesMap(map);
+			} finally {
+				setLoadingChoices(false);
+			}
+		};
+
+		fetchAllChoices();
+	}, [answers]);
+
+
 	if (!state || !state.submission) {
 		return (
-			<div className="min-h-screen bg-gray-100 flex items-center justify-center p-6">
-				<div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full text-center">
-					<div className="text-6xl mb-4">❌</div>
-					<h2 className="text-2xl font-bold text-gray-900 mb-2">
-						Không tìm thấy dữ liệu kết quả
+			<div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+				<div className="bg-white rounded-lg shadow p-8 max-w-md w-full text-center">
+					<div className="text-5xl mb-4">❌</div>
+					<h2 className="text-xl font-bold text-gray-900 mb-2">
+						Không tìm thấy kết quả
 					</h2>
-					<p className="text-gray-600 mb-6">
+					<p className="text-gray-600 mb-6 text-sm">
 						Bạn không có quyền xem trang này hoặc dữ liệu không tồn tại.
 					</p>
 					<button
 						onClick={() => navigate(`/student/courses/${sectionId}/assignments`)}
-						className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+						className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-medium transition"
 					>
-						← Quay lại danh sách
+						← Quay lại
 					</button>
 				</div>
 			</div>
 		);
 	}
 
-	const { submission, summary, answers, showAnswersAfterSubmit } = state;
 
-	// 🔥 Nếu showAnswersAfterSubmit = false → chỉ hiển thị điểm tổng rồi redirect
+	// 🔥 Nếu showAnswersAfterSubmit = false → chỉ hiển thị điểm tổng
 	if (showAnswersAfterSubmit === false) {
 		return (
-			<div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-6">
-				<div className="bg-white rounded-xl shadow-2xl p-8 max-w-2xl w-full">
-					<div className="text-center mb-8">
-						<div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-							<CheckCircle className="w-12 h-12 text-blue-600" />
+			<div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+				<div className="bg-white rounded-lg shadow p-8 max-w-md w-full">
+					<div className="text-center mb-6">
+						<div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+							<CheckCircle className="w-8 h-8 text-blue-600" />
 						</div>
-						<h1 className="text-3xl font-bold text-gray-900 mb-2">
+						<h1 className="text-2xl font-bold text-gray-900 mb-2">
 							Nộp bài thành công!
 						</h1>
-						<p className="text-gray-600">
-							Giảng viên không cho phép xem đáp án sau khi nộp bài
+					</div>
+
+					<div className="bg-blue-50 rounded-lg p-6 text-center mb-6">
+						<p className="text-sm text-gray-600 mb-2">Điểm của bạn</p>
+						<p className="text-4xl font-bold text-blue-600">
+							{submission.score}/10
+						</p>
+						<p className="text-xs text-gray-500 mt-3">
+							{dayjs(submission.submittedAt).format("HH:mm - DD/MM/YYYY")}
 						</p>
 					</div>
 
-					{/* Chỉ hiển thị điểm tổng */}
-					<div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl p-6 text-white text-center mb-6">
-						<p className="text-lg mb-2">Điểm của bạn</p>
-						<p className="text-5xl font-bold">{submission.score}/{submission.maxScore}</p>
-						<p className="text-blue-100 mt-2">
-							Thời gian nộp: {dayjs(submission.submittedAt).format("HH:mm DD/MM/YYYY")}
-						</p>
-					</div>
-
-					{/* Thông báo */}
-					<div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 mb-6">
-						<div className="flex items-start gap-3">
-							<AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-							<div>
-								<p className="font-medium text-yellow-900">
-									Bạn không thể xem chi tiết đáp án
+					<div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+						<div className="flex gap-3">
+							<AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+							<div className="text-sm">
+								<p className="font-medium text-yellow-900 mb-1">
+									Không thể xem đáp án
 								</p>
-								<p className="text-sm text-yellow-700 mt-1">
-									Giảng viên đã tắt chế độ hiển thị đáp án. Bạn chỉ có thể xem tổng điểm.
+								<p className="text-yellow-700">
+									Giảng viên đã tắt chế độ hiển thị đáp án chi tiết.
 								</p>
 							</div>
 						</div>
 					</div>
 
-					{/* Nút quay lại */}
 					<button
 						onClick={() => navigate(`/student/courses/${sectionId}/assignments`)}
-						className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+						className="w-full py-2. 5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded transition"
 					>
-						<ArrowLeft className="w-5 h-5" />
-						Quay lại danh sách bài tập
+						← Quay lại danh sách
 					</button>
 				</div>
 			</div>
@@ -122,91 +178,97 @@ export default function AssignmentsScore() {
 		}
 	};
 
+	// 🔥 Lấy label (A, B, C, D) từ choiceId dựa trên order
+	const getChoiceLabel = (choiceId: number, questionId: number) => {
+		// Lấy tất cả choices của câu hỏi này
+		const questionChoices = Array.from(choicesMap.values())
+			.filter((c) => c.questionId === questionId)
+			.sort((a, b) => a.order - b.order);
+
+		const index = questionChoices.findIndex((c) => c.id === choiceId);
+		return index >= 0 ? String.fromCharCode(65 + index) : "? ";
+	};
+
+	// 🔥 Lấy nội dung choice
+	const getChoiceContent = (choiceId: number) => {
+		const choice = choicesMap.get(choiceId);
+		return choice?.content || `Đang tải...`;
+	};
+
+	// 🔥 Tính toán thống kê đúng
+	const correctCount = answers?.filter((a: any) => a.isCorrect).length || 0;
+	const totalCount = answers?.length || 0;
+	const wrongCount = totalCount - correctCount;
+	const percentage = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
+
 	// 🔥 showAnswersAfterSubmit = true → Hiển thị đầy đủ
 	return (
-		<div className="min-h-screen bg-gray-100 py-8 px-6">
-			<div className="max-w-5xl mx-auto">
+		<div className="min-h-screen bg-gray-50 py-6 px-4">
+			<div className="max-w-4xl mx-auto">
 				{/* Header */}
-				<div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-					<div className="flex items-center justify-between mb-4">
-						<h1 className="text-3xl font-bold text-gray-900">
-							📘 Kết quả bài làm
-						</h1>
-						<button
-							onClick={() => navigate(`/student/courses/${sectionId}/assignments`)}
-							className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors flex items-center gap-2"
-						>
-							<ArrowLeft className="w-4 h-4" />
-							Quay lại
-						</button>
+				<div className="flex items-center justify-between mb-6">
+					<h1 className="text-2xl font-bold text-gray-900">Kết quả bài làm</h1>
+					<button
+						onClick={() => navigate(`/student/courses/${sectionId}/assignments`)}
+						className="px-4 py-2 bg-white border hover:bg-gray-50 text-gray-700 rounded text-sm font-medium transition flex items-center gap-2"
+					>
+						<ArrowLeft className="w-4 h-4" />
+						Quay lại
+					</button>
+				</div>
+
+				{/* Score Card */}
+				<div className="bg-white rounded-lg shadow p-6 mb-6">
+					{/* 🔥 Điểm số chính */}
+					<div className="text-center mb-6 pb-6 border-b">
+						<p className="text-sm text-gray-600 mb-2">Điểm của bạn</p>
+						<p className="text-5xl font-bold text-blue-600">
+							{submission.score}
+							<span className="text-2xl text-gray-400">/10</span>
+						</p>
+						<p className="text-sm text-gray-500 mt-3">
+							{dayjs(submission.submittedAt).format("HH:mm - DD/MM/YYYY")}
+						</p>
 					</div>
 
-					{/* Điểm số */}
-					<div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl p-8 text-white text-center mb-6">
-						<div className="flex items-center justify-center gap-4 mb-4">
-							{submission.isPassing ? (
-								<CheckCircle className="w-12 h-12" />
-							) : (
-								<XCircle className="w-12 h-12" />
-							)}
-							<div>
-								<p className="text-lg opacity-90">Điểm của bạn</p>
-								<p className="text-5xl font-bold">{submission.score}/{submission.maxScore}</p>
-							</div>
-						</div>
-						<div className="flex items-center justify-center gap-6 text-sm opacity-90">
-							<span>Tỉ lệ đúng: {summary.percentage}%</span>
-							<span>•</span>
-							<span>Tổng câu: {summary.totalQuestions}</span>
-							<span>•</span>
-							<span>{submission.isPassing ? "✅ Đạt" : "❌ Chưa đạt"}</span>
-						</div>
-					</div>
-
-					{/* Thông tin chi tiết */}
+					{/* 🔥 Thống kê 3 cột - Đã sửa */}
 					<div className="grid grid-cols-3 gap-4 mb-6">
-						<div className="bg-green-50 rounded-lg p-4 text-center">
-							<p className="text-sm text-gray-600 mb-1">Số câu đúng</p>
-							<p className="text-2xl font-bold text-green-600">
-								{summary.correctAnswers}
-							</p>
+						<div className="text-center">
+							<p className="text-2xl font-bold text-green-600">{correctCount}</p>
+							<p className="text-xs text-gray-500 mt-1">Câu đúng</p>
 						</div>
-						<div className="bg-red-50 rounded-lg p-4 text-center">
-							<p className="text-sm text-gray-600 mb-1">Số câu sai</p>
-							<p className="text-2xl font-bold text-red-600">
-								{summary.totalQuestions - summary.correctAnswers}
-							</p>
+						<div className="text-center">
+							<p className="text-2xl font-bold text-red-600">{wrongCount}</p>
+							<p className="text-xs text-gray-500 mt-1">Câu sai</p>
 						</div>
-						<div className="bg-blue-50 rounded-lg p-4 text-center">
-							<p className="text-sm text-gray-600 mb-1">Thời gian nộp</p>
-							<p className="text-lg font-bold text-blue-600">
-								{dayjs(submission.submittedAt).format("HH:mm")}
-							</p>
-							<p className="text-xs text-gray-500">
-								{dayjs(submission.submittedAt).format("DD/MM/YYYY")}
-							</p>
+						<div className="text-center">
+							<p className="text-2xl font-bold text-blue-600">{percentage}%</p>
+							<p className="text-xs text-gray-500 mt-1">Tỉ lệ đúng</p>
 						</div>
 					</div>
 
 					{/* Gợi ý lộ trình */}
-					<div>
+					<div className="pt-4 border-t">
 						<button
 							onClick={handleRecommendPath}
 							disabled={loadingRecommend}
-							className="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+							className="w-full py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white text-sm rounded font-medium transition flex items-center justify-center gap-2 disabled:opacity-50"
 						>
-							<Sparkles className="w-5 h-5" />
-							{loadingRecommend ? "⏳ Đang phân tích..." : "✨ Gợi ý lộ trình học"}
+							<Sparkles className="w-4 h-4" />
+							{loadingRecommend ? "Đang phân tích..." : "Gợi ý lộ trình học"}
 						</button>
 
 						{recommendation && (
-							<div className="mt-4 p-4 bg-green-50 border-2 border-green-200 rounded-lg">
-								<p className="font-bold text-green-900 mb-2">
-									🎯 Nhãn: {recommendation.label}
+							<div className="mt-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+								<p className="font-semibold text-green-900 text-sm mb-2">
+									🎯 {recommendation.label}
 								</p>
-								<ul className="list-disc pl-5 space-y-1 text-sm text-green-800">
+								<ul className="space-y-1 text-sm text-green-800">
 									{recommendation.suggestions?.map((s: string, i: number) => (
-										<li key={i}>{s}</li>
+										<li key={i} className="flex gap-2">
+											<span>•</span>
+											<span>{s}</span>
+										</li>
 									))}
 								</ul>
 							</div>
@@ -214,112 +276,132 @@ export default function AssignmentsScore() {
 					</div>
 				</div>
 
-				{/* Chi tiết từng câu */}
-				<h2 className="text-2xl font-bold text-gray-900 mb-4">📝 Chi tiết câu trả lời</h2>
-				<div className="space-y-4">
-					{answers.map((ans: any, idx: number) => (
-						<div
-							key={ans.answerId}
-							className={`p-6 rounded-xl shadow-md border-2 ${ans.isCorrect
-									? "bg-green-50 border-green-300"
-									: "bg-red-50 border-red-300"
-								}`}
-						>
-							{/* Header câu hỏi */}
-							<div className="flex items-start justify-between mb-4">
-								<h3 className="font-bold text-lg text-gray-900">
-									Câu {idx + 1}: {ans.questionContent}
-								</h3>
-								<div className="flex items-center gap-2">
-									{ans.isCorrect ? (
-										<CheckCircle className="w-6 h-6 text-green-600" />
-									) : (
-										<XCircle className="w-6 h-6 text-red-600" />
+				{/* Chi tiết câu trả lời */}
+				<h2 className="text-lg font-bold text-gray-900 mb-4">Chi tiết câu trả lời</h2>
+
+				{loadingChoices ? (
+					<div className="bg-white rounded-lg shadow p-8 text-center">
+						<div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+						<p className="text-sm text-gray-600">Đang tải thông tin câu trả lời...</p>
+					</div>
+				) : (
+					<div className="space-y-3">
+						{answers?.map((ans: any, idx: number) => (
+							<div
+								key={ans.answerId}
+								className={`bg-white rounded-lg shadow p-4 border-l-4 ${ans.isCorrect ? "border-green-500" : "border-red-500"
+									}`}
+							>
+								{/* Header */}
+								<div className="flex items-start justify-between mb-3">
+									<div className="flex-1">
+										<div className="flex items-center gap-2 mb-1">
+											<span className="text-xs font-semibold text-gray-500">
+												Câu {idx + 1}
+											</span>
+											<span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
+												{ans.questionType === "multiple_choice" && "Trắc nghiệm"}
+												{ans.questionType === "essay" && "Tự luận"}
+												{ans.questionType === "coding" && "Lập trình"}
+												{ans.questionType === "true_false" && "Đúng/Sai"}
+											</span>
+										</div>
+										<p className="text-sm font-medium text-gray-900">
+											{ans.questionContent}
+										</p>
+									</div>
+									<div className="flex items-center gap-2 ml-4">
+										{ans.isCorrect ? (
+											<CheckCircle className="w-5 h-5 text-green-600" />
+										) : (
+											<XCircle className="w-5 h-5 text-red-600" />
+										)}
+										<span className="text-sm font-bold text-gray-700">
+											{ans.score}/{ans.maxScore}
+										</span>
+									</div>
+								</div>
+
+								{/* Câu trả lời */}
+								<div className="bg-gray-50 rounded p-3 mb-3">
+									<p className="text-xs font-semibold text-gray-600 mb-2">
+										Câu trả lời của bạn:
+									</p>
+
+									{/* 🔥 Trắc nghiệm - Hiển thị A, B, C, D và nội dung */}
+									{ans.questionType === "multiple_choice" && ans.selectedChoices && (
+										<div className="space-y-1">
+											{ans.selectedChoices.map((choiceId: number) => {
+												const label = getChoiceLabel(choiceId, ans.questionId);
+												const content = getChoiceContent(choiceId);
+												return (
+													<div key={choiceId} className="text-sm text-gray-900">
+														<span className="font-bold">{label}. </span> {content}
+													</div>
+												);
+											})}
+										</div>
 									)}
-									<span
-										className={`px-3 py-1 rounded-full text-sm font-bold ${ans.isCorrect
-												? "bg-green-200 text-green-800"
-												: "bg-red-200 text-red-800"
-											}`}
-									>
-										{ans.score}/{ans.maxScore} điểm
-									</span>
-								</div>
-							</div>
 
-							{/* Loại câu hỏi */}
-							<div className="mb-4">
-								<span className="px-3 py-1 bg-gray-200 text-gray-700 rounded-full text-xs font-medium">
-									{ans.questionType === "multiple_choice" && "📋 Trắc nghiệm"}
-									{ans.questionType === "essay" && "📝 Tự luận"}
-									{ans.questionType === "coding" && "💻 Lập trình"}
-									{ans.questionType === "true_false" && "✓✗ Đúng/Sai"}
-								</span>
-							</div>
+									{/* Tự luận */}
+									{ans.questionType === "essay" && (
+										<p className="text-sm text-gray-900 whitespace-pre-wrap">
+											{ans.essayAnswer || "Không có câu trả lời"}
+										</p>
+									)}
 
-							{/* Câu trả lời của học sinh */}
-							<div className="mb-4 p-4 bg-white rounded-lg border">
-								<p className="text-sm font-semibold text-gray-700 mb-2">
-									Câu trả lời của bạn:
-								</p>
-
-								{ans.questionType === "multiple_choice" && ans.selectedChoices && (
-									<div className="space-y-1">
-										{ans.selectedChoices.map((choiceId: number) => (
-											<p key={choiceId} className="text-sm text-gray-900">
-												• Lựa chọn {choiceId}
+									{/* Lập trình */}
+									{ans.questionType === "coding" && (
+										<div>
+											<p className="text-xs text-gray-500 mb-2">
+												Ngôn ngữ: <span className="font-semibold">{ans.language}</span>
 											</p>
-										))}
-									</div>
-								)}
+											<pre className="text-xs bg-gray-900 text-green-400 p-3 rounded overflow-x-auto">
+												{ans.codeAnswer || "Không có code"}
+											</pre>
+											<p className="text-xs text-gray-500 mt-2">
+												Trạng thái: {ans.judgeStatus}
+											</p>
+										</div>
+									)}
 
-								{ans.questionType === "essay" && (
-									<p className="text-sm text-gray-900 whitespace-pre-wrap">
-										{ans.essayAnswer || "Không có câu trả lời"}
-									</p>
-								)}
-
-								{ans.questionType === "coding" && (
-									<div>
-										<p className="text-xs text-gray-600 mb-2">
-											Ngôn ngữ: <span className="font-bold">{ans.language}</span>
+									{/* 🔥 Đúng/Sai - Hiển thị A.  Đúng hoặc B. Sai */}
+									{ans.questionType === "true_false" && ans.selectedChoices && (
+										<p className="text-sm text-gray-900">
+											{ans.selectedChoices.includes(1) ? (
+												<span>
+													<span className="font-bold">A.</span> Đúng
+												</span>
+											) : (
+												<span>
+													<span className="font-bold">B.</span> Sai
+												</span>
+											)}
 										</p>
-										<pre className="text-xs bg-gray-900 text-green-400 p-3 rounded overflow-x-auto font-mono">
-											{ans.codeAnswer || "Không có code"}
-										</pre>
-										<p className="text-xs text-gray-600 mt-2">
-											⏳ Trạng thái chấm: {ans.judgeStatus}
-										</p>
-									</div>
-								)}
+									)}
+								</div>
 
-								{ans.questionType === "true_false" && ans.selectedChoices && (
-									<p className="text-sm text-gray-900">
-										{ans.selectedChoices.includes(1) ? "✓ Đúng" : "✗ Sai"}
-									</p>
+								{/* Giải thích */}
+								{ans.explanation && (
+									<div className="bg-blue-50 border-l-2 border-blue-400 rounded p-3">
+										<p className="text-xs font-semibold text-blue-900 mb-1">
+											💡 Giải thích
+										</p>
+										<p className="text-xs text-blue-800">{ans.explanation}</p>
+									</div>
 								)}
 							</div>
-
-							{/* Giải thích (nếu có) */}
-							{ans.explanation && (
-								<div className="p-3 bg-blue-50 border-l-4 border-blue-500 rounded">
-									<p className="text-sm font-semibold text-blue-900 mb-1">
-										💡 Giải thích:
-									</p>
-									<p className="text-sm text-blue-800">{ans.explanation}</p>
-								</div>
-							)}
-						</div>
-					))}
-				</div>
+						))}
+					</div>
+				)}
 
 				{/* Footer */}
-				<div className="mt-8 text-center">
+				<div className="mt-6 text-center">
 					<button
 						onClick={() => navigate(`/student/courses/${sectionId}/assignments`)}
-						className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-semibold transition-colors"
+						className="px-6 py-2. 5 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded font-medium transition"
 					>
-						🏠 Về trang danh sách bài tập
+						Về trang danh sách
 					</button>
 				</div>
 			</div>

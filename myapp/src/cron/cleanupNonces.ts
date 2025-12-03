@@ -1,4 +1,4 @@
-import { prisma } from "@/prisma/client";
+import { prisma } from "../prisma/client";
 
 export async function cleanupOldNonces() {
   const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);

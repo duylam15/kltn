@@ -13,10 +13,6 @@ import {
 	Popconfirm,
 	Tooltip,
 	Select,
-	Card,
-	Row,
-	Col,
-	Statistic,
 } from "antd";
 import {
 	UploadOutlined,
@@ -33,13 +29,14 @@ import {
 	CloudUploadOutlined,
 	FolderOpenOutlined,
 	CheckCircleOutlined,
+	DatabaseOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
 import { useAuth } from "../../context/authContext";
 import { FileText } from "lucide-react";
+import instance from "../../utils/axiosInstance";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -102,7 +99,7 @@ export default function MaterialsTeacher() {
 	const [form] = Form.useForm();
 	const [addForm] = Form.useForm();
 	const [assignForm] = Form.useForm();
-	const [libraryForm] = Form.useForm(); // 👈 Form cho modal thư viện
+	const [libraryForm] = Form.useForm();
 
 	// Library states
 	const [allMaterials, setAllMaterials] = useState<Material[]>([]);
@@ -120,7 +117,7 @@ export default function MaterialsTeacher() {
 	const fetchData = async () => {
 		try {
 			setLoading(true);
-			const res = await axios.get(`${API_BASE}/materials/teacher/${userId}`);
+			const res = await instance.get(`/materials/teacher/${userId}`);
 			if (res.data.success) {
 				setMaterials(res.data.data || []);
 			}
@@ -134,8 +131,8 @@ export default function MaterialsTeacher() {
 
 	const fetchMySections = async () => {
 		try {
-			const res = await axios.get(
-				`${API_BASE}/sections-instructors?teacher_id=${teacherId}`
+			const res = await instance.get(
+				`/sections-instructors?teacher_id=${teacherId}`
 			);
 			if (res.data.success) {
 				setMySections(res.data.data.map((item: any) => item.section) || []);
@@ -145,13 +142,12 @@ export default function MaterialsTeacher() {
 		}
 	};
 
-	// ✅ Lấy tài liệu public từ thư viện (không lọc theo userId vì giờ gán trực tiếp)
 	const fetchAllMaterials = async () => {
 		try {
 			setLoadingLibrary(true);
-			const { data } = await axios.get(`${API_BASE}/materials/public`, {
+			const { data } = await instance.get(`/materials/public`, {
 				params: {
-					userId, // Backend vẫn cần để lọc nếu cần
+					userId,
 					page: 1,
 					size: 100,
 					keyword: libraryKeyword,
@@ -169,7 +165,6 @@ export default function MaterialsTeacher() {
 		}
 	};
 
-	// ✅ GÁN TRỰC TIẾP tài liệu public vào lớp (không cần copy)
 	const handleAssignFromLibrary = async () => {
 		try {
 			const values = await libraryForm.validateFields();
@@ -184,9 +179,9 @@ export default function MaterialsTeacher() {
 
 			for (const materialId of selectedMaterialIds) {
 				try {
-					await axios.post(`${API_BASE}/materials/assign`, {
+					await instance.post(`/materials/assign`, {
 						courseSectionId: values.sectionId,
-						materialId, // 👈 Gán trực tiếp, không cần copy
+						materialId,
 						assignedBy: userId,
 					});
 					successCount++;
@@ -208,7 +203,7 @@ export default function MaterialsTeacher() {
 			setLibraryKeyword("");
 			libraryForm.resetFields();
 		} catch (err: any) {
-			if (err?.errorFields) return; // Validation error
+			if (err?.errorFields) return;
 			console.error("Lỗi assign from library:", err);
 			toast.error("Không thể thêm tài liệu vào lớp");
 		}
@@ -216,7 +211,7 @@ export default function MaterialsTeacher() {
 
 	const handleTogglePublic = async (materialId: number, isPublic: boolean) => {
 		try {
-			const res = await axios.put(`${API_BASE}/materials/${materialId}`, {
+			const res = await instance.put(`/materials/${materialId}`, {
 				isPublic,
 			});
 			if (res.data.success) {
@@ -249,7 +244,7 @@ export default function MaterialsTeacher() {
 			formData.append("category", values.category || "other");
 			formData.append("originalMaterialId", uuidv4());
 
-			await axios.post(`${API_BASE}/materials/upload`, formData, {
+			await instance.post(`/materials/upload`, formData, {
 				headers: { "Content-Type": "multipart/form-data" },
 			});
 
@@ -270,7 +265,7 @@ export default function MaterialsTeacher() {
 			const values = await form.validateFields();
 			if (!editingMaterial) return;
 
-			await axios.put(`${API_BASE}/materials/${editingMaterial.id}`, values);
+			await instance.put(`/materials/${editingMaterial.id}`, values);
 			toast.success("Cập nhật tài liệu thành công");
 			setEditModalOpen(false);
 			setEditingMaterial(null);
@@ -284,7 +279,7 @@ export default function MaterialsTeacher() {
 
 	const handleDelete = async (id: number) => {
 		try {
-			const res = await axios.delete(`${API_BASE}/materials/${id}`);
+			const res = await instance.delete(`/materials/${id}`);
 			if (res.data.success) {
 				toast.success("Xóa tài liệu thành công");
 				setMaterials((prev) => prev.filter((m) => m.id !== id));
@@ -303,7 +298,7 @@ export default function MaterialsTeacher() {
 			const values = await assignForm.validateFields();
 			if (!assigningMaterial) return;
 
-			await axios.post(`${API_BASE}/materials/assign`, {
+			await instance.post(`/materials/assign`, {
 				courseSectionId: values.sectionId,
 				materialId: assigningMaterial.id,
 				assignedBy: userId,
@@ -351,16 +346,19 @@ export default function MaterialsTeacher() {
 			title: "Tiêu đề",
 			dataIndex: "title",
 			key: "title",
+			width: 250,
 			sorter: (a: Material, b: Material) => a.title.localeCompare(b.title),
 			render: (text: string, record: Material) => (
 				<div>
-					<div style={{ fontWeight: 600, color: "#1890ff" }}>
+					<div style={{ fontWeight: 600, color: "#1890ff", fontSize: 14 }}>
 						<FileOutlined style={{ marginRight: 8 }} />
 						{text}
 					</div>
 					{record.description && (
 						<div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
-							{record.description}
+							{record.description.length > 50
+								? record.description.substring(0, 50) + "..."
+								: record.description}
 						</div>
 					)}
 				</div>
@@ -369,15 +367,15 @@ export default function MaterialsTeacher() {
 		{
 			title: "File",
 			key: "fileInfo",
-			width: 200,
+			width: 180,
 			render: (_: any, record: Material) => (
 				<div>
 					<div style={{ marginBottom: 4 }}>
 						{record.fileName ? (
 							<Tooltip title={record.fileName}>
 								<span style={{ fontSize: 12, color: "#666" }}>
-									{record.fileName.length > 30
-										? record.fileName.substring(0, 30) + "..."
+									{record.fileName.length > 25
+										? record.fileName.substring(0, 25) + "..."
 										: record.fileName}
 								</span>
 							</Tooltip>
@@ -385,10 +383,10 @@ export default function MaterialsTeacher() {
 							<Tag color="red">Chưa có file</Tag>
 						)}
 					</div>
-					<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+					<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
 						{getFileTypeTag(record.fileType || "")}
 						{record.fileSize && (
-							<Tag color="default" style={{ margin: 0 }}>
+							<Tag color="default" style={{ margin: 0, fontSize: 11 }}>
 								{formatFileSize(record.fileSize)}
 							</Tag>
 						)}
@@ -399,42 +397,37 @@ export default function MaterialsTeacher() {
 		{
 			title: "Trạng thái",
 			key: "status",
-			width: 150,
+			width: 110,
 			align: "center" as const,
 			render: (_: any, record: Material) => (
 				<Switch
-					checkedChildren={
-						<>
-							<GlobalOutlined /> Công khai
-						</>
-					}
-					unCheckedChildren={
-						<>
-							<LockOutlined /> Riêng tư
-						</>
-					}
+					checkedChildren={<GlobalOutlined />}
+					unCheckedChildren={<LockOutlined />}
 					checked={record.isPublic}
 					onChange={(checked) => handleTogglePublic(record.id, checked)}
+					size="small"
 				/>
 			),
 		},
 		{
-			title: "Ngày tải lên",
+			title: "Ngày tải",
 			dataIndex: "uploadedAt",
 			key: "uploadedAt",
-			width: 150,
+			width: 110,
 			sorter: (a: Material, b: Material) =>
 				new Date(a.uploadedAt).getTime() - new Date(b.uploadedAt).getTime(),
-			render: (date: string) => dayjs(date).format("DD/MM/YYYY HH:mm"),
+			render: (date: string) => (
+				<span style={{ fontSize: 12 }}>{dayjs(date).format("DD/MM/YYYY")}</span>
+			),
 		},
 		{
 			title: "Hành động",
 			key: "actions",
-			width: 200,
+			width: 180,
 			align: "center" as const,
 			render: (_: any, record: Material) => (
-				<div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
-					<Tooltip title="Xem tài liệu">
+				<div style={{ display: "flex", gap: 4, justifyContent: "center", flexWrap: "wrap" }}>
+					<Tooltip title="Xem">
 						<Button
 							size="small"
 							icon={<EyeOutlined />}
@@ -467,7 +460,7 @@ export default function MaterialsTeacher() {
 					<Tooltip title="Xóa">
 						<Popconfirm
 							title="Xóa tài liệu"
-							description="Bạn có chắc muốn xóa tài liệu này?"
+							description="Bạn có chắc muốn xóa?"
 							okText="Xóa"
 							cancelText="Hủy"
 							okButtonProps={{ danger: true }}
@@ -484,8 +477,8 @@ export default function MaterialsTeacher() {
 	const filteredMaterials = materials.filter((m) => {
 		const matchKeyword =
 			!keyword ||
-			m.title.toLowerCase().includes(keyword.toLowerCase()) ||
-			m.description?.toLowerCase().includes(keyword.toLowerCase()) ||
+				m.title.toLowerCase().includes(keyword.toLowerCase()) ||
+				m.description?.toLowerCase().includes(keyword.toLowerCase()) ||
 			m.fileName?.toLowerCase().includes(keyword.toLowerCase());
 
 		const matchPublic = filterPublic === null || m.isPublic === filterPublic;
@@ -520,142 +513,249 @@ export default function MaterialsTeacher() {
 		);
 
 	return (
-		<div style={{ padding: 16 }}>
+		<div className="materials-container" style={{ padding: "8px 12px" }}>
+			<style>
+				{`
+					/* Mobile styles */
+					@media (max-width: 768px) {
+						.materials-title {
+							font-size: 18px !  important;
+							margin-bottom: 0 ! important;
+						}
+
+						.stats-container {
+							display: none !important;
+						}
+
+						.header-actions {
+							flex-direction: column !important;
+							gap: 8px !important;
+							width: 100%;
+							padding-top: 8px !important;
+						}
+
+						.header-actions > div {
+							width: 100% !important;
+						}
+
+						.header-actions .  ant-input,
+						.header-actions . ant-select,
+						.header-actions .ant-btn {
+							width: 100% !important;
+						}
+
+						.ant-modal {
+							max-width: calc(100vw - 16px) !important;
+							margin: 8px !  important;
+						}
+						
+						/* Table scroll hint */
+						.ant-table-wrapper::after {
+							content: "← Vuốt để xem thêm →";
+							display: block;
+							text-align: center;
+							font-size: 11px;
+							color: #999;
+							padding: 8px 0 4px;
+							font-style: italic;
+						}
+					}
+
+					/* Tablet styles */
+					@media (min-width: 769px) and (max-width: 1024px) {
+						.stats-container > div:nth-child(n+4) {
+							display: none !  important;
+						}
+
+						.  header-actions .  ant-input {
+							width: 200px !important;
+						}
+
+						.header-actions . ant-select {
+							width: 130px !important;
+						}
+					}
+
+					/* Desktop optimizations */
+					@media (min-width: 1025px) {
+						.materials-container {
+							padding: 16px ! important;
+						}
+					}
+					
+					/* Table scrollbar styling */
+					.ant-table-body::-webkit-scrollbar {
+						height: 8px;
+					}
+					
+					.ant-table-body::-webkit-scrollbar-track {
+						background: #f1f1f1;
+						border-radius: 4px;
+					}
+					
+					. ant-table-body::-webkit-scrollbar-thumb {
+						background: #888;
+						border-radius: 4px;
+					}
+					
+					.ant-table-body::-webkit-scrollbar-thumb:hover {
+						background: #555;
+					}
+				`}
+			</style>
+
 			{/* Header */}
+			<Title level={3} className="materials-title" style={{ margin: 0, marginBottom: 16 }}>
+				<div className="flex items-center gap-2">
+					<FileText size={20} /> Quản lý Tài liệu
+				</div>
+			</Title>
+
+			{/* Header Wrapper */}
 			<div
 				style={{
 					display: "flex",
 					justifyContent: "space-between",
-					alignItems: "center",
+					alignItems: "flex-start",
 					marginBottom: 16,
-				}}
-			>
-				<Title level={3} style={{ margin: 0 }}>
-					<div className="flex items-center gap-2">
-						<FileText /> Quản lý Tài liệu
-					</div>
-				</Title>
-			</div>
-
-			{/* Statistics */}
-			<Row gutter={16} style={{ marginBottom: 16 }}>
-				<Col span={6}>
-					<Card>
-						<Statistic
-							title="Tổng tài liệu"
-							value={stats.totalMaterials}
-							prefix={<FolderOpenOutlined />}
-							valueStyle={{ color: "#1890ff" }}
-						/>
-					</Card>
-				</Col>
-				<Col span={6}>
-					<Card>
-						<Statistic
-							title="Tài liệu công khai"
-							value={stats.publicMaterials}
-							prefix={<GlobalOutlined />}
-							valueStyle={{ color: "#52c41a" }}
-						/>
-					</Card>
-				</Col>
-				<Col span={6}>
-					<Card>
-						<Statistic
-							title="Tài liệu riêng tư"
-							value={stats.privateMaterials}
-							prefix={<LockOutlined />}
-							valueStyle={{ color: "#faad14" }}
-						/>
-					</Card>
-				</Col>
-				<Col span={6}>
-					<Card>
-						<Statistic
-							title="Tổng dung lượng"
-							value={formatFileSize(stats.totalFileSize)}
-							prefix={<CheckCircleOutlined />}
-							valueStyle={{ color: "#722ed1" }}
-						/>
-					</Card>
-				</Col>
-			</Row>
-
-			{/* Filters and Actions */}
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					marginBottom: 16,
-					gap: 8,
 					flexWrap: "wrap",
+					gap: 12,
 				}}
 			>
-				<div style={{ display: "flex", gap: 8 }}>
-					<Input
-						allowClear
-						prefix={<SearchOutlined />}
-						placeholder="Tìm theo tiêu đề, mô tả, tên file..."
-						value={keyword}
-						onChange={(e) => setKeyword(e.target.value)}
-						style={{ width: 300 }}
-					/>
-					<Select
-						allowClear
-						placeholder="Lọc theo trạng thái"
-						style={{ width: 150 }}
-						value={filterPublic}
-						onChange={setFilterPublic}
+				{/* Statistics Badges */}
+				<div
+					className="stats-container"
+					style={{
+						display: "flex",
+						gap: 8,
+						flexWrap: "wrap",
+						flex: "1 1 auto",
+					}}
+				>
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 12,
+							color: "#000",
+							border: "1px solid #ddd",
+							borderRadius: 6,
+							padding: "6px 10px",
+							background: "#fff",
+							whiteSpace: "nowrap",
+						}}
 					>
-						<Option value={true}>Công khai</Option>
-						<Option value={false}>Riêng tư</Option>
-					</Select>
+						<FolderOpenOutlined style={{ fontSize: 14, color: "#1890ff" }} />
+						<span>Tổng tài liệu:</span>
+						<strong>{stats.totalMaterials}</strong>
+					</div>
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 12,
+							color: "#000",
+							border: "1px solid #ddd",
+							borderRadius: 6,
+							padding: "6px 10px",
+							background: "#fff",
+							whiteSpace: "nowrap",
+						}}
+					>
+						<DatabaseOutlined style={{ fontSize: 14, color: "#722ed1" }} />
+						<span>Dung lượng:</span>
+						<strong style={{ color: "#722ed1" }}>
+							{formatFileSize(stats.totalFileSize)}
+						</strong>
+					</div>
 				</div>
 
-				<div style={{ display: "flex", gap: 8 }}>
-					<Button icon={<ReloadOutlined />} onClick={fetchData}>
-						Làm mới
-					</Button>
-					<Button
-						icon={<GlobalOutlined />}
-						onClick={() => {
-							setLibraryModalOpen(true);
-							setLibraryKeyword("");
-							libraryForm.resetFields();
-							fetchAllMaterials();
-						}}
-					>
-						Thư viện chung
-					</Button>
-					<Button
-						type="primary"
-						icon={<PlusOutlined />}
-						onClick={() => {
-							addForm.resetFields();
-							setFile(null);
-							setAddModalOpen(true);
-						}}
-					>
-						Thêm tài liệu
-					</Button>
+				{/* Filters + Actions */}
+				<div
+					className="header-actions"
+					style={{
+						display: "flex",
+						gap: 8,
+						alignItems: "center",
+						flexWrap: "wrap",
+					}}
+				>
+					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+						<Input
+							allowClear
+							prefix={<SearchOutlined />}
+							placeholder="Tìm tài liệu..."
+							value={keyword}
+							onChange={(e) => setKeyword(e.target.value)}
+							style={{ width: 200 }}
+						/>
+
+						<Select
+							allowClear
+							placeholder="Trạng thái"
+							style={{ width: 100 }}
+							value={filterPublic}
+							onChange={setFilterPublic}
+						>
+							<Option value={true}>Công khai</Option>
+							<Option value={false}>Riêng tư</Option>
+						</Select>
+					</div>
+
+					<div style={{ display: "flex", gap: 8 }}>
+						<Button icon={<ReloadOutlined />} onClick={fetchData}>
+							<span className="btn-text">Làm mới</span>
+						</Button>
+
+						<Button
+							icon={<GlobalOutlined />}
+							onClick={() => {
+								setLibraryModalOpen(true);
+								setLibraryKeyword("");
+								libraryForm.resetFields();
+								fetchAllMaterials();
+							}}
+						>
+							<span className="btn-text">Thư viện</span>
+						</Button>
+
+						<Button
+							type="primary"
+							icon={<PlusOutlined />}
+							onClick={() => {
+								addForm.resetFields();
+								setFile(null);
+								setAddModalOpen(true);
+							}}
+						>
+							<span className="btn-text">Thêm</span>
+						</Button>
+					</div>
 				</div>
 			</div>
 
-			{/* Table */}
-			<Table<Material>
-				dataSource={filteredMaterials}
-				columns={columns}
-				rowKey="id"
-				bordered
-				pagination={{
-					pageSize: 10,
-					showSizeChanger: true,
-					showTotal: (total) => `Tổng ${total} tài liệu`,
-				}}
-				scroll={{ x: "max-content" }}
-			/>
+			{/* Table with horizontal scroll */}
+			<div style={{ overflowX: "auto" }}>
+				<Table<Material>
+					dataSource={filteredMaterials}
+					columns={columns}
+					rowKey="id"
+					bordered
+					pagination={{
+						pageSize: 10,
+						showSizeChanger: true,
+						showTotal: (total) => `Tổng ${total} tài liệu`,
+						responsive: true,
+						size: "default",
+					}}
+					scroll={{ x: 830 }}
+					size="middle"
+				/>
+			</div>
 
-			{/* Modal thêm tài liệu */}
+			{/* Modals giữ nguyên */}
 			<Modal
 				title="Thêm tài liệu mới"
 				open={addModalOpen}
@@ -668,6 +768,7 @@ export default function MaterialsTeacher() {
 				okText="Tải lên"
 				cancelText="Hủy"
 				width={600}
+				style={{ maxWidth: "calc(100vw - 16px)" }}
 			>
 				<Form form={addForm} layout="vertical" style={{ marginTop: 16 }}>
 					<Form.Item
@@ -749,7 +850,6 @@ export default function MaterialsTeacher() {
 				</Form>
 			</Modal>
 
-			{/* Modal sửa tài liệu */}
 			<Modal
 				title="Chỉnh sửa tài liệu"
 				open={editModalOpen}
@@ -760,6 +860,14 @@ export default function MaterialsTeacher() {
 				onOk={handleUpdate}
 				okText="Cập nhật"
 				cancelText="Hủy"
+				style={{ maxWidth: "calc(100vw - 16px)" }}
+				centered
+				bodyStyle={{
+					maxHeight: "75vh",
+					overflowY: "auto",
+					overflowX: "hidden",
+				}}
+				
 			>
 				<Form form={form} layout="vertical" style={{ marginTop: 16 }}>
 					<Form.Item
@@ -813,10 +921,11 @@ export default function MaterialsTeacher() {
 									display: "flex",
 									alignItems: "center",
 									gap: 8,
+									flexWrap: "wrap",
 								}}
 							>
 								<FileOutlined />
-								<span>{editingMaterial.fileName}</span>
+								<span style={{ fontSize: 13 }}>{editingMaterial.fileName}</span>
 								{editingMaterial.fileSize && (
 									<Tag color="default">
 										{formatFileSize(editingMaterial.fileSize)}
@@ -828,7 +937,6 @@ export default function MaterialsTeacher() {
 				</Form>
 			</Modal>
 
-			{/* Modal thêm vào lớp */}
 			<Modal
 				title="Thêm tài liệu vào lớp"
 				open={assignModalOpen}
@@ -839,6 +947,7 @@ export default function MaterialsTeacher() {
 				onOk={handleAssignToClass}
 				okText="Thêm vào lớp"
 				cancelText="Hủy"
+				style={{ maxWidth: "calc(100vw - 16px)" }}
 			>
 				{assigningMaterial && (
 					<div style={{ marginBottom: 16 }}>
@@ -857,7 +966,7 @@ export default function MaterialsTeacher() {
 							filterOption={(input, option) =>
 								String(option?.children || "")
 									?.toLowerCase()
-									.includes(input.toLowerCase())
+										.includes(input.toLowerCase())
 							}
 						>
 							{mySections.map((section) => (
@@ -871,7 +980,6 @@ export default function MaterialsTeacher() {
 				</Form>
 			</Modal>
 
-			{/* Modal thư viện - GÁN TRỰC TIẾP */}
 			<Modal
 				title={
 					<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -889,6 +997,7 @@ export default function MaterialsTeacher() {
 				okText={`Thêm vào lớp (${selectedMaterialIds.length})`}
 				cancelText="Hủy"
 				width={1100}
+				style={{ maxWidth: "calc(100vw - 16px)" }}
 				centered
 			>
 				<Form form={libraryForm} layout="vertical">
@@ -903,7 +1012,7 @@ export default function MaterialsTeacher() {
 							filterOption={(input, option) =>
 								String(option?.children || "")
 									?.toLowerCase()
-									.includes(input.toLowerCase())
+										.includes(input.toLowerCase())
 							}
 						>
 							{mySections.map((section) => (
@@ -916,14 +1025,14 @@ export default function MaterialsTeacher() {
 					</Form.Item>
 				</Form>
 
-				<div style={{ marginTop: 16, marginBottom: 16, display: "flex", gap: 8 }}>
+				<div style={{ marginTop: 16, marginBottom: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
 					<Input
 						allowClear
 						prefix={<SearchOutlined />}
 						placeholder="Tìm tài liệu..."
 						value={libraryKeyword}
 						onChange={(e) => setLibraryKeyword(e.target.value)}
-						style={{ flex: 1 }}
+						style={{ flex: 1, minWidth: 200 }}
 					/>
 					<Button icon={<ReloadOutlined />} onClick={fetchAllMaterials}>
 						Tìm kiếm
@@ -942,12 +1051,11 @@ export default function MaterialsTeacher() {
 								title: "Tiêu đề",
 								dataIndex: "title",
 								key: "title",
-								width: "30%",
 								render: (text: string, record: Material) => (
 									<div>
-										<div style={{ fontWeight: 500 }}>{text}</div>
+										<div style={{ fontWeight: 500, fontSize: 13 }}>{text}</div>
 										{record.description && (
-											<div style={{ fontSize: 12, color: "#666" }}>
+											<div style={{ fontSize: 11, color: "#666" }}>
 												{record.description}
 											</div>
 										)}
@@ -957,10 +1065,9 @@ export default function MaterialsTeacher() {
 							{
 								title: "Người tải lên",
 								key: "uploader",
-								width: "20%",
 								render: (_: any, record: Material) => (
 									<div>
-										<div style={{ fontWeight: 500 }}>
+										<div style={{ fontWeight: 500, fontSize: 12 }}>
 											{record.uploader?.fullName || "Không rõ"}
 										</div>
 										{record.uploader?.email && (
@@ -974,12 +1081,14 @@ export default function MaterialsTeacher() {
 							{
 								title: "File",
 								key: "file",
-								width: "20%",
+								width: 120,
 								render: (_: any, record: Material) => (
-									<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+									<div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
 										{getFileTypeTag(record.fileType || "")}
 										{record.fileSize && (
-											<Tag color="default">{formatFileSize(record.fileSize)}</Tag>
+											<Tag color="default" style={{ fontSize: 11 }}>
+												{formatFileSize(record.fileSize)}
+											</Tag>
 										)}
 									</div>
 								),
@@ -988,8 +1097,10 @@ export default function MaterialsTeacher() {
 								title: "Ngày tải",
 								dataIndex: "uploadedAt",
 								key: "uploadedAt",
-								width: "15%",
-								render: (date: string) => dayjs(date).format("DD/MM/YYYY"),
+								width: 100,
+								render: (date: string) => (
+									<span style={{ fontSize: 12 }}>{dayjs(date).format("DD/MM/YYYY")}</span>
+								),
 							},
 						]}
 						rowKey="id"
@@ -997,8 +1108,9 @@ export default function MaterialsTeacher() {
 							selectedRowKeys: selectedMaterialIds,
 							onChange: (keys) => setSelectedMaterialIds(keys as number[]),
 						}}
-						pagination={{ pageSize: 6 }}
+						pagination={{ pageSize: 6, responsive: true }}
 						size="small"
+						scroll={{ x: 600 }}
 					/>
 				)}
 			</Modal>

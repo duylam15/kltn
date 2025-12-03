@@ -76,6 +76,8 @@ interface Answer {
 	essayAnswer?: string;
 	codeAnswer?: string;
 	language?: string;
+	score?: number;
+	maxScore?: number;
 }
 
 interface CodeSubmissionResult {
@@ -109,7 +111,6 @@ export default function AssignmentsDetailsStudent() {
 	const [testingCode, setTestingCode] = useState<Set<number>>(new Set());
 	const [error, setError] = useState("");
 	const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
-	const [hasStarted, setHasStarted] = useState(false);
 	const [isLateSubmission, setIsLateSubmission] = useState(false);
 
 	// 🔥 Sử dụng useRef để tránh stale closure
@@ -137,7 +138,7 @@ export default function AssignmentsDetailsStudent() {
 
 	// 🔥 TIMER EFFECT - Đã sửa lại hoàn toàn
 	useEffect(() => {
-		if (!hasStarted || timeRemaining === null || timeRemaining <= 0) {
+		if (timeRemaining === null || timeRemaining <= 0) {
 			return;
 		}
 
@@ -156,7 +157,7 @@ export default function AssignmentsDetailsStudent() {
 
 				// 🔥 Cảnh báo khi còn 5 phút
 				if (prev === 300) {
-					alert("⚠️ CHÚ Ý: Còn 5 phút! Hãy kiểm tra và chuẩn bị nộp bài.");
+					alert("⚠️ CHÚ Ý: Còn 5 phút!  Hãy kiểm tra và chuẩn bị nộp bài.");
 				}
 
 				// 🔥 Cảnh báo khi còn 1 phút
@@ -169,7 +170,7 @@ export default function AssignmentsDetailsStudent() {
 		}, 1000);
 
 		return () => clearInterval(timer);
-	}, [hasStarted, timeRemaining]);
+	}, [timeRemaining]);
 
 	const fetchAssignmentDetails = async () => {
 		setLoading(true);
@@ -237,6 +238,20 @@ export default function AssignmentsDetailsStudent() {
 
 			setAssignment(assignmentObj);
 
+			// 🔥 Tự động bắt đầu bài tập và khởi động timer
+			if (assignmentObj.timeLimit) {
+				setTimeRemaining(assignmentObj.timeLimit * 60);
+			}
+
+			// 🔥 Tự động xáo trộn câu hỏi nếu cần
+			if (assignmentObj.shuffleQuestions) {
+				const shuffled = shuffleArray(fullQuestions);
+				setDisplayQuestions(shuffled);
+			} else {
+				setDisplayQuestions(fullQuestions);
+			}
+
+			// 🔥 Kiểm tra nộp muộn
 			if (assignmentObj.dueDate) {
 				const now = dayjs();
 				const dueDate = dayjs(assignmentObj.dueDate);
@@ -244,6 +259,26 @@ export default function AssignmentsDetailsStudent() {
 					setIsLateSubmission(true);
 				}
 			}
+
+			// 🔥 Gọi API start assignment ngầm
+			try {
+				await fetch(
+					`http://localhost:4000/api/v1/assignments/${assignmentId}/start`,
+					{
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+						},
+						credentials: "include",
+						body: JSON.stringify({
+							studentId: studentId,
+						}),
+					}
+				);
+			} catch (err) {
+				console.error("Error auto-starting assignment:", err);
+			}
+
 		} catch (err) {
 			console.error("Fetch error:", err);
 			setError("Lỗi kết nối server");
@@ -259,50 +294,6 @@ export default function AssignmentsDetailsStudent() {
 			[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
 		}
 		return shuffled;
-	};
-
-	const handleStartAssignment = async () => {
-		if (isLateSubmission && !assignment?.allowLateSubmission) {
-			alert("⚠️ Bài tập đã hết hạn nộp và không cho phép nộp muộn!");
-			return;
-		}
-
-		try {
-			const res = await fetch(
-				`http://localhost:4000/api/v1/assignments/${assignmentId}/start`,
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-					},
-					credentials: "include",
-					body: JSON.stringify({
-						studentId: studentId,
-					}),
-				}
-			);
-
-			const data = await res.json();
-
-			if (data.success) {
-				setHasStarted(true);
-				if (assignment?.timeLimit) {
-					setTimeRemaining(assignment.timeLimit * 60);
-				}
-
-				if (assignment?.shuffleQuestions) {
-					const shuffled = shuffleArray(assignment.questions);
-					setDisplayQuestions(shuffled);
-				} else {
-					setDisplayQuestions(assignment?.questions || []);
-				}
-			} else {
-				setError(data.message || "Không thể bắt đầu bài tập");
-			}
-		} catch (err) {
-			console.error("Error starting assignment:", err);
-			setError("Lỗi khi bắt đầu bài tập");
-		}
 	};
 
 	const handleAnswerChange = (questionId: number, answer: Partial<Answer>) => {
@@ -335,6 +326,7 @@ export default function AssignmentsDetailsStudent() {
 		handleAnswerChange(questionId, { selectedChoices });
 	};
 
+	
 	const handleTestCode = async (questionId: number) => {
 		const answer = answers.get(questionId);
 
@@ -380,17 +372,20 @@ export default function AssignmentsDetailsStudent() {
 
 			console.log("✅ Answer ID:", answerId);
 
-			await new Promise((resolve) => setTimeout(resolve, 1000));
+			// 🔥 ĐỢI LÂU HƠN TRƯỚC KHI BẮT ĐẦU POLL
+			await new Promise((resolve) => setTimeout(resolve, 2000)); // 2 giây thay vì 1 giây
 
 			let attempts = 0;
-			const maxAttempts = 60;
+			const maxAttempts = 120; // 🔥 TĂNG LÊN 120 lần (60 giây)
 			const pollInterval = 500;
 
 			const pollResult = async (): Promise<any> => {
 				attempts++;
 
+				console.log(`🔄 Polling attempt ${attempts}`); // 🔥 THÊM LOG
+
 				if (attempts > maxAttempts) {
-					throw new Error("⏰ Timeout: Quá thời gian chờ kết quả (30 giây)");
+					throw new Error("⏰ Timeout: Quá thời gian chờ kết quả (60 giây)");
 				}
 
 				const resultRes = await fetch(
@@ -400,13 +395,16 @@ export default function AssignmentsDetailsStudent() {
 
 				const resultData = await resultRes.json();
 
+				console.log(`🔄 Polling attempt ${attempts} Result:`, resultData); // 🔥 THÊM LOG
+
 				if (!resultData.success) {
 					throw new Error(resultData.message || "Không lấy được kết quả");
 				}
 
 				const status = resultData.data.judgeStatus;
 
-				if (status === "queued" || status === "judging") {
+				// 🔥 THÊM "running" VÀO ĐIỀU KIỆN TIẾP TỤC POLL
+				if (status === "queued" || status === "judging" || status === "running") {
 					await new Promise((resolve) => setTimeout(resolve, pollInterval));
 					return pollResult();
 				}
@@ -424,10 +422,23 @@ export default function AssignmentsDetailsStudent() {
 
 			const result = await pollResult();
 
+			// 🔥 LƯU KẾT QUẢ VÀO codeResults
 			setCodeResults((prev) => {
 				const newResults = new Map(prev);
 				newResults.set(questionId, result);
 				return newResults;
+			});
+
+			// 🔥 CẬP NHẬT ĐIỂM SỐ VÀO answers STATE
+			setAnswers((prev) => {
+				const newAnswers = new Map(prev);
+				const existingAnswer = newAnswers.get(questionId) || { questionId };
+				newAnswers.set(questionId, {
+					...existingAnswer,
+					score: result.score ?? 0,
+					maxScore: result.maxScore ?? 0,
+				});
+				return newAnswers;
 			});
 
 			const score = result.score ?? 0;
@@ -452,7 +463,7 @@ export default function AssignmentsDetailsStudent() {
 				return newSet;
 			});
 		}
-	};
+	};	
 
 	const handleSubmit = async (isAutoSubmit: boolean = false) => {
 		// 🔥 Ngăn submit trùng lặp
@@ -469,13 +480,43 @@ export default function AssignmentsDetailsStudent() {
 		// 🔥 Sử dụng ref để lấy answers mới nhất
 		const currentAnswers = answersRef.current;
 		const answersArray = Array.from(currentAnswers.values());
+		console.log("📦 === SUBMIT DEBUG ===");
+		console.log("Total answers:", answersArray.length);
+		answersArray.forEach((ans, index) => {
+			const question = displayQuestions.find(q => q.id === ans.questionId);
+			console.log(`\nAnswer ${index + 1}:`, {
+				questionId: ans.questionId,
+				questionType: question?.type,
+				questionContent: question?.content?.substring(0, 50) + '...',
+
+				// 🔥 LOG NỘI DUNG ĐẦY ĐỦ
+				essayAnswer: ans.essayAnswer,
+				codeAnswer: ans.codeAnswer,
+				language: ans.language,
+				selectedChoices: ans.selectedChoices,
+
+				// Metadata
+				hasEssay: !!ans.essayAnswer,
+				essayLength: ans.essayAnswer?.length || 0,
+				hasCode: !!ans.codeAnswer,
+				codeLength: ans.codeAnswer?.length || 0,
+				hasLanguage: !!ans.language,
+			});
+		});
+		console.log("\n📤 FULL PAYLOAD:");
+		console.log(JSON.stringify({
+			studentId,
+			answers: answersArray,
+		}, null, 2));
+		console.log("======================\n");
+
 
 		if (!isAutoSubmit) {
 			const unansweredQuestions = displayQuestions.filter((q) => !currentAnswers.has(q.id));
 
 			if (unansweredQuestions.length > 0) {
 				const confirm = window.confirm(
-					`Bạn còn ${unansweredQuestions.length} câu chưa trả lời.\nBạn có chắc muốn nộp bài?`
+					`Bạn còn ${unansweredQuestions.length} câu chưa trả lời.\nBạn có chắc muốn nộp bài? `
 				);
 				if (!confirm) return;
 			}
@@ -554,17 +595,15 @@ export default function AssignmentsDetailsStudent() {
 
 	// 🔥 Hàm auto-submit - chỉ gọi handleSubmit với flag
 	const handleAutoSubmit = () => {
-		console.log("⏰ HẾT GIỜ! Tự động nộp bài...");
+		console.log("⏰ HẾT GIỜ!  Tự động nộp bài.. .");
 		handleSubmit(true);
 	};
 
 	const handleExit = () => {
-		if (hasStarted) {
-			const confirm = window.confirm(
-				"Bạn có chắc muốn thoát? Tiến trình làm bài sẽ không được lưu."
-			);
-			if (!confirm) return;
-		}
+		const confirm = window.confirm(
+			"Bạn có chắc muốn thoát?  Tiến trình làm bài sẽ không được lưu."
+		);
+		if (!confirm) return;
 		navigate(`/student/courses/${sectionId}/assignments`);
 	};
 
@@ -683,7 +722,6 @@ export default function AssignmentsDetailsStudent() {
 															hasMultipleCorrect
 														)
 													}
-													disabled={!hasStarted}
 													className="hidden"
 												/>
 												<div
@@ -726,7 +764,7 @@ export default function AssignmentsDetailsStudent() {
 										key={option.id}
 										className="flex items-start gap-3 cursor-pointer group"
 									>
-										<div className="flex-shrink-0 mt-0.5">
+										<div className="flex-shrink-0 mt-0. 5">
 											<input
 												type="radio"
 												name={`question-${question.id}`}
@@ -736,7 +774,6 @@ export default function AssignmentsDetailsStudent() {
 														selectedChoices: [option.id],
 													})
 												}
-												disabled={!hasStarted}
 												className="hidden"
 											/>
 											<div
@@ -775,7 +812,6 @@ export default function AssignmentsDetailsStudent() {
 								}
 								placeholder="Nhập câu trả lời của bạn..."
 								className="w-full min-h-[200px] p-4 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
-								disabled={!hasStarted}
 							/>
 							<p className="text-xs text-gray-500 mt-2">
 								{answer?.essayAnswer?.length || 0} ký tự
@@ -794,7 +830,6 @@ export default function AssignmentsDetailsStudent() {
 										})
 									}
 									className="px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 bg-white"
-									disabled={!hasStarted}
 								>
 									<option value="javascript">JavaScript</option>
 									<option value="python">Python</option>
@@ -807,7 +842,7 @@ export default function AssignmentsDetailsStudent() {
 
 								<button
 									onClick={() => handleTestCode(question.id)}
-									disabled={!hasStarted || isTesting || !answer?.codeAnswer}
+									disabled={isTesting || !answer?.codeAnswer}
 									className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium disabled:bg-gray-400 transition-colors"
 								>
 									{isTesting ? "Testing..." : "🧪 Test Code"}
@@ -823,7 +858,6 @@ export default function AssignmentsDetailsStudent() {
 								}
 								placeholder="// Nhập code của bạn..."
 								className="w-full min-h-[300px] p-4 border-2 border-gray-200 rounded-lg font-mono text-sm focus:outline-none focus:border-blue-500 bg-gray-900 text-green-400"
-								disabled={!hasStarted}
 								spellCheck={false}
 							/>
 
@@ -888,88 +922,12 @@ export default function AssignmentsDetailsStudent() {
 		);
 	}
 
-	if (!hasStarted) {
-		return (
-			<div className="w-full min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-				<div className="bg-white rounded-xl shadow-2xl p-8 max-w-3xl w-full">
-					<div className="text-center mb-8">
-						<div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-							<FileText className="w-10 h-10 text-blue-600" />
-						</div>
-						<h1 className="text-3xl font-bold text-gray-900 mb-2">
-							{assignment.title}
-						</h1>
-						<p className="text-gray-600">{assignment.description}</p>
-					</div>
-
-					{isLateSubmission && !assignment.allowLateSubmission && (
-						<div className="mb-6 p-4 bg-red-50 border-2 border-red-200 rounded-lg flex items-start gap-3">
-							<AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-							<div>
-								<p className="font-medium text-red-900">Bài tập đã hết hạn nộp</p>
-								<p className="text-sm text-red-700">
-									Hạn nộp: {dayjs(assignment.dueDate).format("DD/MM/YYYY HH:mm")}
-								</p>
-							</div>
-						</div>
-					)}
-
-					<div className="grid grid-cols-4 gap-4 mb-8">
-						<div className="bg-blue-50 rounded-lg p-4 text-center">
-							<div className="text-sm text-gray-600 mb-1">Số câu hỏi</div>
-							<div className="text-3xl font-bold text-blue-600">
-								{assignment.questions.length}
-							</div>
-						</div>
-						<div className="bg-green-50 rounded-lg p-4 text-center">
-							<div className="text-sm text-gray-600 mb-1">Tổng điểm</div>
-							<div className="text-3xl font-bold text-green-600">
-								{assignment.maxScore}
-							</div>
-						</div>
-						<div className="bg-purple-50 rounded-lg p-4 text-center">
-							<div className="text-sm text-gray-600 mb-1">Thời gian</div>
-							<div className="text-2xl font-bold text-purple-600">
-								{assignment.timeLimit ? `${assignment.timeLimit}'` : "∞"}
-							</div>
-						</div>
-						<div className="bg-orange-50 rounded-lg p-4 text-center">
-							<div className="text-sm text-gray-600 mb-1">Lần nộp</div>
-							<div className="text-3xl font-bold text-orange-600">
-								{assignment.maxAttempts}
-							</div>
-						</div>
-					</div>
-
-					<div className="space-y-3">
-						<button
-							onClick={handleStartAssignment}
-							disabled={isLateSubmission && !assignment.allowLateSubmission}
-							className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg rounded-lg shadow-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-						>
-							<FileText className="w-6 h-6" />
-							Bắt đầu làm bài
-						</button>
-
-						<Link
-							to={`/student/courses/${sectionId}/assignments/${assignmentId}/history`}
-							className="w-full block py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg text-center transition-colors flex items-center justify-center gap-2"
-						>
-							<History className="w-5 h-5" />
-							Xem lịch sử nộp bài
-						</Link>
-					</div>
-				</div>
-			</div>
-		);
-	}
-
 	return (
 		<div className="w-full min-h-screen bg-gray-100 flex flex-col">
 			{isLateSubmission && assignment.allowLateSubmission && (
 				<div className="bg-red-600 text-white px-6 py-3 text-center font-semibold flex items-center justify-center gap-2">
 					<AlertTriangle className="w-5 h-5" />
-					CẢNH BÁO: Bạn đang nộp muộn! Hạn nộp đã qua vào{" "}
+					CẢNH BÁO: Bạn đang nộp muộn!  Hạn nộp đã qua vào{" "}
 					{dayjs(assignment.dueDate).format("DD/MM/YYYY HH:mm")}
 				</div>
 			)}
@@ -979,15 +937,15 @@ export default function AssignmentsDetailsStudent() {
 					<div className="flex items-center justify-between">
 						<button
 							onClick={handleExit}
-							className="flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors shadow-md"
+							className="flex items-center gap-2 px-5 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors shadow-md"
 						>
-							<Power className="w-5 h-5" />
+							<Power className="w-5 h-5 " />
 							THOÁT
 						</button>
 
 						<div className="flex-1 text-center px-4">
 							<h1 className="text-xl font-bold text-gray-900">
-								Thí sinh: {user?.fullName}
+								{assignment.title}
 							</h1>
 						</div>
 

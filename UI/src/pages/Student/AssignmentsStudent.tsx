@@ -1,12 +1,43 @@
 import React, { useState, useEffect } from "react";
+import {
+  Card,
+  Button,
+  Input,
+  Select,
+  Spin,
+  Row,
+  Col,
+  Space,
+  Tooltip,
+  Progress,
+  Badge,
+} from "antd";
+import {
+  ReloadOutlined,
+  SearchOutlined,
+  BookOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  WarningOutlined,
+  PlayCircleOutlined,
+  FileTextOutlined,
+  CalendarOutlined,
+  TrophyOutlined,
+  CheckOutlined,
+  FieldTimeOutlined,
+  HistoryOutlined,
+} from "@ant-design/icons";
 import { useAuth } from "../../context/authContext";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/vi";
 import { useNavigate } from "react-router-dom";
+import { Clock, Timer, TimerIcon } from "lucide-react";
 
 dayjs.extend(relativeTime);
 dayjs.locale("vi");
+
+const { Option } = Select;
 
 type AssignmentType = "exercise" | "quiz" | "project" | "exam";
 type AssignmentStatus = "not_started" | "in_progress" | "completed" | "overdue";
@@ -91,6 +122,7 @@ export default function AssignmentsStudent() {
 
   const fetchAssignments = async () => {
     setLoading(true);
+    setError("");
     try {
       const res = await fetch(
         `http://localhost:4000/api/v1/assignments/section/${sectionId}/student/${studentId}`,
@@ -116,20 +148,18 @@ export default function AssignmentsStudent() {
   const filterAssignments = () => {
     let filtered = [...assignments];
 
-    // Filter by search term
     if (searchTerm.trim()) {
-      filtered = filtered.filter((a) =>
-        a.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        a.description?.toLowerCase().includes(searchTerm.toLowerCase())
+      filtered = filtered.filter(
+        (a) =>
+          a.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          a.description?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
-    // Filter by status
     if (filterStatus !== "all") {
       filtered = filtered.filter((a) => a.status === filterStatus);
     }
 
-    // Filter by type
     if (filterType !== "all") {
       filtered = filtered.filter((a) => a.type === filterType);
     }
@@ -142,11 +172,13 @@ export default function AssignmentsStudent() {
     const date = dayjs(dateString);
     const now = dayjs();
     const diffDays = date.diff(now, "day");
+    const diffHours = date.diff(now, "hour");
 
-    if (diffDays === 0) return `Hôm nay ${date.format("HH:mm")}`;
-    if (diffDays === 1) return `Ngày mai ${date.format("HH:mm")}`;
-    if (diffDays === -1) return `Hôm qua ${date.format("HH:mm")}`;
-    return date.format("DD/MM/YYYY HH:mm");
+    if (diffHours < 0) return date.format("DD/MM/YYYY");
+    if (diffHours < 24) return `${diffHours}h nữa`;
+    if (diffDays === 1) return "Ngày mai";
+    if (diffDays < 7) return `${diffDays} ngày nữa`;
+    return date.format("DD/MM/YYYY");
   };
 
   const getTypeText = (type: AssignmentType) => {
@@ -159,217 +191,507 @@ export default function AssignmentsStudent() {
     return typeMap[type];
   };
 
-  const getTypeColor = (type: AssignmentType) => {
-    const colorMap = {
-      exercise: "bg-blue-100 text-blue-700",
-      quiz: "bg-purple-100 text-purple-700",
-      project: "bg-green-100 text-green-700",
-      exam: "bg-red-100 text-red-700",
+  const getTypeConfig = (type: AssignmentType) => {
+    const configMap = {
+      exercise: { color: "#4A90E2", bg: "#E8F4FF", icon: "📝" },
+      quiz: { color: "#9B59B6", bg: "#F4EBFF", icon: "✍️" },
+      project: { color: "#27AE60", bg: "#E8F8F0", icon: "💼" },
+      exam: { color: "#E74C3C", bg: "#FFEAEA", icon: "🎓" },
     };
-    return colorMap[type];
+    return configMap[type];
   };
 
-  const getStatusText = (status: AssignmentStatus) => {
-    const statusMap = {
-      not_started: "Chưa làm",
-      in_progress: "Đang làm",
-      completed: "Đã hoàn thành",
-      overdue: "Quá hạn",
+  const getStatusConfig = (status: AssignmentStatus) => {
+    const configMap = {
+      not_started: { text: "Chưa bắt đầu", color: "#95A5A6", bg: "#F8F9FA" },
+      in_progress: { text: "Đang làm", color: "#3498DB", bg: "#EBF5FB" },
+      completed: { text: "Hoàn thành", color: "#27AE60", bg: "#EAFAF1" },
+      overdue: { text: "Quá hạn", color: "#E74C3C", bg: "#FADBD8" },
     };
-    return statusMap[status];
+    return configMap[status];
   };
 
-  const getStatusColor = (status: AssignmentStatus) => {
-    const colorMap = {
-      not_started: "text-gray-600",
-      in_progress: "text-blue-600",
-      completed: "text-green-600",
-      overdue: "text-red-600",
-    };
-    return colorMap[status];
+  const getStatistics = () => {
+    const totalAssignments = assignments.length;
+    const completed = assignments.filter((a) => a.status === "completed").length;
+    const inProgress = assignments.filter((a) => a.status === "in_progress").length;
+    const overdue = assignments.filter((a) => a.status === "overdue").length;
+
+    return { totalAssignments, completed, inProgress, overdue };
   };
 
-  const getStatusIcon = (status: AssignmentStatus) => {
-    const iconMap = {
-      not_started: "📋",
-      in_progress: "⏳",
-      completed: "✅",
-      overdue: "⚠️",
-    };
-    return iconMap[status];
+  // 🔥 Hàm xử lý click vào assignment
+  const handleAssignmentClick = (assignment: Assignment, e: React.MouseEvent) => {
+    // Ngăn chặn event bubbling nếu click vào button
+    if ((e.target as HTMLElement).closest('button')) {
+      return;
+    }
+
+    // Nếu có submission (đã từng làm bài), cho phép xem chi tiết/lịch sử
+    if (assignment.submission?.startedAt) {
+      navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`);
+    }
+    // Nếu chưa có submission và còn hạn, cho phép làm bài
+    else if (assignment.canSubmit) {
+      navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`);
+    }
+    // Nếu hết hạn và chưa làm, vẫn cho xem chi tiết
+    else {
+      navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`);
+    }
   };
 
+  // 🔥 Hàm xác định button action và text
+  const getActionButton = (assignment: Assignment) => {
+    // Trường hợp 1: Đã hoàn thành - Xem lịch sử
+    if (assignment.submission?.completedAt) {
+      return {
+        text: "Xem lịch sử",
+        icon: <HistoryOutlined />,
+        type: "default" as const,
+        onClick: () => navigate(`/student/courses/${sectionId}/assignments/${assignment.id}/history`),
+      };
+    }
+
+    // Trường hợp 2: Đang làm - Tiếp tục
+    if (assignment.submission?.startedAt && !assignment.submission?.completedAt) {
+      if (assignment.canSubmit) {
+        return {
+          text: "Tiếp tục làm",
+          icon: <PlayCircleOutlined />,
+          type: "primary" as const,
+          onClick: () => navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`),
+        };
+      } else {
+        return {
+          text: "Xem lịch sử",
+          icon: <HistoryOutlined />,
+          type: "default" as const,
+          onClick: () => navigate(`/student/courses/${sectionId}/assignments/${assignment.id}/history`),
+        };
+      }
+    }
+
+    // Trường hợp 3: Chưa làm và còn hạn - Bắt đầu
+    if (assignment.canSubmit) {
+      return {
+        text: "Bắt đầu làm",
+        icon: <PlayCircleOutlined />,
+        type: "primary" as const,
+        onClick: () => navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`),
+      };
+    }
+
+    // Trường hợp 4: Hết hạn và chưa làm - Xem chi tiết
+    if (assignment.isOverdue) {
+      return {
+        text: "Đã hết hạn",
+        icon: <WarningOutlined />,
+        type: "default" as const,
+        onClick: () => navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`),
+        disabled: true,
+      };
+    }
+
+    // Default: Xem chi tiết
+    return {
+      text: "Xem chi tiết",
+      icon: <FileTextOutlined />,
+      type: "default" as const,
+      onClick: () => navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`),
+    };
+  };
+
+  const stats = getStatistics();
 
   if (loading) {
     return (
-      <div className="w-full min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-600">Đang tải...</p>
+      <div style={{ padding: 16 }}>
+        <Spin tip="Đang tải..." />
       </div>
     );
   }
 
   return (
-    <div className="w-full min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b">
-        <div className="px-4 py-4">
-          <h1 className="text-xl font-normal text-gray-800">Bài tập</h1>
-        </div>
-      </div>
+    <div style={{ padding: 16 }}>
+      {/* Statistics Bar - Giống GroupList */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 16,
+          marginTop: -16,
+        }}
+      >
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "#000",
+              border: "1px solid #ddd",
+              borderRadius: 6,
+              padding: "6px 10px",
+              background: "#fff",
+            }}
+          >
+            <BookOutlined style={{ fontSize: 14, color: "#1890ff" }} />
+            <span>Tổng bài tập:</span>
+            <strong>{stats.totalAssignments}</strong>
+          </div>
 
-      {/* Filters */}
-      <div className="bg-white border-b px-4 py-3">
-        <div className="flex flex-col sm:flex-row gap-3">
-          {/* Search */}
-          <input
-            type="text"
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "#000",
+              border: "1px solid #ddd",
+              borderRadius: 6,
+              padding: "6px 10px",
+              background: "#fff",
+            }}
+          >
+            <CheckCircleOutlined style={{ fontSize: 14, color: "#52c41a" }} />
+            <span>Hoàn thành:</span>
+            <strong style={{ color: "#52c41a" }}>{stats.completed}</strong>
+            <span style={{ fontSize: 11, color: "#888" }}>
+              / {stats.totalAssignments}
+            </span>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "#000",
+              border: "1px solid #ddd",
+              borderRadius: 6,
+              padding: "6px 10px",
+              background: "#fff",
+            }}
+          >
+            <ClockCircleOutlined style={{ fontSize: 14, color: "#1890ff" }} />
+            <span>Đang làm:</span>
+            <strong style={{ color: "#1890ff" }}>{stats.inProgress}</strong>
+          </div>
+
+          {stats.overdue > 0 && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 12,
+                color: "#000",
+                border: "1px solid #ddd",
+                borderRadius: 6,
+                padding: "6px 10px",
+                background: "#fff",
+              }}
+            >
+              <WarningOutlined style={{ fontSize: 14, color: "#ff4d4f" }} />
+              <span>Quá hạn:</span>
+              <strong style={{ color: "#ff4d4f" }}>{stats.overdue}</strong>
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <Input
+            allowClear
+            prefix={<SearchOutlined />}
             placeholder="Tìm kiếm bài tập..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded focus:outline-none focus:border-gray-400"
+            style={{ width: 200 }}
           />
-
-          {/* Filter Status */}
-          <select
+          <Select
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="px-4 py-2 border border-gray-300 rounded focus:outline-none focus:border-gray-400"
+            onChange={(value) => setFilterStatus(value)}
+            style={{ width: 150 }}
           >
-            <option value="all">Tất cả trạng thái</option>
-            <option value="not_started">Chưa làm</option>
-            <option value="in_progress">Đang làm</option>
-            <option value="completed">Đã hoàn thành</option>
-            <option value="overdue">Quá hạn</option>
-          </select>
-
-          {/* Filter Type */}
-          <select
+            <Option value="all">Tất cả trạng thái</Option>
+            <Option value="not_started">Chưa làm</Option>
+            <Option value="in_progress">Đang làm</Option>
+            <Option value="completed">Hoàn thành</Option>
+            <Option value="overdue">Quá hạn</Option>
+          </Select>
+          <Select
             value={filterType}
-            onChange={(e) => setFilterType(e.target.value as any)}
-            className="px-4 py-2 border border-gray-300 rounded focus:outline-none focus:border-gray-400"
+            onChange={(value) => setFilterType(value)}
+            style={{ width: 120 }}
           >
-            <option value="all">Tất cả loại</option>
-            <option value="exercise">Bài tập</option>
-            <option value="quiz">Kiểm tra</option>
-            <option value="project">Dự án</option>
-            <option value="exam">Thi</option>
-          </select>
-        </div>
-
-        <div className="mt-3 text-sm text-gray-600">
-          Hiển thị {filteredAssignments.length} / {assignments.length} bài tập
+            <Option value="all">Tất cả loại</Option>
+            <Option value="exercise">Bài tập</Option>
+            <Option value="quiz">Kiểm tra</Option>
+            <Option value="project">Dự án</Option>
+            <Option value="exam">Thi</Option>
+          </Select>
+          <Button icon={<ReloadOutlined />} onClick={fetchAssignments}>
+            Refresh
+          </Button>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="px-4 py-6">
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
-            {error}
-          </div>
-        )}
+      {/* Error */}
+      {error && (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: 12,
+            background: "#fff2f0",
+            border: "1px solid #ffccc7",
+            borderRadius: 4,
+            color: "#ff4d4f",
+            fontSize: 13,
+          }}
+        >
+          {error}
+        </div>
+      )}
 
-        {filteredAssignments.length === 0 ? (
-          <div className="bg-white rounded-lg border p-8 text-center">
-            <p className="text-gray-600">
-              {searchTerm || filterStatus !== "all" || filterType !== "all"
-                ? "Không tìm thấy bài tập nào"
-                : "Chưa có bài tập nào"}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredAssignments.map((assignment) => (
-              <div
-                key={assignment.id}
-                className="bg-white rounded-lg border hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => navigate(`/student/courses/${sectionId}/assignments/` + assignment.id)}
+      {/* Count */}
+      <div style={{ marginBottom: 16, fontSize: 13, color: "#666" }}>
+        Hiển thị {filteredAssignments.length} / {assignments.length} bài tập
+      </div>
 
-              >
-                <div className="p-4">
-                  {/* Header */}
-                  <div className="flex items-start gap-3 mb-3">
-                    <div className="flex-shrink-0 w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white text-xl">
-                      {getStatusIcon(assignment.status)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-gray-900 text-sm truncate mb-1">
-                        {assignment.title}
-                      </h3>
-                      <span className={`inline-block px-2 py-0.5 rounded text-xs ${getTypeColor(assignment.type)}`}>
-                        {getTypeText(assignment.type)}
-                      </span>
-                    </div>
-                  </div>
+      {/* Assignments Grid */}
+      {filteredAssignments.length === 0 ? (
+        <Card
+          style={{
+            textAlign: "center",
+            padding: "60px 20px",
+            borderRadius: 16,
+            border: "2px dashed #E0E0E0",
+            background: "#fff",
+          }}
+        >
+          <div style={{ fontSize: 64, marginBottom: 16 }}>📭</div>
+          <h3 style={{ color: "#95A5A6", fontSize: 18, fontWeight: 500 }}>
+            {searchTerm || filterStatus !== "all" || filterType !== "all"
+              ? "Không tìm thấy bài tập nào"
+              : "Chưa có bài tập nào"}
+          </h3>
+          <p style={{ color: "#BDC3C7", fontSize: 14 }}>
+            {searchTerm || filterStatus !== "all" || filterType !== "all"
+              ? "Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm"
+              : "Các bài tập mới sẽ xuất hiện tại đây"}
+          </p>
+        </Card>
+      ) : (
+        <Row gutter={[16, 16]}>
+          {filteredAssignments.map((assignment) => {
+            const typeConfig = getTypeConfig(assignment.type);
+            const statusConfig = getStatusConfig(assignment.status);
+            const isUrgent =
+              assignment.dueDate &&
+              dayjs(assignment.dueDate).diff(dayjs(), "hour") < 24 &&
+              dayjs(assignment.dueDate).diff(dayjs(), "hour") > 0;
+            const actionButton = getActionButton(assignment);
 
-                  {/* Description */}
-                  {assignment.description && (
-                    <p className="text-xs text-gray-600 mb-3 line-clamp-2">
-                      {assignment.description}
-                    </p>
-                  )}
-
-                  {/* Info */}
-                  <div className="space-y-1.5 mb-3 text-xs text-gray-600">
-                    <div className="flex items-center justify-between">
-                      <span>Câu hỏi:</span>
-                      <span className="font-medium">{assignment.totalQuestions}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Điểm:</span>
-                      <span className="font-medium">{assignment.totalPoints}</span>
-                    </div>
-                    {assignment.dueDate && (
-                      <div className={`flex items-center justify-between ${assignment.isOverdue ? "text-red-600" : ""}`}>
-                        <span>Hạn nộp:</span>
-                        <span className="font-medium">{formatDate(assignment.dueDate)}</span>
+            return (
+              <Col key={assignment.id} xs={24} sm={12} md={8} lg={6} xl={6}>
+                <Badge.Ribbon
+                  text={isUrgent ? "🔥 Gấp" : statusConfig.text}
+                  color={isUrgent ? "red" : statusConfig.color}
+                >
+                  <Card
+                    hoverable
+                    style={{
+                      borderRadius: 16,
+                      border: "1px solid #E8E8E8",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
+                      overflow: "hidden",
+                      transition: "all 0.3s ease",
+                      height: "100%",
+                    }}
+                    bodyStyle={{ padding: 0 }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = "translateY(-4px)";
+                      e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.12)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "translateY(0)";
+                      e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.06)";
+                    }}
+                  >
+                    {/* Type Badge */}
+                    <div
+                      style={{
+                        background: typeConfig.bg,
+                        padding: "12px 16px",
+                        borderBottom: `3px solid ${typeConfig.color}`,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 20 }}>{typeConfig.icon}</span>
+                        <span
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: typeConfig.color,
+                          }}
+                        >
+                          {getTypeText(assignment.type).toUpperCase()}
+                        </span>
                       </div>
-                    )}
-                  </div>
-
-                  {/* Status */}
-                  <div className="pt-3 border-t">
-                    <div className={`text-xs font-medium text-center ${getStatusColor(assignment.status)}`}>
-                      {getStatusText(assignment.status)}
                     </div>
 
-                    {/* Submission Info */}
-                    {assignment.submission && (
-                      <div className="mt-2 text-xs text-gray-600 text-center">
-                        {assignment.submission.completedAt ? (
-                          <>
-                            <div>Điểm: {assignment.submission.score || "Chưa chấm"} / {assignment.submission.maxScore}</div>
-                            <div className="text-green-600 mt-0.5">
-                              Nộp lúc {dayjs(assignment.submission.completedAt).format("DD/MM HH:mm")}
-                            </div>
-                          </>
-                        ) : assignment.submission.startedAt ? (
-                          <div className="text-blue-600">
-                            Tiến độ: {assignment.submission.progress}%
+                    {/* Content */}
+                    <div style={{ padding: 16 }}>
+                      {/* Title */}
+                      <Tooltip title={assignment.title}>
+                        <h3
+                          style={{
+                            fontSize: 15,
+                            fontWeight: 600,
+                            color: "#2C3E50",
+                            marginBottom: 12,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {assignment.title}
+                        </h3>
+                      </Tooltip>
+
+                      {/* Meta Info */}
+                      <div style={{ marginBottom: 12 }}>
+                        <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                            <span style={{ color: "#95A5A6" }}>
+                              <FileTextOutlined /> Câu hỏi
+                            </span>
+                            <span style={{ fontWeight: 600, color: "#34495E" }}>
+                              {assignment.totalQuestions}
+                            </span>
                           </div>
-                        ) : null}
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                            <span style={{ color: "#95A5A6" }}>
+                              <TrophyOutlined /> Điểm tối đa
+                            </span>
+                            <span style={{ fontWeight: 600, color: "#F39C12" }}>
+                              {assignment.totalPoints}
+                            </span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                            <span style={{ color: "#95A5A6" }}>
+                              <FieldTimeOutlined /> Thời gian làm bài
+                            </span>
+                            <span style={{ fontWeight: 600, color: "#F39C12" }}>
+                              {assignment.timeLimit ? `${assignment.timeLimit} phút` : "Không giới hạn"}
+                            </span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                            <span style={{ color: "#95A5A6" }}>
+                              <CalendarOutlined /> Hạn nộp
+                            </span>
+                            <span
+                              style={{
+                                fontWeight: 600,
+                                color: assignment.isOverdue
+                                  ? "#E74C3C"
+                                  : isUrgent
+                                    ? "#E67E22"
+                                    : "#27AE60",
+                              }}
+                            >
+                              {formatDate(assignment.dueDate)}
+                            </span>
+                          </div>
+                        </Space>
                       </div>
-                    )}
 
-                    {/* Action Button */}
-                    {assignment.canSubmit && !assignment.submission?.completedAt && (
-                      <button
-                        className="w-full mt-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors"
+                      {/* Progress Bar */}
+                      {assignment.submission?.progress ? (
+                        <div style={{ marginBottom: 12 }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              marginBottom: 4,
+                              fontSize: 11,
+                              color: "#7F8C8D",
+                            }}
+                          >
+                            <span>Tiến độ</span>
+                            <span style={{ fontWeight: 600 }}>
+                              {assignment.submission.progress}%
+                            </span>
+                          </div>
+                          <Progress
+                            percent={assignment.submission.progress}
+                            size="small"
+                            strokeColor={{
+                              "0%": "#667eea",
+                              "100%": "#764ba2",
+                            }}
+                            showInfo={false}
+                          />
+                        </div>
+                      ) : null}
+
+                      {/* Score Display */}
+                      {assignment.submission?.completedAt && (
+                        <div
+                          style={{
+                            marginBottom: 12,
+                            padding: "10px 12px",
+                            background: "linear-gradient(135deg, #667eea20 0%, #764ba220 100%)",
+                            borderRadius: 8,
+                            border: "1px solid #667eea40",
+                            textAlign: "center",
+                          }}
+                        >
+                          <div style={{ fontSize: 11, color: "#7F8C8D", marginBottom: 2 }}>
+                            Điểm đạt được
+                          </div>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: "#667eea" }}>
+                            {assignment.submission.score ?? "?"} /{" "}
+                            <span style={{ fontSize: 14 }}>{assignment.submission.maxScore}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 🔥 Action Button - Đã update logic */}
+                      <Button
+                        type={actionButton.type}
+                        block
+                        icon={actionButton.icon}
+                        disabled={actionButton.disabled}
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`);
+                          actionButton.onClick();
+                        }}
+                        style={{
+                          borderRadius: 8,
+                          height: 38,
+                          fontWeight: 500,
+                          background:
+                            actionButton.type === "primary"
+                              ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+                              : undefined,
+                          border: "none",
                         }}
                       >
-                        {assignment.submission?.startedAt ? "Tiếp tục làm" : "Bắt đầu"}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+                        {actionButton.text}
+                      </Button>
+                    </div>
+                  </Card>
+                </Badge.Ribbon>
+              </Col>
+            );
+          })}
+        </Row>
+      )}
     </div>
   );
 }

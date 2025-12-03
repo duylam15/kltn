@@ -2,8 +2,46 @@ import { Router } from "express";
 import validate from "../../../middlewares/validate";
 import * as validation from "./assignment.validation";
 import * as controller from "./assignment.controller";
-
+import {
+    getAssignmentWithBestSubmissions,
+    getPublicAssignments,
+    getSubmissionsByStudentAndAssignment,
+} from "./assignment.service";
 const router = Router();
+
+router.get(
+    "/:assignmentId/student/:studentId/submissions",
+    async (req, res) => {
+        try {
+            const assignmentId = Number(req.params.assignmentId);
+            const studentId = Number(req.params.studentId);
+
+            if (isNaN(assignmentId) || isNaN(studentId)) {
+                return res
+                    .status(400)
+                    .json({ success: false, message: "ID không hợp lệ" });
+            }
+
+            const submissions = await getSubmissionsByStudentAndAssignment(
+                studentId,
+                assignmentId
+            );
+            res.json({ success: true, data: submissions });
+        } catch (error) {
+            console.error("Error fetching submissions:", error);
+            res.status(500).json({ success: false, message: "Lỗi server" });
+        }
+    }
+);
+router.get("/public", async (req, res) => {
+    try {
+        const data = await getPublicAssignments();
+        res.json({ success: true, data });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: "Lỗi server" });
+    }
+});
 
 // Admin/Teacher
 router.post(
@@ -27,6 +65,9 @@ router.get(
     validate(validation.getAssignmentByIdSchema),
     controller.getById
 );
+
+router.get("/:id/best-submissions", controller.getBestSubmissions);
+
 router.get(
     "/:id/submissions",
     validate(validation.listSubmissionsByAssignmentSchema),

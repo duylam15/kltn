@@ -25,15 +25,14 @@ import {
 	FolderOpenOutlined,
 	UserOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import { FileText } from "lucide-react";
 import { useAuth } from "../../context/authContext";
 import { v4 as uuidv4 } from "uuid";
+import instance from "../../utils/axiosInstance";
 
 const { Title } = Typography;
-const API_BASE = "http://localhost:4000/api/v1";
 
 type User = {
 	id: number;
@@ -78,8 +77,8 @@ export default function MaterialsAdmin() {
 	async function fetchMaterials() {
 		try {
 			setLoading(true);
-			const res = await axios.get<{ success: boolean; data: Material[] }>(
-				`${API_BASE}/materials`
+			const res = await instance.get<{ success: boolean; data: Material[] }>(
+				`/materials`
 			);
 			if (res.data.success) {
 				setMaterials(res.data.data || []);
@@ -93,7 +92,7 @@ export default function MaterialsAdmin() {
 
 	const handleDelete = async (id: number) => {
 		try {
-			const res = await axios.delete(`${API_BASE}/materials/${id}`);
+			const res = await instance.delete(`/materials/${id}`);
 			if (res.data.success) {
 				toast.success("Đã xóa tài liệu");
 				setMaterials((prev) => prev.filter((m) => m.id !== id));
@@ -119,7 +118,7 @@ export default function MaterialsAdmin() {
 
 			if (editing) {
 				// Cập nhật tài liệu
-				await axios.put(`${API_BASE}/materials/${editing.id}`, {
+				await instance.put(`/materials/${editing.id}`, {
 					title: values.title.trim(),
 					description: values.description?.trim() || "",
 				});
@@ -139,7 +138,7 @@ export default function MaterialsAdmin() {
 				formData.append("uploadedBy", user?.id.toString() || "0");
 				formData.append("originalMaterialId", uniqueCode); // 👈 luôn duy nhất
 
-				await axios.post(`${API_BASE}/materials/upload`, formData, {
+				await instance.post(`/materials/upload`, formData, {
 					headers: { "Content-Type": "multipart/form-data" },
 				});
 				toast.success("Đã thêm tài liệu mới");

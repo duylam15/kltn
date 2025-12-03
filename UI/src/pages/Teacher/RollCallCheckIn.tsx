@@ -1,9 +1,7 @@
 import { useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { User, CheckCircle } from "lucide-react";
-import axios from "axios";
-
-const API_BASE = "http://localhost:4000/api/v1";
+import instance from "../../utils/axiosInstance";
 
 function getOrCreateDeviceId(): string {
   if (typeof window === "undefined") return "";
@@ -76,8 +74,8 @@ export default function RollCallCheckIn() {
       const deviceId = getOrCreateDeviceId();
 
       // 3) Xin nonce cho session
-      const nonceRes = await axios.get(
-        `${API_BASE}/attendance/session/${sessionId}/nonce`
+      const nonceRes = await instance.get(
+        `/attendance/session/${sessionId}/nonce`
       );
       if (!nonceRes.data?.success) {
         throw new Error(nonceRes.data?.message || "Không lấy được nonce");
@@ -86,7 +84,7 @@ export default function RollCallCheckIn() {
 
       // 4) Tạo base string và xin HMAC
       const base = [sessionId, latitude, longitude, accuracy, nonce].join("|");
-      const sigRes = await axios.post(`${API_BASE}/attendance/sign`, {
+      const sigRes = await instance.post(`/attendance/sign`, {
         base,
       });
       if (!sigRes.data?.success) {
@@ -107,7 +105,7 @@ export default function RollCallCheckIn() {
         // scannedToken: "" // nếu sau này bạn muốn bắt SV nhập mã TOTP thì thêm ở đây
       };
 
-      const res = await axios.post(`${API_BASE}/attendance/check-in`, body);
+      const res = await instance.post(`/attendance/check-in`, body);
 
       if (res.data.success) {
         setSuccessMsg(res.data.message || "Điểm danh thành công");

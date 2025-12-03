@@ -18,3 +18,9 @@ export async function remove(req: Request, res: Response) {
     await service.deleteChoice(Number(params.id));
     res.json({ success: true });
 }
+
+export async function getById(req: Request, res: Response) {
+    const { params } = (req as any).validated;
+    const choice = await service.getChoiceById(Number(params.id));
+    res.json({ success: true, data: choice });
+}

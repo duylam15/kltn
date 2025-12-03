@@ -20,6 +20,7 @@ import {
   InputNumber,
   Space,
   Badge,
+  message,
 } from "antd";
 import {
   ReloadOutlined,
@@ -33,17 +34,18 @@ import {
   HistoryOutlined,
   SaveOutlined,
   CheckCircleOutlined,
+  StarOutlined,
+  StarFilled,
 } from "@ant-design/icons";
-import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
 
-import { useAuth } from "../../context/authContext";
+import { useAuth } from "../../../context/authContext";
+import instance from "../../../utils/axiosInstance";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
-const API_BASE = "http://localhost:4000/api/v1";
 
 type Assignment = {
   id: number;
@@ -86,6 +88,8 @@ type Submission = {
   gradedAt?: string;
   startedAt: string;
   completedAt: string;
+  attempt?: number;
+  isFinal?: boolean; // 🔥 Thêm field isFinal
 };
 
 type Student = {
@@ -165,7 +169,7 @@ export default function AssignmentTeacher() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${API_BASE}/assignments/sections/${sectionId}/assignments`);
+      const res = await instance.get(`/assignments/sections/${sectionId}/assignments`);
 
       if (res.data.success) {
         const assignmentsData = res.data.data || [];
@@ -189,8 +193,8 @@ export default function AssignmentTeacher() {
 
   const fetchStudents = async () => {
     try {
-      const res = await axios.get<{ success: boolean; data: any[] }>(
-        `${API_BASE}/sections-enrollments/section/${sectionId}/students`
+      const res = await instance.get<{ success: boolean; data: any[] }>(
+        `/sections-enrollments/section/${sectionId}/students`
       );
       if (res.data.success) {
         setStudents(res.data.data.map((item: any) => item.student) || []);
@@ -203,8 +207,8 @@ export default function AssignmentTeacher() {
 
   const fetchQuestions = async () => {
     try {
-      const res = await axios.get<{ success: boolean; data: Question[] }>(
-        `${API_BASE}/questions`
+      const res = await instance.get<{ success: boolean; data: Question[] }>(
+        `/questions`
       );
       if (res.data.success) {
         setQuestions(res.data.data || []);
@@ -214,30 +218,69 @@ export default function AssignmentTeacher() {
     }
   };
 
+  // 🔥 SỬA HÀM fetchAssignmentWithSubmissions
   const fetchAssignmentWithSubmissions = async (assignmentId: number) => {
     try {
-      const res = await axios.get<{ success: boolean; data: Assignment }>(
-        `${API_BASE}/assignments/${assignmentId}/best-submissions?sectionId=${sectionId}`
+      setLoading(true);
+
+      // Lấy thông tin assignment
+      const assignmentRes = await instance.get<{ success: boolean; data: Assignment }>(
+        `/assignments/${assignmentId}`
       );
 
-      if (res.data.success) {
-        console.log("Fetched assignment with best submissions:", res.data.data);
-        setSelectedAssignment(res.data.data);
-        setScoreModalOpen(true);
-      } else {
+      if (!assignmentRes.data.success) {
         toast.error("Không tải được thông tin bài tập");
+        return;
       }
+
+      const assignment = assignmentRes.data.data;
+
+      // 🔥 Lấy tất cả submissions của assignment này cho từng học sinh trong section
+      const allSubmissionsPromises = students.map(async (student) => {
+        try {
+          const res = await instance.get<{ success: boolean; data: Submission[] }>(
+            `/assignments/${assignmentId}/student/${student.id}/submissions`
+          );
+
+          if (res.data.success && res.data.data) {
+            // 🔥 Tìm submission có isFinal = true
+            const finalSubmission = res.data.data.find(sub => sub.isFinal === true);
+            return finalSubmission || null;
+          }
+          return null;
+        } catch (err) {
+          console.error(`Lỗi khi lấy submissions của học sinh ${student.id}:`, err);
+          return null;
+        }
+      });
+
+      const allSubmissions = await Promise.all(allSubmissionsPromises);
+
+      // Lọc bỏ các giá trị null
+      const finalSubmissions = allSubmissions.filter(sub => sub !== null) as Submission[];
+
+      console.log("Final submissions:", finalSubmissions);
+
+      // Gán submissions vào assignment
+      setSelectedAssignment({
+        ...assignment,
+        submissions: finalSubmissions,
+      });
+
+      setScoreModalOpen(true);
     } catch (err) {
       console.error("Lỗi khi tải chi tiết bài tập:", err);
       toast.error("Không tải được thông tin bài tập");
+    } finally {
+      setLoading(false);
     }
   };
 
   const fetchStudentSubmissions = async (studentId: number, assignmentId: number) => {
     try {
       setLoadingSubmissions(true);
-      const res = await axios.get<{ success: boolean; data: Submission[] }>(
-        `${API_BASE}/assignments/${assignmentId}/student/${studentId}/submissions`
+      const res = await instance.get<{ success: boolean; data: Submission[] }>(
+        `/assignments/${assignmentId}/student/${studentId}/submissions`
       );
 
       if (res.data.success) {
@@ -260,8 +303,8 @@ export default function AssignmentTeacher() {
   // 🔥 Hàm sửa điểm của submission
   const handleUpdateScore = async (submissionId: number, newScore: number) => {
     try {
-      const res = await axios.put(
-        `${API_BASE}/submissions/${submissionId}`,
+      const res = await instance.put(
+        `/submissions/${submissionId}`,
         { score: newScore }
       );
 
@@ -295,8 +338,8 @@ export default function AssignmentTeacher() {
       const newStatus = !assignment.showAnswersAfterSubmit;
 
       // Gọi API update
-      const res = await axios.put(
-        `${API_BASE}/assignments/${assignmentId}`,
+      const res = await instance.put(
+        `/assignments/${assignmentId}`,
         { showAnswersAfterSubmit: newStatus }
       );
 
@@ -320,34 +363,46 @@ export default function AssignmentTeacher() {
     }
   };
 
-  // 🔥 Hàm chọn submission làm điểm cuối cùng
-  const handleSetFinalScore = async (submissionId: number) => {
+  // 🔥 Hàm chọn submission làm điểm cuối cùng - CẬP NHẬT
+  const handleSelectFinalSubmission = async (submissionId: number) => {
     try {
       const submission = selectedStudentSubmissions.find(s => s.id === submissionId);
-      if (!submission || submission.score === null || submission.score === undefined) {
-        toast.error("Submission này chưa có điểm");
+      if (!submission) {
+        toast.error("Không tìm thấy submission");
         return;
       }
 
-      // Cập nhật điểm cuối cùng bằng cách cập nhật tất cả submissions khác
-      const res = await axios.post(
-        `${API_BASE}/submissions/${submissionId}/set-final`,
-        {
-          studentId: selectedStudent!.id,
-          assignmentId: selectedAssignment!.id
-        }
+      if (submission.score === null || submission.score === undefined) {
+        toast.error("Submission này chưa có điểm, vui lòng chấm điểm trước");
+        return;
+      }
+
+      // Gọi API với đúng endpoint
+      const res = await instance.post(
+        `/submissions/${submissionId}/select-final`
       );
 
       if (res.data.success) {
-        toast.success("Đã chọn làm điểm cuối cùng");
+        toast.success("Đã chọn làm điểm chính thức");
 
-        // Refresh submissions
-        await fetchStudentSubmissions(selectedStudent!.id, selectedAssignment!.id);
-        await fetchAssignmentWithSubmissions(selectedAssignment!.id);
+        // Cập nhật lại danh sách submissions
+        setSelectedStudentSubmissions(prev =>
+          prev.map(sub => ({
+            ...sub,
+            isFinal: sub.id === submissionId
+          }))
+        );
+
+        // Refresh bảng điểm chính
+        if (selectedAssignment) {
+          await fetchAssignmentWithSubmissions(selectedAssignment.id);
+        }
+      } else {
+        toast.error(res.data.message || "Không thể chọn điểm chính thức");
       }
-    } catch (err) {
-      console.error("Lỗi khi chọn điểm cuối cùng:", err);
-      toast.error("Không thể chọn điểm cuối cùng");
+    } catch (err: any) {
+      console.error("Lỗi khi chọn điểm chính thức:", err);
+      toast.error(err?.response?.data?.message || "Không thể chọn điểm chính thức");
     }
   };
 
@@ -357,18 +412,18 @@ export default function AssignmentTeacher() {
       setLoadingSubmissionDetail(true);
 
       // Fetch submission info
-      const submissionRes = await axios.get<{ success: boolean; data: Submission }>(
-        `${API_BASE}/submissions/${submissionId}`
+      const submissionRes = await instance.get<{ success: boolean; data: Submission }>(
+        `/submissions/${submissionId}`
       );
 
       // Fetch submission answers
-      const answersRes = await axios.get<{ success: boolean; data: any[] }>(
-        `${API_BASE}/submission-answers/submission/${submissionId}`
+      const answersRes = await instance.get<{ success: boolean; data: any[] }>(
+        `/submission-answers/submission/${submissionId}`
       );
 
       // Fetch code results
-      const codeResultsRes = await axios.get<{ success: boolean; data: any[] }>(
-        `${API_BASE}/code-submission-results/submission/${submissionId}`
+      const codeResultsRes = await instance.get<{ success: boolean; data: any[] }>(
+        `/code-submission-results/submission/${submissionId}`
       );
 
       console.log("Fetched submission detail:", {
@@ -381,8 +436,8 @@ export default function AssignmentTeacher() {
       const answersWithQuestions = await Promise.all(
         (answersRes.data.data || []).map(async (answer: any) => {
           try {
-            const questionRes = await axios.get(
-              `${API_BASE}/questions/${answer.questionId}`
+            const questionRes = await instance.get(
+              `/questions/${answer.questionId}`
             );
             if (questionRes.data.success) {
               return { ...answer, question: questionRes.data.data };
@@ -413,8 +468,8 @@ export default function AssignmentTeacher() {
 
   const handleToggleVisibility = async (assignmentId: number, checked: boolean) => {
     try {
-      const res = await axios.patch(
-        `${API_BASE}/sections-assignments/sections/${sectionId}/assignments/${assignmentId}/visibility`,
+      const res = await instance.patch(
+        `/sections-assignments/sections/${sectionId}/assignments/${assignmentId}/visibility`,
         { isOpen: checked }
       );
       if (res.data.success) {
@@ -431,7 +486,7 @@ export default function AssignmentTeacher() {
 
   const handleDelete = async (id: number) => {
     try {
-      await axios.delete(`${API_BASE}/assignments/${id}`);
+      await instance.delete(`/assignments/${id}`);
       toast.success("Đã xóa bài tập");
       setAssignments((prev) => prev.filter((a) => a.id !== id));
       if (visibility[id] !== undefined) {
@@ -453,7 +508,7 @@ export default function AssignmentTeacher() {
 
       setLoadingQuestions(true);
       try {
-        const res = await axios.get<{
+        const res = await instance.get<{
           success: boolean;
           data: Array<{
             assignmentId: number;
@@ -461,7 +516,7 @@ export default function AssignmentTeacher() {
             question: Question;
           }>;
         }>(
-          `${API_BASE}/assignments-questions/assignments/${assignment.id}/questions`
+          `/assignments-questions/assignments/${assignment.id}/questions`
         );
 
         if (res.data.success && res.data.data) {
@@ -513,15 +568,15 @@ export default function AssignmentTeacher() {
       let assignmentId: number;
 
       if (editing) {
-        await axios.put(`${API_BASE}/assignments/${editing.id}`, payload);
+        await instance.put(`/assignments/${editing.id}`, payload);
         assignmentId = editing.id;
         toast.success("Đã cập nhật bài tập");
       } else {
-        const res = await axios.post(`${API_BASE}/assignments`, payload);
+        const res = await instance.post(`/assignments`, payload);
         assignmentId = res.data.data.id;
 
-        await axios.post(
-          `${API_BASE}/sections-assignments/sections/${sectionId}/assignments`,
+        await instance.post(
+          `/sections-assignments/sections/${sectionId}/assignments`,
           { assignmentId }
         );
 
@@ -555,14 +610,14 @@ export default function AssignmentTeacher() {
       );
 
       const addPromises = toAdd.map((questionId) =>
-        axios.post(
-          `${API_BASE}/assignments-questions/assignments/${assignmentId}/questions/${questionId}`
+        instance.post(
+          `/assignments-questions/assignments/${assignmentId}/questions/${questionId}`
         )
       );
 
       const removePromises = toRemove.map((questionId: any) =>
-        axios.delete(
-          `${API_BASE}/assignments-questions/assignments/${assignmentId}/questions/${questionId}`
+        instance.delete(
+          `/assignments-questions/assignments/${assignmentId}/questions/${questionId}`
         )
       );
 
@@ -615,6 +670,8 @@ export default function AssignmentTeacher() {
         )[0]
         : null;
 
+      console.log("Student submissions:", student.id, studentSubmissions);
+      
       return {
         key: student.id,
         studentId: student.id,
@@ -748,7 +805,7 @@ export default function AssignmentTeacher() {
     },
   ];
 
-  // 🔥 Cột cho bảng lịch sử nộp bài
+  // 🔥 Cột cho bảng lịch sử nộp bài - CÓ NÚT CHỌN ĐIỂM CHÍNH THỨC
   const submissionHistoryColumns = [
     {
       title: "Lần",
@@ -757,6 +814,20 @@ export default function AssignmentTeacher() {
       align: "center" as const,
       render: (_: any, __: any, index: number) => (
         <strong>{selectedStudentSubmissions.length - index}</strong>
+      ),
+    },
+    // 🔥 CỘT HIỂN THỊ ĐIỂM CHÍNH THỨC
+    {
+      title: "Điểm chính thức",
+      key: "isFinal",
+      width: 100,
+      align: "center" as const,
+      render: (_: any, record: Submission) => (
+        record.isFinal ? (
+          <Tooltip title="Đây là điểm chính thức">
+            <StarFilled style={{ fontSize: 20, color: '#faad14' }} />
+          </Tooltip>
+        ) : null
       ),
     },
     {
@@ -849,7 +920,7 @@ export default function AssignmentTeacher() {
     {
       title: "Hành động",
       key: "actions",
-      width: 200,
+      width: 250,
       align: "center" as const,
       render: (_: any, record: Submission) => (
         <Space>
@@ -862,6 +933,28 @@ export default function AssignmentTeacher() {
               Chi tiết
             </Button>
           </Tooltip>
+
+          {/* 🔥 NÚT CHỌN ĐIỂM CHÍNH THỨC */}
+          {!record.isFinal && record.score !== null && record.score !== undefined && (
+            <Popconfirm
+              title="Chọn làm điểm chính thức?"
+              description="Điểm này sẽ được dùng để tính điểm cuối cùng cho học sinh."
+              onConfirm={() => handleSelectFinalSubmission(record.id)}
+              okText="Xác nhận"
+              cancelText="Hủy"
+            >
+              <Tooltip title="Chọn làm điểm chính thức">
+                <Button
+                  size="small"
+                  type="dashed"
+                  icon={<StarOutlined />}
+                  style={{ color: '#faad14', borderColor: '#faad14' }}
+                >
+                  Chọn
+                </Button>
+              </Tooltip>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -1440,7 +1533,7 @@ export default function AssignmentTeacher() {
             Đóng
           </Button>,
         ]}
-        width={1200}
+        width={1300}
         centered
       >
         {loadingSubmissions ? (
@@ -1466,18 +1559,49 @@ export default function AssignmentTeacher() {
               </Row>
             </div>
 
+            {/* 🔥 THÔNG BÁO ĐIỂM CHÍNH THỨC */}
+            {selectedStudentSubmissions.some(s => s.isFinal) && (
+              <div style={{
+                marginBottom: 16,
+                padding: 12,
+                background: '#fffbe6',
+                border: '1px solid #ffe58f',
+                borderRadius: 6,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8
+              }}>
+                <StarFilled style={{ fontSize: 18, color: '#faad14' }} />
+                <Text strong style={{ color: '#ad6800' }}>
+                  Bài nộp có dấu sao vàng là điểm chính thức được dùng để tính điểm cuối cùng
+                </Text>
+              </div>
+            )}
+
             <Table
               dataSource={selectedStudentSubmissions}
               columns={submissionHistoryColumns}
               rowKey="id"
               bordered
               pagination={false}
-              scroll={{ x: 900 }}
+              scroll={{ x: 1100 }}
               locale={{ emptyText: "Không có lịch sử nộp bài" }}
+              rowClassName={(record) => record.isFinal ? 'final-submission-row' : ''}
             />
+
+            {/* 🔥 CSS cho row được chọn làm điểm chính thức */}
+            <style>{`
+              .final-submission-row {
+                background-color: #fffbe6 !important;
+              }
+              .final-submission-row:hover > td {
+                background-color: #fff7cc !important;
+              }
+            `}</style>
           </>
         )}
       </Modal>
+
       {/* 🔥 Modal xem chi tiết bài làm */}
       <Modal
         title={
@@ -1708,6 +1832,7 @@ export default function AssignmentTeacher() {
                             minHeight: 60,
                           }}
                         >
+                          {/* 🔥 SỬA: Lấy từ answer.essayAnswer thay vì answer.answer Text */}
                           {answer.essayAnswer || <Text type="secondary">Không có câu trả lời</Text>}
                         </div>
                         {answer.feedback && (
@@ -1728,11 +1853,12 @@ export default function AssignmentTeacher() {
                     )}
 
                     {/* Coding Answer */}
-                    {question?.type === "coding" && codeResult && (
+                    {question?.type === "coding" && (
                       <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                           <Text strong>Code của học sinh:</Text>
-                          <Tag color="purple">{codeResult.language}</Tag>
+                          {/* 🔥 SỬA: Hiển thị language từ answer.language */}
+                          <Tag color="purple">{answer.language || 'N/A'}</Tag>
                         </div>
                         <pre
                           style={{
@@ -1747,162 +1873,169 @@ export default function AssignmentTeacher() {
                             maxHeight: 300,
                           }}
                         >
-                          {codeResult.codeAnswer}
+                          {/* 🔥 SỬA: Lấy code từ answer.codeAnswer */}
+                          {answer.codeAnswer || <Text type="secondary">Không có code</Text>}
                         </pre>
 
-                        {/* Code Results */}
-                        <div style={{ marginTop: 12, padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                            <Text strong>Kết quả test:</Text>
-                            <Space>
-                              <Tag color={
-                                codeResult.score === codeResult.maxScore ? "success" : "warning"
-                              }>
-                                {codeResult.score}/{codeResult.maxScore} điểm
-                              </Tag>
-                              <Tag color={
-                                codeResult.judgeStatus === "accepted" ? "success" : "error"
-                              }>
-                                {codeResult.judgeStatus}
-                              </Tag>
-                            </Space>
-                          </div>
-
-                          {codeResult.compileLog && (
-                            <div
-                              style={{
-                                marginTop: 8,
-                                padding: 10,
-                                backgroundColor: '#fff1f0',
-                                border: '1px solid #ffa39e',
-                                borderRadius: 6,
-                              }}
-                            >
-                              <Text strong style={{ color: '#cf1322' }}>Compile Error:</Text>
-                              <pre style={{
-                                margin: '8px 0 0 0',
-                                fontSize: 12,
-                                whiteSpace: 'pre-wrap',
-                                color: '#cf1322'
-                              }}>
-                                {codeResult.compileLog}
-                              </pre>
+                        {/* 🔥 Code Results - Kiểm tra xem có kết quả test không */}
+                        {(answer.score !== null || answer.testResults) && (
+                          <div style={{ marginTop: 12, padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                              <Text strong>Kết quả test:</Text>
+                              <Space>
+                                <Tag color={
+                                  answer.score === answer.maxScore ? "success" : "warning"
+                                }>
+                                  {answer.score ?? 0}/{answer.maxScore ?? 0} điểm
+                                </Tag>
+                                <Tag color={
+                                  answer.judgeStatus === "passed" ? "success" : "error"
+                                }>
+                                  {answer.judgeStatus || 'N/A'}
+                                </Tag>
+                              </Space>
                             </div>
-                          )}
 
-                          {codeResult.stderrLog && (
-                            <div
-                              style={{
-                                marginTop: 8,
-                                padding: 10,
-                                backgroundColor: '#fff1f0',
-                                border: '1px solid #ffa39e',
-                                borderRadius: 6,
-                              }}
-                            >
-                              <Text strong style={{ color: '#cf1322' }}>Runtime Error:</Text>
-                              <pre style={{
-                                margin: '8px 0 0 0',
-                                fontSize: 12,
-                                whiteSpace: 'pre-wrap',
-                                color: '#cf1322'
-                              }}>
-                                {codeResult.stderrLog}
-                              </pre>
-                            </div>
-                          )}
-
-                          {codeResult.testResults && codeResult.testResults.length > 0 && (
-                            <div style={{ marginTop: 12 }}>
-                              <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                                Test Cases:
-                              </Text>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                {codeResult.testResults.map((test: any, idx: number) => (
-                                  <div
-                                    key={test.id}
-                                    style={{
-                                      padding: 10,
-                                      backgroundColor: test.status === "ok" ? "#f6ffed" : "#fff1f0",
-                                      border: `1px solid ${test.status === "ok" ? "#b7eb8f" : "#ffa39e"}`,
-                                      borderRadius: 6,
-                                    }}
-                                  >
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                      <Text strong>Test Case {idx + 1}</Text>
-                                      <Tag color={test.status === "ok" ? "success" : "error"}>
-                                        {test.status === "ok" ? "✓ Passed" : "✗ Failed"}
-                                      </Tag>
-                                    </div>
-                                    <Row gutter={8}>
-                                      <Col span={8}>
-                                        <Text type="secondary" style={{ fontSize: 12 }}>Input:</Text>
-                                        <pre style={{
-                                          margin: '4px 0 0 0',
-                                          padding: 8,
-                                          backgroundColor: '#fff',
-                                          border: '1px solid #d9d9d9',
-                                          borderRadius: 4,
-                                          fontSize: 12,
-                                        }}>
-                                          {test.input}
-                                        </pre>
-                                      </Col>
-                                      <Col span={8}>
-                                        <Text type="secondary" style={{ fontSize: 12 }}>Expected:</Text>
-                                        <pre style={{
-                                          margin: '4px 0 0 0',
-                                          padding: 8,
-                                          backgroundColor: '#fff',
-                                          border: '1px solid #d9d9d9',
-                                          borderRadius: 4,
-                                          fontSize: 12,
-                                        }}>
-                                          {test.expect}
-                                        </pre>
-                                      </Col>
-                                      <Col span={8}>
-                                        <Text type="secondary" style={{ fontSize: 12 }}>Got:</Text>
-                                        <pre style={{
-                                          margin: '4px 0 0 0',
-                                          padding: 8,
-                                          backgroundColor: '#fff',
-                                          border: '1px solid #d9d9d9',
-                                          borderRadius: 4,
-                                          fontSize: 12,
-                                          color: test.status === "ok" ? "#52c41a" : "#ff4d4f",
-                                        }}>
-                                          {test.got}
-                                        </pre>
-                                      </Col>
-                                    </Row>
-                                  </div>
-                                ))}
+                            {/* Compile Error */}
+                            {answer.compileLog && (
+                              <div
+                                style={{
+                                  marginTop: 8,
+                                  padding: 10,
+                                  backgroundColor: '#fff1f0',
+                                  border: '1px solid #ffa39e',
+                                  borderRadius: 6,
+                                }}
+                              >
+                                <Text strong style={{ color: '#cf1322' }}>Compile Error:</Text>
+                                <pre style={{
+                                  margin: '8px 0 0 0',
+                                  fontSize: 12,
+                                  whiteSpace: 'pre-wrap',
+                                  color: '#cf1322'
+                                }}>
+                                  {answer.compileLog}
+                                </pre>
                               </div>
-                            </div>
-                          )}
+                            )}
 
-                          {codeResult.stdoutLog && (
-                            <div
-                              style={{
-                                marginTop: 8,
-                                padding: 10,
-                                backgroundColor: '#f5f5f5',
-                                border: '1px solid #d9d9d9',
-                                borderRadius: 6,
-                              }}
-                            >
-                              <Text strong>Output:</Text>
-                              <pre style={{
-                                margin: '8px 0 0 0',
-                                fontSize: 12,
-                                whiteSpace: 'pre-wrap'
-                              }}>
-                                {codeResult.stdoutLog}
-                              </pre>
-                            </div>
-                          )}
-                        </div>
+                            {/* Runtime Error */}
+                            {answer.stderrLog && (
+                              <div
+                                style={{
+                                  marginTop: 8,
+                                  padding: 10,
+                                  backgroundColor: '#fff1f0',
+                                  border: '1px solid #ffa39e',
+                                  borderRadius: 6,
+                                }}
+                              >
+                                <Text strong style={{ color: '#cf1322' }}>Runtime Error:</Text>
+                                <pre style={{
+                                  margin: '8px 0 0 0',
+                                  fontSize: 12,
+                                  whiteSpace: 'pre-wrap',
+                                  color: '#cf1322'
+                                }}>
+                                  {answer.stderrLog}
+                                </pre>
+                              </div>
+                            )}
+
+                            {/* Test Results */}
+                            {answer.testResults && answer.testResults.length > 0 && (
+                              <div style={{ marginTop: 12 }}>
+                                <Text strong style={{ display: 'block', marginBottom: 8 }}>
+                                  Test Cases:
+                                </Text>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  {answer.testResults.map((test: any, idx: number) => (
+                                    <div
+                                      key={test.id || idx}
+                                      style={{
+                                        padding: 10,
+                                        backgroundColor: test.status === "ok" ? "#f6ffed" : "#fff1f0",
+                                        border: `1px solid ${test.status === "ok" ? "#b7eb8f" : "#ffa39e"}`,
+                                        borderRadius: 6,
+                                      }}
+                                    >
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                        <Text strong>Test Case {idx + 1}</Text>
+                                        <Tag color={test.status === "ok" ? "success" : "error"}>
+                                          {test.status === "ok" ? "✓ Passed" : "✗ Failed"}
+                                        </Tag>
+                                      </div>
+                                      <Row gutter={8}>
+                                        <Col span={8}>
+                                          <Text type="secondary" style={{ fontSize: 12 }}>Input:</Text>
+                                          <pre style={{
+                                            margin: '4px 0 0 0',
+                                            padding: 8,
+                                            backgroundColor: '#fff',
+                                            border: '1px solid #d9d9d9',
+                                            borderRadius: 4,
+                                            fontSize: 12,
+                                          }}>
+                                            {test.input}
+                                          </pre>
+                                        </Col>
+                                        <Col span={8}>
+                                          <Text type="secondary" style={{ fontSize: 12 }}>Expected:</Text>
+                                          <pre style={{
+                                            margin: '4px 0 0 0',
+                                            padding: 8,
+                                            backgroundColor: '#fff',
+                                            border: '1px solid #d9d9d9',
+                                            borderRadius: 4,
+                                            fontSize: 12,
+                                          }}>
+                                            {test.expect}
+                                          </pre>
+                                        </Col>
+                                        <Col span={8}>
+                                          <Text type="secondary" style={{ fontSize: 12 }}>Got:</Text>
+                                          <pre style={{
+                                            margin: '4px 0 0 0',
+                                            padding: 8,
+                                            backgroundColor: '#fff',
+                                            border: '1px solid #d9d9d9',
+                                            borderRadius: 4,
+                                            fontSize: 12,
+                                            color: test.status === "ok" ? "#52c41a" : "#ff4d4f",
+                                          }}>
+                                            {test.got}
+                                          </pre>
+                                        </Col>
+                                      </Row>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Stdout Log */}
+                            {answer.stdoutLog && (
+                              <div
+                                style={{
+                                  marginTop: 8,
+                                  padding: 10,
+                                  backgroundColor: '#f5f5f5',
+                                  border: '1px solid #d9d9d9',
+                                  borderRadius: 6,
+                                }}
+                              >
+                                <Text strong>Output:</Text>
+                                <pre style={{
+                                  margin: '8px 0 0 0',
+                                  fontSize: 12,
+                                  whiteSpace: 'pre-wrap'
+                                }}>
+                                  {answer.stdoutLog}
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1936,4 +2069,4 @@ export default function AssignmentTeacher() {
       </Modal>
     </div>
   );
-}
+}                        

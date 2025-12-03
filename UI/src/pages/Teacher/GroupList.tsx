@@ -141,9 +141,10 @@ export default function GroupList() {
 			key: "groupName",
 			sorter: (a: Group, b: Group) => (a.groupName || "").localeCompare(b.groupName || ""),
 			render: (text: string) => text || <Tag color="default">Chưa đặt</Tag>,
+			responsive: ["sm"] as any,
 		},
 		{
-			title: "Số thành viên",
+			title: "Số TV",
 			key: "membersCount",
 			align: "center" as const,
 			sorter: (a: Group, b: Group) =>
@@ -151,15 +152,16 @@ export default function GroupList() {
 			render: (_: any, record: Group) => record.enrollments?.length || 0,
 		},
 		{
-			title: "Tối đa thành viên",
+			title: "Tối đa",
 			dataIndex: "maxMembers",
 			key: "maxMembers",
 			align: "center" as const,
 			sorter: (a: Group, b: Group) => (a.maxMembers || 0) - (b.maxMembers || 0),
 			render: (num: number) => num || 6,
+			responsive: ["md"] as any,
 		},
 		{
-			title: "Kích hoạt",
+			title: "Trạng thái",
 			dataIndex: "isActive",
 			key: "isActive",
 			align: "center" as const,
@@ -167,6 +169,7 @@ export default function GroupList() {
 				Number(Boolean(a.isActive)) - Number(Boolean(b.isActive)),
 			render: (v: boolean) =>
 				v ? <Tag color="green">Active</Tag> : <Tag color="red">Inactive</Tag>,
+			responsive: ["lg"] as any,
 		},
 		{
 			title: "Ngày tạo",
@@ -175,12 +178,16 @@ export default function GroupList() {
 			sorter: (a: Group, b: Group) =>
 				new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(),
 			render: (v: string) => (v ? dayjs(v).format("DD/MM/YYYY HH:mm") : "—"),
+			responsive: ["xl"] as any,
 		},
 		{
 			title: "Hành động",
 			key: "actions",
+			align: "center" as const,
+			fixed: "right" as const,
+			width: 140,
 			render: (_: any, record: Group) => (
-				<div style={{ display: "flex", gap: 8 }}>
+				<div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
 					<Tooltip title="Xem chi tiết">
 						<Button
 							icon={<TeamOutlined />}
@@ -218,7 +225,6 @@ export default function GroupList() {
 			),
 		},
 	];
-
 
 	const filteredGroups = groups.filter(
 		(g) =>
@@ -262,17 +268,63 @@ export default function GroupList() {
 	const stats = getStatistics();
 
 	return (
-		<div style={{ padding: 16 }}>
+		<div style={{ padding: "16px" }}>
+			<style>
+				{`
+					@media (max-width: 768px) {
+						.stats-container {
+							display: none ! important;
+						}
+						
+						.header-actions {
+							flex-direction: column;
+							gap: 8px ! important;
+							width: 100%;
+						}
+						
+						.search-input {
+							width: 100% !important;
+						}
+						
+						.action-buttons {
+							width: 100%;
+							display: flex;
+							gap: 8px;
+						}
+						
+						.action-buttons button {
+							flex: 1;
+						}
+					}
+					
+					@media (min-width: 769px) and (max-width: 1024px) {
+						.stats-container > div:nth-child(n+4) {
+							display: none ! important;
+						}
+					}
+				`}
+			</style>
+
 			<div
 				style={{
 					display: "flex",
 					justifyContent: "space-between",
-					alignItems: "center",
+					alignItems: "flex-start",
 					marginBottom: 16,
 					marginTop: -16,
+					flexWrap: "wrap",
+					gap: 12,
 				}}
 			>
-				<div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+				<div
+					className="stats-container"
+					style={{
+						display: "flex",
+						gap: 8,
+						flexWrap: "wrap",
+						flex: "1 1 auto",
+					}}
+				>
 					<div
 						style={{
 							display: "flex",
@@ -284,6 +336,7 @@ export default function GroupList() {
 							borderRadius: 6,
 							padding: "6px 10px",
 							background: "#fff",
+							whiteSpace: "nowrap",
 						}}
 					>
 						<UsergroupAddOutlined style={{ fontSize: 14, color: "#1890ff" }} />
@@ -302,6 +355,7 @@ export default function GroupList() {
 							borderRadius: 6,
 							padding: "6px 10px",
 							background: "#fff",
+							whiteSpace: "nowrap",
 						}}
 					>
 						<CheckCircleOutlined style={{ fontSize: 14, color: "#52c41a" }} />
@@ -311,6 +365,7 @@ export default function GroupList() {
 							/ {stats.totalGroups}
 						</span>
 					</div>
+
 					<div
 						style={{
 							display: "flex",
@@ -322,6 +377,7 @@ export default function GroupList() {
 							borderRadius: 6,
 							padding: "6px 10px",
 							background: "#fff",
+							whiteSpace: "nowrap",
 						}}
 					>
 						<TeamOutlined
@@ -352,6 +408,7 @@ export default function GroupList() {
 								borderRadius: 6,
 								padding: "6px 10px",
 								background: "#fff",
+								whiteSpace: "nowrap",
 							}}
 						>
 							<WarningOutlined style={{ fontSize: 14, color: "#ff4d4f" }} />
@@ -361,64 +418,108 @@ export default function GroupList() {
 					)}
 				</div>
 
-				<div style={{ display: "flex", gap: 8 }}>
+				<div
+					className="header-actions"
+					style={{
+						display: "flex",
+						gap: 8,
+						alignItems: "center",
+					}}
+				>
 					<Input
 						allowClear
 						prefix={<SearchOutlined />}
-						placeholder="Tìm theo mã/tên nhóm..."
+						placeholder="Tìm mã/tên..."
 						value={keyword}
 						onChange={(e) => setKeyword(e.target.value)}
-						style={{ width: 200 }}
+						className="search-input"
+						style={{ width: 180 }}
 					/>
-					<Button icon={<ReloadOutlined />} onClick={fetchGroups}>
-						Refresh
-					</Button>
-					<Button
-						type="primary"
-						icon={<PlusOutlined />}
-						onClick={() => {
-							setEditing(null);
-							form.resetFields();
-							setModalOpen(true);
-						}}
-					>
-						Thêm nhóm
-					</Button>
+					<div className="action-buttons" style={{ display: "flex", gap: 8 }}>
+						<Button icon={<ReloadOutlined />} onClick={fetchGroups}>
+							<span className="btn-text">Refresh</span>
+						</Button>
+						<Button
+							type="primary"
+							icon={<PlusOutlined />}
+							onClick={() => {
+								setEditing(null);
+								form.resetFields();
+								setModalOpen(true);
+							}}
+						>
+							<span className="btn-text">Thêm</span>
+						</Button>
+					</div>
 				</div>
 			</div>
 
 			{loading ? (
-				<Spin tip="Đang tải..." />
+				<div style={{ textAlign: "center", padding: "40px 0" }}>
+					<Spin tip="Đang tải..." />
+				</div>
 			) : (
 				<Table<Group>
 					dataSource={filteredGroups}
 					columns={columns}
 					rowKey="id"
 					bordered
-					pagination={{ pageSize: 5 }}
+					pagination={{
+						pageSize: 5,
+						showSizeChanger: true,
+						showTotal: (total) => `Tổng ${total} nhóm`,
+						responsive: true,
+					}}
+					scroll={{ x: 800 }}
 				/>
 			)}
 
 			{/* Modal chi tiết thành viên */}
 			<Modal
-				title={`Chi tiết nhóm ${selectedGroup?.groupName || selectedGroup?.groupCode
+				title={`Chi tiết nhóm ${selectedGroup?.groupName || selectedGroup?.groupCode || ""
 					}`}
 				open={detailOpen}
 				onCancel={() => setDetailOpen(false)}
-				footer={null}
+				footer={[
+					<Button key="close" type="primary" onClick={() => setDetailOpen(false)}>
+						Đóng
+					</Button>
+				]}
 				width={700}
+				style={{ maxWidth: "calc(100vw - 32px)" }}
 			>
 				<Table
 					dataSource={selectedGroup?.enrollments || []}
 					rowKey={(row) => row.student.id}
 					columns={[
-						{ title: "MSSV", dataIndex: ["student", "studentCode"], key: "code" },
-						{ title: "Họ tên", dataIndex: ["student", "user", "fullName"], key: "name" },
-						{ title: "Email", dataIndex: ["student", "user", "email"], key: "email" },
-						{ title: "Lớp", dataIndex: ["student", "className"], key: "class" },
+						{
+							title: "MSSV",
+							dataIndex: ["student", "studentCode"],
+							key: "code",
+							width: 120,
+						},
+						{
+							title: "Họ tên",
+							dataIndex: ["student", "user", "fullName"],
+							key: "name",
+							responsive: ["sm"] as any,
+						},
+						{
+							title: "Email",
+							dataIndex: ["student", "user", "email"],
+							key: "email",
+							responsive: ["md"] as any,
+						},
+						{
+							title: "Lớp",
+							dataIndex: ["student", "className"],
+							key: "class",
+							width: 100,
+						},
 					]}
 					pagination={false}
 					bordered
+					scroll={{ x: 600 }}
 				/>
 			</Modal>
 
@@ -429,6 +530,14 @@ export default function GroupList() {
 				onCancel={() => setModalOpen(false)}
 				onOk={handleSubmit}
 				okText={editing ? "Lưu" : "Tạo mới"}
+				cancelText="Hủy"
+				style={{ maxWidth: "calc(100vw - 32px)" }}
+				centered
+				bodyStyle={{
+					maxHeight: "70vh",
+					overflowY: "auto",
+					overflowX: "hidden",
+				}}
 			>
 				<Form
 					form={form}

@@ -1,5 +1,5 @@
-import axios from "axios";
 import { jwtDecode } from "jwt-decode";
+import instance from "./axiosInstance";
 
 interface User {
     id: string;
@@ -50,8 +50,8 @@ export const verifyToken = async (): Promise<AuthResponse> => {
     }
 
     try {
-        const response = await axios.get(
-            "http://localhost:4000/api/v1/auth/verify",
+        const response = await instance.get(
+            "/auth/verify",
             {
                 headers: {
                     Authorization: `Bearer ${token}`,

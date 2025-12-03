@@ -20,13 +20,12 @@ import {
 	DeleteOutlined,
 	UserOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import { GraduationCap } from "lucide-react";
+import instance from "../../utils/axiosInstance";
 
 const { Title } = Typography;
-const API_BASE = "http://localhost:4000/api/v1";
 
 type User = {
 	id: number;
@@ -48,7 +47,7 @@ type Teacher = {
 	user?: User;
 };
 
-export default function Teachers() {
+export default function TeachersAdmin() {
 	const [loading, setLoading] = useState(true);
 	const [teachers, setTeachers] = useState<Teacher[]>([]);
 	const [users, setUsers] = useState<User[]>([]);
@@ -67,8 +66,8 @@ export default function Teachers() {
 	async function fetchTeachers() {
 		try {
 			setLoading(true);
-			const res = await axios.get<{ success: boolean; data: Teacher[] }>(
-				`${API_BASE}/teachers`
+			const res = await instance.get<{ success: boolean; data: Teacher[] }>(
+				`/teachers`
 			);
 			if (res.data.success) {
 				setTeachers(res.data.data || []);
@@ -82,8 +81,8 @@ export default function Teachers() {
 
 	async function fetchUsers() {
 		try {
-			const res = await axios.get<{ success: boolean; data: User[] }>(
-				`${API_BASE}/users?role=teacher`
+			const res = await instance.get<{ success: boolean; data: User[] }>(
+				`/users?role=teacher`
 			);
 			if (res.data.success) {
 				setUsers(res.data.data || []);
@@ -95,7 +94,7 @@ export default function Teachers() {
 
 	const handleDelete = async (id: number) => {
 		try {
-			await axios.delete(`${API_BASE}/teachers/${id}`);
+			await instance.delete(`/teachers/${id}`);
 			toast.success("Đã xóa giảng viên");
 			setTeachers((prev) => prev.filter((t) => t.id !== id));
 		} catch (err) {
@@ -117,10 +116,10 @@ export default function Teachers() {
 			};
 
 			if (editing) {
-				await axios.patch(`${API_BASE}/teachers/${editing.id}`, payload);
+				await instance.patch(`/teachers/${editing.id}`, payload);
 				toast.success("Đã cập nhật giảng viên");
 			} else {
-				await axios.post(`${API_BASE}/teachers`, payload);
+				await instance.post(`/teachers`, payload);
 				toast.success("Đã thêm giảng viên mới");
 			}
 

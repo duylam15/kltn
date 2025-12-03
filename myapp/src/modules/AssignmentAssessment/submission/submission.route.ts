@@ -15,4 +15,18 @@ router.get(
 // GET: chi tiết 1 lần nộp cụ thể
 router.get("/:id", validate(validation.getByIdSchema), controller.getById);
 
+// POST: chọn lần nộp làm điểm chính thức
+router.post(
+    "/:id/select-final",
+    validate(validation.selectFinalSchema),
+    controller.selectFinalSubmission
+);
+
+// 🔥 PUT: sửa điểm submission
+router.put(
+    "/:id",
+    validate(validation.updateScoreSchema),
+    controller.updateScore
+);
+
 export default router;

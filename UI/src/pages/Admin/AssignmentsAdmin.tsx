@@ -21,6 +21,8 @@ import {
 	Statistic,
 	InputNumber,
 	Alert,
+	Drawer,
+	Grid,
 } from "antd";
 import {
 	ReloadOutlined,
@@ -36,7 +38,6 @@ import {
 	WarningOutlined,
 	CheckCircleOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import { FileQuestion } from "lucide-react";
@@ -46,8 +47,9 @@ import instance from "../../utils/axiosInstance";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
-const API_BASE = "http://localhost:4000/api/v1";
+const { useBreakpoint } = Grid;
 
+// ==================== TYPES ====================
 type Assignment = {
 	id: number;
 	sectionId?: number;
@@ -107,47 +109,65 @@ type Chapter = {
 	chapterName: string;
 };
 
-type ChapterRule = {
-	chapterId: number;
-	easy: { count: number; pointPerQuestion: number };
-	medium: { count: number; pointPerQuestion: number };
-	hard: { count: number; pointPerQuestion: number };
+type ApiResponse<T> = {
+	success: boolean;
+	data: T;
+	meta?: any;
 };
 
-export default function Assignments() {
+// ==================== COMPONENT ====================
+export default function AssignmentsAdmin() {
+	const screens = useBreakpoint();
+	const isMobile = !screens.md;
+	const isTablet = screens.md && !screens.lg;
+
+	// ==================== STATE ====================
 	const [loading, setLoading] = useState(true);
 	const [assignments, setAssignments] = useState<Assignment[]>([]);
 	const [sections, setSections] = useState<Section[]>([]);
 	const [questions, setQuestions] = useState<Question[]>([]);
 	const [keyword, setKeyword] = useState("");
 
-	const [form] = Form.useForm<any>();
+	const [form] = Form.useForm();
 	const [modalOpen, setModalOpen] = useState(false);
 	const [editing, setEditing] = useState<Assignment | null>(null);
 
 	const [assignModalOpen, setAssignModalOpen] = useState(false);
-	const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
+	const [selectedAssignment, setSelectedAssignment] =
+		useState<Assignment | null>(null);
 	const [assignedSectionIds, setAssignedSectionIds] = useState<number[]>([]);
-	const [tempSelectedSectionIds, setTempSelectedSectionIds] = useState<number[]>([]);
+	const [tempSelectedSectionIds, setTempSelectedSectionIds] = useState<
+		number[]
+	>([]);
 	const [savingAssignment, setSavingAssignment] = useState(false);
 
 	const [assignedQuestionIds, setAssignedQuestionIds] = useState<number[]>([]);
-	const [tempSelectedQuestionIds, setTempSelectedQuestionIds] = useState<number[]>([]);
+	const [tempSelectedQuestionIds, setTempSelectedQuestionIds] = useState<
+		number[]
+	>([]);
 	const [loadingQuestions, setLoadingQuestions] = useState(false);
 	const [questionKeyword, setQuestionKeyword] = useState("");
 
-	const [questionSubjects, setQuestionSubjects] = useState<QuestionSubject[]>([]);
+	const [questionSubjects, setQuestionSubjects] = useState<QuestionSubject[]>(
+		[]
+	);
 	const [chapters, setChapters] = useState<Chapter[]>([]);
-	const [selectedSubjectId, setSelectedSubjectId] = useState<number | undefined>();
-	const [selectedChapterId, setSelectedChapterId] = useState<number | undefined>();
-	const [selectedDifficulty, setSelectedDifficulty] = useState<string | undefined>();
+	const [selectedSubjectId, setSelectedSubjectId] = useState<
+		number | undefined
+	>();
+	const [selectedChapterId, setSelectedChapterId] = useState<
+		number | undefined
+	>();
+	const [selectedDifficulty, setSelectedDifficulty] = useState<
+		string | undefined
+	>();
 	const [selectedType, setSelectedType] = useState<string | undefined>();
 
 	const [autoGenModalOpen, setAutoGenModalOpen] = useState(false);
-	const [autoGenForm] = Form.useForm<any>();
+	const [autoGenForm] = Form.useForm();
 	const [generatingQuestions, setGeneratingQuestions] = useState(false);
 
-	// 🆕 State cho validation điểm
+	// State cho validation điểm
 	const [currentMaxScore, setCurrentMaxScore] = useState<number>(10);
 	const [totalSelectedPoints, setTotalSelectedPoints] = useState<number>(0);
 	const [pointsValidation, setPointsValidation] = useState<{
@@ -159,6 +179,7 @@ export default function Assignments() {
 	const { user } = useAuth();
 	const teacherId = user?.id;
 
+	// ==================== EFFECTS ====================
 	useEffect(() => {
 		fetchAssignments();
 		fetchSections();
@@ -178,19 +199,17 @@ export default function Assignments() {
 		}
 	}, [selectedSubjectId]);
 
-	// 🆕 Tính tổng điểm khi chọn/bỏ chọn câu hỏi
 	useEffect(() => {
 		calculateTotalPoints();
 	}, [tempSelectedQuestionIds, questions, currentMaxScore]);
 
-	// 🆕 Update maxScore khi form thay đổi
-	const handleFormValuesChange = (changedValues: any, allValues: any) => {
+	// ==================== HANDLERS ====================
+	const handleFormValuesChange = (changedValues: any, _allValues: any) => {
 		if (changedValues.maxScore !== undefined) {
 			setCurrentMaxScore(Number(changedValues.maxScore) || 10);
 		}
 	};
 
-	// 🆕 Hàm tính tổng điểm
 	const calculateTotalPoints = () => {
 		const selectedQuestions = questions.filter((q) =>
 			tempSelectedQuestionIds.includes(q.id)
@@ -199,7 +218,6 @@ export default function Assignments() {
 		const total = selectedQuestions.reduce((sum, q) => sum + (q.points || 0), 0);
 		setTotalSelectedPoints(total);
 
-		// Validation
 		if (total === 0) {
 			setPointsValidation({
 				isValid: true,
@@ -209,13 +227,15 @@ export default function Assignments() {
 		} else if (total < currentMaxScore) {
 			setPointsValidation({
 				isValid: false,
-				message: `Tổng điểm (${total}) nhỏ hơn điểm tối đa (${currentMaxScore}). Cần thêm ${currentMaxScore - total} điểm.`,
+				message: `Tổng điểm (${total}) nhỏ hơn điểm tối đa (${currentMaxScore}). Cần thêm ${currentMaxScore - total
+					} điểm. `,
 				type: "warning",
 			});
 		} else if (total > currentMaxScore) {
 			setPointsValidation({
 				isValid: false,
-				message: `Tổng điểm (${total}) vượt quá điểm tối đa (${currentMaxScore}). Cần giảm ${total - currentMaxScore} điểm.`,
+				message: `Tổng điểm (${total}) vượt quá điểm tối đa (${currentMaxScore}). Cần giảm ${total - currentMaxScore
+					} điểm.`,
 				type: "error",
 			});
 		} else {
@@ -227,18 +247,13 @@ export default function Assignments() {
 		}
 	};
 
+	// ==================== API CALLS ====================
 	async function fetchAssignments() {
 		try {
 			setLoading(true);
-
-			// ✅ Dùng instance thay vì axios
-			const res:any = await instance.get<{ success: boolean; data: Assignment[] }>(
-				"/assignments" // ✅ Không cần `${API_BASE}` vì baseURL đã set
-			);
-
-			// ✅ res đã là data (do interceptor return response. data)
-			if (res.success) {
-				setAssignments(res.data || []);
+			const res = await instance.get<ApiResponse<Assignment[]>>(`/assignments`);
+			if (res.data.success) {
+				setAssignments(res.data.data || []);
 			}
 		} catch (error) {
 			console.error("❌ Fetch assignments error:", error);
@@ -250,8 +265,8 @@ export default function Assignments() {
 
 	async function fetchSections() {
 		try {
-			const res = await axios.get<{ success: boolean; data: Section[] }>(
-				`${API_BASE}/course-sections`
+			const res = await instance.get<ApiResponse<Section[]>>(
+				`/course-sections`
 			);
 			if (res.data.success) {
 				setSections(res.data.data || []);
@@ -263,11 +278,9 @@ export default function Assignments() {
 
 	async function fetchQuestionSubjects() {
 		try {
-			const res = await axios.get<{
-				success: boolean;
-				data: QuestionSubject[];
-				meta: any;
-			}>(`${API_BASE}/subjects?limit=100`);
+			const res = await instance.get<ApiResponse<QuestionSubject[]>>(
+				`/subjects? limit=100`
+			);
 			if (res.data.success) {
 				setQuestionSubjects(res.data.data || []);
 			}
@@ -278,8 +291,8 @@ export default function Assignments() {
 
 	async function fetchChaptersBySubject(subjectId: number) {
 		try {
-			const res = await axios.get<{ success: boolean; data: Chapter[] }>(
-				`${API_BASE}/questions/${subjectId}/chapters`
+			const res = await instance.get<ApiResponse<Chapter[]>>(
+				`/questions/${subjectId}/chapters`
 			);
 			if (res.data.success) {
 				setChapters(res.data.data || []);
@@ -293,17 +306,16 @@ export default function Assignments() {
 	async function fetchQuestions() {
 		try {
 			setLoadingQuestions(true);
-			const params: any = { page: 1, limit: 1000 };
+			const params: Record<string, any> = { page: 1, limit: 1000 };
 
 			if (selectedSubjectId) params.subjectId = selectedSubjectId;
 			if (selectedChapterId) params.chapterId = selectedChapterId;
 			if (selectedDifficulty) params.difficulty = selectedDifficulty;
 			if (selectedType) params.type = selectedType;
 
-			const res = await axios.get<{
-				success: boolean;
-				data: Question[] | { items: Question[] };
-			}>(`${API_BASE}/questions`, { params });
+			const res = await instance.get<
+				ApiResponse<Question[] | { items: Question[] }>
+			>(`/questions`, { params });
 
 			if (res.data.success) {
 				const items = Array.isArray(res.data.data)
@@ -321,7 +333,7 @@ export default function Assignments() {
 
 	const handleDelete = async (id: number) => {
 		try {
-			await axios.delete(`${API_BASE}/assignments/${id}`);
+			await instance.delete(`/assignments/${id}`);
 			toast.success("Đã xóa bài tập");
 			setAssignments((prev) => prev.filter((a) => a.id !== id));
 		} catch {
@@ -330,7 +342,6 @@ export default function Assignments() {
 	};
 
 	const handleSubmit = async () => {
-		// 🆕 Validation điểm trước khi submit
 		if (tempSelectedQuestionIds.length > 0 && !pointsValidation.isValid) {
 			Modal.error({
 				title: "Không thể lưu bài tập",
@@ -364,14 +375,14 @@ export default function Assignments() {
 			let assignmentId: number;
 
 			if (editing) {
-				const res = await axios.put(
-					`${API_BASE}/assignments/${editing.id}`,
-					payload
-				);
+				await instance.put(`/assignments/${editing.id}`, payload);
 				assignmentId = editing.id;
 				toast.success("Đã cập nhật bài tập");
 			} else {
-				const res = await axios.post(`${API_BASE}/assignments`, payload);
+				const res = await instance.post<ApiResponse<{ id: number }>>(
+					`/assignments`,
+					payload
+				);
 				assignmentId = res.data.data.id;
 				toast.success("Đã tạo bài tập mới");
 			}
@@ -406,14 +417,14 @@ export default function Assignments() {
 			);
 
 			const addPromises = toAdd.map((questionId) =>
-				axios.post(
-					`${API_BASE}/assignments-questions/assignments/${assignmentId}/questions/${questionId}`
+				instance.post(
+					`/assignments-questions/assignments/${assignmentId}/questions/${questionId}`
 				)
 			);
 
 			const removePromises = toRemove.map((questionId) =>
-				axios.delete(
-					`${API_BASE}/assignments-questions/assignments/${assignmentId}/questions/${questionId}`
+				instance.delete(
+					`/assignments-questions/assignments/${assignmentId}/questions/${questionId}`
 				)
 			);
 
@@ -436,8 +447,8 @@ export default function Assignments() {
 	const openAssignModal = async (assignment: Assignment) => {
 		setSelectedAssignment(assignment);
 		try {
-			const res = await axios.get<{ success: boolean; data: any[] }>(
-				`${API_BASE}/sections-assignments/assignments/${assignment.id}/sections`
+			const res = await instance.get<ApiResponse<Array<{ sectionId: number }>>>(
+				`/sections-assignments/assignments/${assignment.id}/sections`
 			);
 			if (res.data.success) {
 				const sectionIds = res.data.data.map((s) => s.sectionId);
@@ -463,16 +474,11 @@ export default function Assignments() {
 
 			setLoadingQuestions(true);
 			try {
-				const res = await axios.get<{
-					success: boolean;
-					data: Array<{
-						assignmentId: number;
-						questionId: number;
-						question: Question;
-					}>;
-				}>(
-					`${API_BASE}/assignments-questions/assignments/${assignment.id}/questions`
-				);
+				const res = await instance.get<
+					ApiResponse<
+						Array<{ assignmentId: number; questionId: number; question: Question }>
+					>
+				>(`/assignments-questions/assignments/${assignment.id}/questions`);
 
 				if (res.data.success && res.data.data) {
 					const questionIds = res.data.data.map((item) => item.questionId);
@@ -525,7 +531,9 @@ export default function Assignments() {
 
 			setGeneratingQuestions(true);
 
-			const res = await axios.post(`${API_BASE}/assignment-generator/generate`, {
+			const res = await instance.post<
+				ApiResponse<{ totalQuestionsAdded: number }>
+			>(`/assignment-generator/generate`, {
 				assignmentId: editing.id,
 				subjectId: values.subjectId,
 				totalScore: 10,
@@ -534,7 +542,7 @@ export default function Assignments() {
 
 			if (res.data.success) {
 				toast.success(
-					`Đã tự động tạo ${res.data.data.totalQuestionsAdded} câu hỏi!`
+					`Đã tự động tạo ${res.data.data.totalQuestionsAdded} câu hỏi! `
 				);
 				setAutoGenModalOpen(false);
 				autoGenForm.resetFields();
@@ -582,8 +590,8 @@ export default function Assignments() {
 			);
 
 			const addPromises = toAdd.map((sectionId) =>
-				axios.post(
-					`${API_BASE}/sections-assignments/sections/${sectionId}/assignments`,
+				instance.post(
+					`/sections-assignments/sections/${sectionId}/assignments`,
 					{
 						assignmentId: selectedAssignment.id,
 					}
@@ -591,8 +599,8 @@ export default function Assignments() {
 			);
 
 			const removePromises = toRemove.map((sectionId) =>
-				axios.delete(
-					`${API_BASE}/sections-assignments/sections/${sectionId}/assignments/${selectedAssignment.id}`
+				instance.delete(
+					`/sections-assignments/sections/${sectionId}/assignments/${selectedAssignment.id}`
 				)
 			);
 
@@ -617,6 +625,7 @@ export default function Assignments() {
 		setQuestionKeyword("");
 	};
 
+	// ==================== RENDER HELPERS ====================
 	const renderDifficultyTag = (difficulty?: string) => {
 		const config: Record<string, { color: string; text: string }> = {
 			easy: { color: "green", text: "Dễ" },
@@ -639,19 +648,21 @@ export default function Assignments() {
 		return <Tag color={t.color}>{t.text}</Tag>;
 	};
 
+	// ==================== TABLE COLUMNS ====================
 	const columns = [
 		{
 			title: "Tiêu đề",
 			dataIndex: "title",
 			key: "title",
 			render: (text: string) => <strong>{text}</strong>,
+			responsive: ["xs", "sm", "md", "lg", "xl"] as any,
 		},
 		{
 			title: "Loại",
 			dataIndex: "type",
 			key: "type",
 			render: (type: string) => {
-				const colors: any = {
+				const colors: Record<string, string> = {
 					exercise: "blue",
 					quiz: "purple",
 					project: "orange",
@@ -659,12 +670,14 @@ export default function Assignments() {
 				};
 				return <Tag color={colors[type]}>{type.toUpperCase()}</Tag>;
 			},
+			responsive: ["sm", "md", "lg", "xl"] as any,
 		},
 		{
-			title: "Điểm tối đa",
+			title: "Điểm",
 			dataIndex: "maxScore",
 			key: "maxScore",
 			align: "center" as const,
+			responsive: ["md", "lg", "xl"] as any,
 		},
 		{
 			title: "Hạn nộp",
@@ -672,19 +685,23 @@ export default function Assignments() {
 			key: "dueDate",
 			render: (v: string) =>
 				v ? dayjs(v).format("DD/MM/YYYY HH:mm") : <Tag>Không</Tag>,
+			responsive: ["lg", "xl"] as any,
 		},
 		{
 			title: "Ngày tạo",
 			dataIndex: "createdAt",
 			key: "createdAt",
-			render: (v: string) => (v ? dayjs(v).format("DD/MM/YYYY HH:mm") : "—"),
+			render: (v: string) => (v ? dayjs(v).format("DD/MM/YYYY") : "—"),
+			responsive: ["xl"] as any,
 		},
 		{
 			title: "Hành động",
 			key: "actions",
 			align: "center" as const,
+			fixed: isMobile ? undefined : ("right" as const),
+			width: isMobile ? undefined : 180,
 			render: (_: any, record: Assignment) => (
-				<div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+				<Space size="small" wrap>
 					<Tooltip title="Sửa">
 						<Button
 							icon={<EditOutlined />}
@@ -720,7 +737,7 @@ export default function Assignments() {
 							onClick={() => openAssignModal(record)}
 						/>
 					</Tooltip>
-				</div>
+				</Space>
 			),
 		},
 	];
@@ -746,43 +763,43 @@ export default function Assignments() {
 	});
 
 	return (
-		<div className="pl-3 pr-3">
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					alignItems: "center",
-				}}
-			>
-				<Title level={3} className="mt-2">
+		<div className="p-3 ">
+			{/* Header */}
+			<div className="flex flex-col gap-4 mb-4 md:flex-row md:justify-between md:items-center">
+				<Title level={isMobile ? 4 : 3} className="! mb-0">
 					<div className="flex items-center gap-2">
-						<FileQuestion /> Quản lý Bài tập
+						<FileQuestion size={isMobile ? 20 : 24} />
+						<span>Quản lý Bài tập</span>
 					</div>
 				</Title>
-				<div style={{ display: "flex", gap: 8 }}>
+
+				<Space direction={isMobile ? "vertical" : "horizontal"} className="w-full md:w-auto">
 					<Input
 						allowClear
 						prefix={<SearchOutlined />}
-						placeholder="Tìm theo tiêu đề, mô tả, loại..."
+						placeholder={isMobile ? "Tìm kiếm..." : "Tìm theo tiêu đề, mô tả, loại... "}
 						value={keyword}
 						onChange={(e) => setKeyword(e.target.value)}
-						style={{ width: 400 }}
+						className="w-full md:w-64 lg:w-96"
 					/>
-					<Button icon={<ReloadOutlined />} onClick={fetchAssignments}>
-						Làm mới
-					</Button>
-					<Button
-						type="primary"
-						icon={<PlusOutlined />}
-						onClick={() => openCreateEditModal()}
-					>
-						Thêm bài tập
-					</Button>
-				</div>
+					<Space>
+						<Button icon={<ReloadOutlined />} onClick={fetchAssignments}>
+							{!isMobile && "Làm mới"}
+						</Button>
+						<Button
+							type="primary"
+							icon={<PlusOutlined />}
+							onClick={() => openCreateEditModal()}
+						>
+							{isMobile ? "Thêm" : "Thêm bài tập"}
+						</Button>
+					</Space>
+				</Space>
 			</div>
 
+			{/* Table */}
 			{loading ? (
-				<div style={{ textAlign: "center", padding: 60 }}>
+				<div className="text-center py-16">
 					<Spin size="large" tip="Đang tải danh sách bài tập..." />
 				</div>
 			) : (
@@ -791,68 +808,82 @@ export default function Assignments() {
 					columns={columns}
 					rowKey="id"
 					bordered
-					pagination={{ pageSize: 10, showSizeChanger: true }}
+					scroll={{ x: isMobile ? 800 : undefined }}
+					pagination={{
+						pageSize: 10,
+						showSizeChanger: !isMobile,
+						showTotal: (total) => `Tổng ${total} bài tập`,
+						responsive: true,
+					}}
 					locale={{ emptyText: "Không có bài tập nào" }}
+					size={isMobile ? "small" : "middle"}
 				/>
 			)}
 
 			{/* Modal thêm/sửa */}
-			<Modal
-				title={editing ? "Sửa thông tin bài tập" : "Thêm bài tập mới"}
-				open={modalOpen}
-				onCancel={() => {
-					setModalOpen(false);
-					setEditing(null);
-					setTempSelectedQuestionIds([]);
-					setAssignedQuestionIds([]);
-					setCurrentMaxScore(10);
-					setTotalSelectedPoints(0);
-					resetFilters();
-				}}
-				onOk={handleSubmit}
-				okText={editing ? "Lưu" : "Tạo mới"}
-				cancelText="Hủy"
-				// 🆕 Disable nút OK nếu điểm không hợp lệ
-				okButtonProps={{
-					disabled: tempSelectedQuestionIds.length > 0 && !pointsValidation.isValid,
-				}}
-				width={1400}
-				centered
-				bodyStyle={{
-					maxHeight: "75vh",
-					overflowY: "auto",
-					overflowX: "hidden",
-				}}
-			>
-				<Row gutter={24}>
-					{/* Cột trái: Thông tin bài tập */}
-					<Col span={10}>
-						<Title level={5} style={{ marginBottom: 12 }}>
+			{isMobile ? (
+				<Drawer
+					title={editing ? "Sửa bài tập" : "Thêm bài tập mới"}
+					open={modalOpen}
+					onClose={() => {
+						setModalOpen(false);
+						setEditing(null);
+						setTempSelectedQuestionIds([]);
+						setAssignedQuestionIds([]);
+						setCurrentMaxScore(10);
+						setTotalSelectedPoints(0);
+						resetFilters();
+					}}
+					width="100%"
+					extra={
+						<Space>
+							<Button
+								onClick={() => {
+									setModalOpen(false);
+									setEditing(null);
+								}}
+							>
+								Hủy
+							</Button>
+							<Button
+								type="primary"
+								onClick={handleSubmit}
+								disabled={
+									tempSelectedQuestionIds.length > 0 && !pointsValidation.isValid
+								}
+							>
+								{editing ? "Lưu" : "Tạo"}
+							</Button>
+						</Space>
+					}
+				>
+					{/* Form bài tập */}
+					<div className="mb-6">
+						<Title level={5} className="mb-3">
 							Thông tin bài tập
 						</Title>
-
-						<Form form={form} layout="vertical" className="[&_.ant-form-item]:mb-3">
+						<Form
+							form={form}
+							layout="vertical"
+							onValuesChange={handleFormValuesChange}
+						>
 							<Form.Item
 								label="Tiêu đề"
 								name="title"
-								rules={[{ required: true }]}
-								className="mb-3"
+								rules={[{ required: true, message: "Vui lòng nhập tiêu đề" }]}
 							>
-								<Input
-									placeholder="VD: Bài tập OOP"
-									className="!py-1.5 !px-2"
-								/>
+								<Input placeholder="VD: Bài tập OOP" />
 							</Form.Item>
 
-							<Form.Item label="Mô tả" name="description" className="mb-3">
-								<Input.TextArea
-									rows={3}
-									placeholder="Mô tả chi tiết bài tập"
-									className="!p-2"
-								/>
+							<Form.Item label="Mô tả" name="description">
+								<Input.TextArea rows={3} placeholder="Mô tả chi tiết bài tập" />
 							</Form.Item>
 
-							<Form.Item label="Loại bài tập" name="type" className="mb-3">
+							<Form.Item
+								label="Loại bài tập"
+								name="type"
+								rules={[{ required: true, message: "Vui lòng chọn loại" }]}
+							>
 								<Select placeholder="Chọn loại bài tập">
 									<Option value="exercise">Exercise</Option>
 									<Option value="quiz">Quiz</Option>
@@ -861,7 +892,7 @@ export default function Assignments() {
 								</Select>
 							</Form.Item>
 
-							<Form.Item label="Hạn nộp" name="dueDate" className="mb-3">
+							<Form.Item label="Hạn nộp" name="dueDate">
 								<DatePicker
 									showTime
 									format="YYYY-MM-DD HH:mm"
@@ -869,90 +900,65 @@ export default function Assignments() {
 								/>
 							</Form.Item>
 
-							<Divider className="!my-3">Cấu hình</Divider>
+							<Divider>Cấu hình</Divider>
 
-							<div className="grid grid-cols-2 gap-4">
-								<Form.Item
-									label="Điểm tối đa"
-									name="maxScore"
-									className="mb-3"
-									initialValue={10}
-									rules={[
-										{ required: true, message: "Vui lòng nhập điểm tối đa" },
-										{
-											type: "number",
-											min: 1,
-											message: "Điểm tối đa phải lớn hơn 0",
-										},
-									]}
-								>
-									<InputNumber
-										min={1}
-										className="w-full !py-1.5 !px-2"
-										placeholder="Mặc định: 10"
-									/>
-								</Form.Item>
-								<Form.Item label="Điểm đạt" name="passingScore" className="mb-3">
-									<InputNumber min={0} className="w-full !py-1.5 !px-2" />
-								</Form.Item>
-							</div>
+							<Row gutter={16}>
+								<Col span={12}>
+									<Form.Item
+										label="Điểm tối đa"
+										name="maxScore"
+										initialValue={10}
+										rules={[
+											{ required: true, message: "Vui lòng nhập điểm" },
+											{ type: "number", min: 1, message: "Điểm phải > 0" },
+										]}
+									>
+										<InputNumber min={1} className="w-full" />
+									</Form.Item>
+								</Col>
+								<Col span={12}>
+									<Form.Item label="Điểm đạt" name="passingScore">
+										<InputNumber min={0} className="w-full" />
+									</Form.Item>
+								</Col>
+							</Row>
 
-							<div className="grid grid-cols-2 gap-4">
-								<Form.Item
-									label="Thời gian (phút)"
-									name="timeLimit"
-									className="mb-3"
-								>
-									<InputNumber min={0} className="w-full !py-1.5 !px-2" />
-								</Form.Item>
-								<Form.Item
-									label="Số lần nộp"
-									name="maxAttempts"
-									className="mb-3"
-									initialValue={1}
-								>
-									<InputNumber min={1} className="w-full !py-1.5 !px-2" />
-								</Form.Item>
-							</div>
+							<Row gutter={16}>
+								<Col span={12}>
+									<Form.Item label="Thời gian (phút)" name="timeLimit">
+										<InputNumber min={0} className="w-full" />
+									</Form.Item>
+								</Col>
+								<Col span={12}>
+									<Form.Item
+										label="Số lần nộp"
+										name="maxAttempts"
+										initialValue={1}
+									>
+										<InputNumber min={1} className="w-full" />
+									</Form.Item>
+								</Col>
+							</Row>
 
-							<Form.Item
-								name="shuffleQuestions"
-								valuePropName="checked"
-								className="mb-2"
-							>
+							<Form.Item name="shuffleQuestions" valuePropName="checked">
 								<Checkbox>Xáo trộn câu hỏi</Checkbox>
 							</Form.Item>
-							<Form.Item
-								name="showAnswersAfterSubmit"
-								valuePropName="checked"
-								className="mb-2"
-							>
+							<Form.Item name="showAnswersAfterSubmit" valuePropName="checked">
 								<Checkbox>Hiện đáp án sau khi nộp</Checkbox>
 							</Form.Item>
-							<Form.Item
-								name="allowLateSubmission"
-								valuePropName="checked"
-								className="mb-0"
-							>
+							<Form.Item name="allowLateSubmission" valuePropName="checked">
 								<Checkbox>Cho phép nộp muộn</Checkbox>
 							</Form.Item>
 						</Form>
-					</Col>
+					</div>
 
-					{/* Cột phải: Danh sách câu hỏi */}
-					<Col span={14}>
-						<div
-							style={{
-								display: "flex",
-								justifyContent: "space-between",
-								alignItems: "center",
-								marginBottom: 12,
-							}}
-						>
-							<Title level={5} style={{ margin: 0 }}>
+					{/* Danh sách câu hỏi */}
+					<div>
+						<div className="flex justify-between items-center mb-3">
+							<Title level={5} className="!mb-0">
 								Câu hỏi
 							</Title>
-							<Space>
+							<Space size="small">
 								<Button
 									icon={<ThunderboltOutlined />}
 									size="small"
@@ -960,19 +966,14 @@ export default function Assignments() {
 									onClick={() => openAutoGenModal(editing || undefined)}
 									disabled={!editing}
 								>
-									Tự động tạo
+									Tự động
 								</Button>
-								<Button
-									icon={<ClearOutlined />}
-									size="small"
-									onClick={resetFilters}
-								>
-									Xóa bộ lọc
+								<Button icon={<ClearOutlined />} size="small" onClick={resetFilters}>
+									Xóa lọc
 								</Button>
 							</Space>
 						</div>
 
-						{/* 🆕 Alert validation điểm */}
 						{tempSelectedQuestionIds.length > 0 && (
 							<Alert
 								message={
@@ -987,69 +988,50 @@ export default function Assignments() {
 								}
 								type={pointsValidation.type}
 								showIcon
-								style={{ marginBottom: 12 }}
+								className="mb-3"
 								banner
 							/>
 						)}
 
-						{/* Bộ lọc */}
-						<Card
-							size="small"
-							style={{ marginBottom: 12, backgroundColor: "#fafafa" }}
-						>
-							<Space direction="vertical" style={{ width: "100%" }} size="small">
+						<Card size="small" className="mb-3 bg-gray-50">
+							<Space direction="vertical" className="w-full" size="small">
+								<Select
+									allowClear
+									placeholder="Môn học"
+									value={selectedSubjectId}
+									onChange={setSelectedSubjectId}
+									className="w-full"
+									size="small"
+								>
+									{questionSubjects.map((s) => (
+										<Option key={s.id} value={s.id}>
+											{s.subjectCode} - {s.subjectName}
+										</Option>
+									))}
+								</Select>
+								<Select
+									allowClear
+									placeholder="Chương"
+									value={selectedChapterId}
+									onChange={setSelectedChapterId}
+									disabled={!selectedSubjectId}
+									className="w-full"
+									size="small"
+								>
+									{chapters.map((c) => (
+										<Option key={c.id} value={c.id}>
+											{c.chapterCode} - {c.chapterName}
+										</Option>
+									))}
+								</Select>
 								<Row gutter={8}>
 									<Col span={12}>
-										<Text type="secondary" style={{ fontSize: 12 }}>
-											Môn học:
-										</Text>
 										<Select
 											allowClear
-											placeholder="Chọn môn học"
-											value={selectedSubjectId}
-											onChange={setSelectedSubjectId}
-											style={{ width: "100%" }}
-											size="small"
-										>
-											{questionSubjects.map((s) => (
-												<Option key={s.id} value={s.id}>
-													{s.subjectCode} - {s.subjectName}
-												</Option>
-											))}
-										</Select>
-									</Col>
-									<Col span={12}>
-										<Text type="secondary" style={{ fontSize: 12 }}>
-											Chương:
-										</Text>
-										<Select
-											allowClear
-											placeholder="Chọn chương"
-											value={selectedChapterId}
-											onChange={setSelectedChapterId}
-											disabled={!selectedSubjectId}
-											style={{ width: "100%" }}
-											size="small"
-										>
-											{chapters.map((c) => (
-												<Option key={c.id} value={c.id}>
-													{c.chapterCode} - {c.chapterName}
-												</Option>
-											))}
-										</Select>
-									</Col>
-								</Row>
-								<Row gutter={8}>
-									<Col span={12}>
-										<Text type="secondary" style={{ fontSize: 12 }}>
-											Độ khó:
-										</Text>
-										<Select
-											allowClear
-											placeholder="Chọn độ khó"
+											placeholder="Độ khó"
 											value={selectedDifficulty}
 											onChange={setSelectedDifficulty}
-											style={{ width: "100%" }}
+											className="w-full"
 											size="small"
 										>
 											<Option value="easy">Dễ</Option>
@@ -1058,15 +1040,12 @@ export default function Assignments() {
 										</Select>
 									</Col>
 									<Col span={12}>
-										<Text type="secondary" style={{ fontSize: 12 }}>
-											Loại câu hỏi:
-										</Text>
 										<Select
 											allowClear
-											placeholder="Chọn loại"
+											placeholder="Loại"
 											value={selectedType}
 											onChange={setSelectedType}
-											style={{ width: "100%" }}
+											className="w-full"
 											size="small"
 										>
 											<Option value="multiple_choice">Trắc nghiệm</Option>
@@ -1079,40 +1058,38 @@ export default function Assignments() {
 							</Space>
 						</Card>
 
-						{/* Search */}
 						<Input
 							allowClear
 							prefix={<SearchOutlined />}
-							placeholder="Tìm theo nội dung câu hỏi..."
+							placeholder="Tìm câu hỏi..."
 							value={questionKeyword}
 							onChange={(e) => setQuestionKeyword(e.target.value)}
-							style={{ marginBottom: 12 }}
+							className="mb-3"
 							size="small"
 						/>
 
-						{/* 🆕 Thống kê cải tiến */}
-						<Card size="small" style={{ marginBottom: 12 }}>
-							<Row gutter={16}>
+						<Card size="small" className="mb-3">
+							<Row gutter={8}>
 								<Col span={8}>
 									<Statistic
-										title="Tổng số câu"
+										title="Tổng câu"
 										value={questions.length}
-										valueStyle={{ fontSize: 20 }}
+										valueStyle={{ fontSize: 16 }}
 									/>
 								</Col>
 								<Col span={8}>
 									<Statistic
 										title="Đã chọn"
 										value={tempSelectedQuestionIds.length}
-										valueStyle={{ fontSize: 20, color: "#1890ff" }}
+										valueStyle={{ fontSize: 16, color: "#1890ff" }}
 									/>
 								</Col>
 								<Col span={8}>
 									<Statistic
-										title="Tổng điểm"
+										title="Điểm"
 										value={`${totalSelectedPoints}/${currentMaxScore}`}
 										valueStyle={{
-											fontSize: 20,
+											fontSize: 16,
 											color: pointsValidation.isValid
 												? "#52c41a"
 												: pointsValidation.type === "error"
@@ -1124,26 +1101,15 @@ export default function Assignments() {
 							</Row>
 						</Card>
 
-						{/* Danh sách câu hỏi */}
-						<div
-							style={{
-								maxHeight: 400,
-								overflowY: "auto",
-								border: "1px solid #d9d9d9",
-								borderRadius: 4,
-								padding: 12,
-							}}
-						>
+						<div className="max-h-96 overflow-y-auto border border-gray-200 rounded p-3">
 							{loadingQuestions ? (
-								<div style={{ textAlign: "center", padding: 20 }}>
+								<div className="text-center py-8">
 									<Spin tip="Đang tải câu hỏi..." />
 								</div>
 							) : filteredQuestions.length === 0 ? (
-								<div
-									style={{ textAlign: "center", padding: 20, color: "#999" }}
-								>
-									<FilterOutlined style={{ fontSize: 32, marginBottom: 8 }} />
-									<p>Không tìm thấy câu hỏi phù hợp</p>
+								<div className="text-center py-8 text-gray-400">
+									<FilterOutlined className="text-3xl mb-2" />
+									<p>Không tìm thấy câu hỏi</p>
 									<Button size="small" onClick={resetFilters}>
 										Xóa bộ lọc
 									</Button>
@@ -1154,56 +1120,31 @@ export default function Assignments() {
 									return (
 										<label
 											key={q.id}
-											style={{
-												display: "block",
-												padding: "10px 12px",
-												marginBottom: 8,
-												borderRadius: 4,
-												border: "1px solid #d9d9d9",
-												cursor: "pointer",
-												transition: "all 0.3s",
-												backgroundColor: checked ? "#e6f7ff" : "transparent",
-											}}
-											onMouseEnter={(e) => {
-												if (!checked)
-													e.currentTarget.style.backgroundColor = "#f5f5f5";
-											}}
-											onMouseLeave={(e) => {
-												if (!checked)
-													e.currentTarget.style.backgroundColor =
-														"transparent";
-											}}
+											className={`block p-3 mb-2 border rounded cursor-pointer transition-all ${checked ? "bg-blue-50 border-blue-300" : "border-gray-200"
+												}`}
 										>
-											<div
-												style={{
-													display: "flex",
-													alignItems: "flex-start",
-													gap: 8,
-												}}
-											>
+											<div className="flex items-start gap-2">
 												<input
 													type="checkbox"
 													checked={checked}
 													onChange={(e) =>
 														toggleTempQuestionSelection(q.id, e.target.checked)
 													}
-													style={{ marginTop: 4, cursor: "pointer" }}
+													className="mt-1 cursor-pointer"
 												/>
-												<div style={{ flex: 1 }}>
+												<div className="flex-1">
 													<div
-														style={{ fontWeight: 500, marginBottom: 4 }}
+														className="font-medium mb-1 text-sm"
 														dangerouslySetInnerHTML={{
 															__html:
-																q.content.substring(0, 100) +
-																(q.content.length > 100 ? "..." : ""),
+																q.content.substring(0, 80) +
+																(q.content.length > 80 ? "..." : ""),
 														}}
 													/>
-													<div style={{ fontSize: 12 }}>
+													<div className="flex flex-wrap gap-1">
 														{renderTypeTag(q.type)}
 														{renderDifficultyTag(q.difficulty)}
-														{q.points && (
-															<Tag color="green">{q.points} điểm</Tag>
-														)}
+														{q.points && <Tag color="green">{q.points} điểm</Tag>}
 														{q.subject && (
 															<Tag color="blue" icon={<BookOutlined />}>
 																{q.subject.subjectCode}
@@ -1220,9 +1161,369 @@ export default function Assignments() {
 								})
 							)}
 						</div>
-					</Col>
-				</Row>
-			</Modal>
+					</div>
+				</Drawer>
+			) : (
+				<Modal
+					title={editing ? "Sửa thông tin bài tập" : "Thêm bài tập mới"}
+					open={modalOpen}
+					onCancel={() => {
+						setModalOpen(false);
+						setEditing(null);
+						setTempSelectedQuestionIds([]);
+						setAssignedQuestionIds([]);
+						setCurrentMaxScore(10);
+						setTotalSelectedPoints(0);
+						resetFilters();
+					}}
+					onOk={handleSubmit}
+					okText={editing ? "Lưu" : "Tạo mới"}
+					cancelText="Hủy"
+					okButtonProps={{
+						disabled:
+							tempSelectedQuestionIds.length > 0 && !pointsValidation.isValid,
+					}}
+					width={isTablet ? "90%" : 1400}
+					centered
+					bodyStyle={{
+						maxHeight: "75vh",
+						overflowY: "auto",
+						overflowX: "hidden",
+					}}
+				>
+					<Row gutter={24}>
+						<Col xs={24} lg={10}>
+							<Title level={5} className="mb-3">
+								Thông tin bài tập
+							</Title>
+							<Form
+								form={form}
+								layout="vertical"
+								onValuesChange={handleFormValuesChange}
+							>
+								<Form.Item
+									label="Tiêu đề"
+									name="title"
+									rules={[{ required: true, message: "Vui lòng nhập tiêu đề" }]}
+								>
+									<Input placeholder="VD: Bài tập OOP" />
+								</Form.Item>
+
+								<Form.Item label="Mô tả" name="description">
+									<Input.TextArea rows={3} placeholder="Mô tả chi tiết bài tập" />
+								</Form.Item>
+
+								<Form.Item
+									label="Loại bài tập"
+									name="type"
+									rules={[{ required: true, message: "Vui lòng chọn loại" }]}
+								>
+									<Select placeholder="Chọn loại bài tập">
+										<Option value="exercise">Exercise</Option>
+										<Option value="quiz">Quiz</Option>
+										<Option value="project">Project</Option>
+										<Option value="exam">Exam</Option>
+									</Select>
+								</Form.Item>
+
+								<Form.Item label="Hạn nộp" name="dueDate">
+									<DatePicker
+										showTime
+										format="YYYY-MM-DD HH:mm"
+										className="w-full"
+									/>
+								</Form.Item>
+
+								<Divider>Cấu hình</Divider>
+
+								<Row gutter={16}>
+									<Col span={12}>
+										<Form.Item
+											label="Điểm tối đa"
+											name="maxScore"
+											initialValue={10}
+											rules={[
+												{ required: true, message: "Vui lòng nhập điểm" },
+												{ type: "number", min: 1, message: "Điểm phải > 0" },
+											]}
+										>
+											<InputNumber min={1} className="w-full" />
+										</Form.Item>
+									</Col>
+									<Col span={12}>
+										<Form.Item label="Điểm đạt" name="passingScore">
+											<InputNumber min={0} className="w-full" />
+										</Form.Item>
+									</Col>
+								</Row>
+
+								<Row gutter={16}>
+									<Col span={12}>
+										<Form.Item label="Thời gian (phút)" name="timeLimit">
+											<InputNumber min={0} className="w-full" />
+										</Form.Item>
+									</Col>
+									<Col span={12}>
+										<Form.Item
+											label="Số lần nộp"
+											name="maxAttempts"
+											initialValue={1}
+										>
+											<InputNumber min={1} className="w-full" />
+										</Form.Item>
+									</Col>
+								</Row>
+
+								<Form.Item name="shuffleQuestions" valuePropName="checked">
+									<Checkbox>Xáo trộn câu hỏi</Checkbox>
+								</Form.Item>
+								<Form.Item name="showAnswersAfterSubmit" valuePropName="checked">
+									<Checkbox>Hiện đáp án sau khi nộp</Checkbox>
+								</Form.Item>
+								<Form.Item name="allowLateSubmission" valuePropName="checked">
+									<Checkbox>Cho phép nộp muộn</Checkbox>
+								</Form.Item>
+							</Form>
+						</Col>
+
+						<Col xs={24} lg={14}>
+							<div className="flex justify-between items-center mb-3">
+								<Title level={5} className="!mb-0">
+									Câu hỏi
+								</Title>
+								<Space>
+									<Button
+										icon={<ThunderboltOutlined />}
+										size="small"
+										type="primary"
+										onClick={() => openAutoGenModal(editing || undefined)}
+										disabled={!editing}
+									>
+										Tự động tạo
+									</Button>
+									<Button
+										icon={<ClearOutlined />}
+										size="small"
+										onClick={resetFilters}
+									>
+										Xóa bộ lọc
+									</Button>
+								</Space>
+							</div>
+
+							{tempSelectedQuestionIds.length > 0 && (
+								<Alert
+									message={
+										<Space>
+											{pointsValidation.type === "success" ? (
+												<CheckCircleOutlined />
+											) : (
+												<WarningOutlined />
+											)}
+											{pointsValidation.message}
+										</Space>
+									}
+									type={pointsValidation.type}
+									showIcon
+									className="mb-3"
+									banner
+								/>
+							)}
+
+							<Card size="small" className="mb-3 bg-gray-50">
+								<Space direction="vertical" className="w-full" size="small">
+									<Row gutter={8}>
+										<Col span={12}>
+											<Text type="secondary" className="text-xs">
+												Môn học:
+											</Text>
+											<Select
+												allowClear
+												placeholder="Chọn môn học"
+												value={selectedSubjectId}
+												onChange={setSelectedSubjectId}
+												className="w-full"
+												size="small"
+											>
+												{questionSubjects.map((s) => (
+													<Option key={s.id} value={s.id}>
+														{s.subjectCode} - {s.subjectName}
+													</Option>
+												))}
+											</Select>
+										</Col>
+										<Col span={12}>
+											<Text type="secondary" className="text-xs">
+												Chương:
+											</Text>
+											<Select
+												allowClear
+												placeholder="Chọn chương"
+												value={selectedChapterId}
+												onChange={setSelectedChapterId}
+												disabled={!selectedSubjectId}
+												className="w-full"
+												size="small"
+											>
+												{chapters.map((c) => (
+													<Option key={c.id} value={c.id}>
+														{c.chapterCode} - {c.chapterName}
+													</Option>
+												))}
+											</Select>
+										</Col>
+									</Row>
+									<Row gutter={8}>
+										<Col span={12}>
+											<Text type="secondary" className="text-xs">
+												Độ khó:
+											</Text>
+											<Select
+												allowClear
+												placeholder="Chọn độ khó"
+												value={selectedDifficulty}
+												onChange={setSelectedDifficulty}
+												className="w-full"
+												size="small"
+											>
+												<Option value="easy">Dễ</Option>
+												<Option value="medium">Trung bình</Option>
+												<Option value="hard">Khó</Option>
+											</Select>
+										</Col>
+										<Col span={12}>
+											<Text type="secondary" className="text-xs">
+												Loại câu hỏi:
+											</Text>
+											<Select
+												allowClear
+												placeholder="Chọn loại"
+												value={selectedType}
+												onChange={setSelectedType}
+												className="w-full"
+												size="small"
+											>
+												<Option value="multiple_choice">Trắc nghiệm</Option>
+												<Option value="essay">Tự luận</Option>
+												<Option value="coding">Lập trình</Option>
+												<Option value="true_false">Đúng/Sai</Option>
+											</Select>
+										</Col>
+									</Row>
+								</Space>
+							</Card>
+
+							<Input
+								allowClear
+								prefix={<SearchOutlined />}
+								placeholder="Tìm theo nội dung câu hỏi..."
+								value={questionKeyword}
+								onChange={(e) => setQuestionKeyword(e.target.value)}
+								className="mb-3"
+								size="small"
+							/>
+
+							<Card size="small" className="mb-3">
+								<Row gutter={16}>
+									<Col span={8}>
+										<Statistic
+											title="Tổng số câu"
+											value={questions.length}
+											valueStyle={{ fontSize: 20 }}
+										/>
+									</Col>
+									<Col span={8}>
+										<Statistic
+											title="Đã chọn"
+											value={tempSelectedQuestionIds.length}
+											valueStyle={{ fontSize: 20, color: "#1890ff" }}
+										/>
+									</Col>
+									<Col span={8}>
+										<Statistic
+											title="Tổng điểm"
+											value={`${totalSelectedPoints}/${currentMaxScore}`}
+											valueStyle={{
+												fontSize: 20,
+												color: pointsValidation.isValid
+													? "#52c41a"
+													: pointsValidation.type === "error"
+														? "#ff4d4f"
+														: "#faad14",
+											}}
+										/>
+									</Col>
+								</Row>
+							</Card>
+
+							<div className="max-h-96 overflow-y-auto border border-gray-200 rounded p-3">
+								{loadingQuestions ? (
+									<div className="text-center py-5">
+										<Spin tip="Đang tải câu hỏi..." />
+									</div>
+								) : filteredQuestions.length === 0 ? (
+									<div className="text-center py-5 text-gray-400">
+										<FilterOutlined className="text-3xl mb-2" />
+										<p>Không tìm thấy câu hỏi phù hợp</p>
+										<Button size="small" onClick={resetFilters}>
+											Xóa bộ lọc
+										</Button>
+									</div>
+								) : (
+									filteredQuestions.map((q) => {
+										const checked = tempSelectedQuestionIds.includes(q.id);
+										return (
+											<label
+												key={q.id}
+												className={`block p-3 mb-2 border rounded cursor-pointer transition-all ${checked
+														? "bg-blue-50 border-blue-300"
+														: "border-gray-200 hover:bg-gray-50"
+													}`}
+											>
+												<div className="flex items-start gap-2">
+													<input
+														type="checkbox"
+														checked={checked}
+														onChange={(e) =>
+															toggleTempQuestionSelection(q.id, e.target.checked)
+														}
+														className="mt-1 cursor-pointer"
+													/>
+													<div className="flex-1">
+														<div
+															className="font-medium mb-1"
+															dangerouslySetInnerHTML={{
+																__html:
+																	q.content.substring(0, 100) +
+																	(q.content.length > 100 ? "..." : ""),
+															}}
+														/>
+														<div className="flex flex-wrap gap-1 text-xs">
+															{renderTypeTag(q.type)}
+															{renderDifficultyTag(q.difficulty)}
+															{q.points && (
+																<Tag color="green">{q.points} điểm</Tag>
+															)}
+															{q.subject && (
+																<Tag color="blue" icon={<BookOutlined />}>
+																	{q.subject.subjectCode}
+																</Tag>
+															)}
+															{q.chapter && (
+																<Tag color="purple">{q.chapter.chapterCode}</Tag>
+															)}
+														</div>
+													</div>
+												</div>
+											</label>
+										);
+									})
+								)}
+							</div>
+						</Col>
+					</Row>
+				</Modal>
+			)}
 
 			{/* Modal tự động tạo câu hỏi */}
 			<Modal
@@ -1241,7 +1542,7 @@ export default function Assignments() {
 				okText="Tạo câu hỏi"
 				cancelText="Hủy"
 				confirmLoading={generatingQuestions}
-				width={800}
+				width={isMobile ? "100%" : isTablet ? "90%" : 800}
 				centered
 			>
 				<Form form={autoGenForm} layout="vertical">
@@ -1271,99 +1572,74 @@ export default function Assignments() {
 						{(fields, { add, remove }) => (
 							<>
 								{fields.map(({ key, name, ...restField }) => (
-									<Card key={key} size="small" style={{ marginBottom: 12 }}>
-										<Row gutter={16}>
-											<Col span={24}>
-												<Form.Item
-													{...restField}
-													name={[name, "chapterId"]}
-													label="Chương"
-													rules={[{ required: true }]}
-												>
-													<Select placeholder="Chọn chương">
-														{chapters.map((c) => (
-															<Option key={c.id} value={c.id}>
-																{c.chapterCode} - {c.chapterName}
-															</Option>
-														))}
-													</Select>
-												</Form.Item>
-											</Col>
-										</Row>
+									<Card key={key} size="small" className="mb-3">
+										<Form.Item
+											{...restField}
+											name={[name, "chapterId"]}
+											label="Chương"
+											rules={[{ required: true, message: "Vui lòng chọn chương" }]}
+										>
+											<Select placeholder="Chọn chương">
+												{chapters.map((c) => (
+													<Option key={c.id} value={c.id}>
+														{c.chapterCode} - {c.chapterName}
+													</Option>
+												))}
+											</Select>
+										</Form.Item>
 
 										<Row gutter={8}>
-											<Col span={8}>
+											<Col xs={24} sm={8}>
 												<Text strong>Dễ:</Text>
 												<Form.Item
 													{...restField}
 													name={[name, "easy", "count"]}
 													label="Số câu"
 												>
-													<InputNumber
-														min={0}
-														style={{ width: "100%" }}
-													/>
+													<InputNumber min={0} className="w-full" />
 												</Form.Item>
 												<Form.Item
 													{...restField}
 													name={[name, "easy", "pointPerQuestion"]}
 													label="Điểm/câu"
 												>
-													<InputNumber
-														min={0}
-														step={0.5}
-														style={{ width: "100%" }}
-													/>
+													<InputNumber min={0} step={0.5} className="w-full" />
 												</Form.Item>
 											</Col>
 
-											<Col span={8}>
+											<Col xs={24} sm={8}>
 												<Text strong>Trung bình:</Text>
 												<Form.Item
 													{...restField}
 													name={[name, "medium", "count"]}
 													label="Số câu"
 												>
-													<InputNumber
-														min={0}
-														style={{ width: "100%" }}
-													/>
+													<InputNumber min={0} className="w-full" />
 												</Form.Item>
 												<Form.Item
 													{...restField}
 													name={[name, "medium", "pointPerQuestion"]}
 													label="Điểm/câu"
 												>
-													<InputNumber
-														min={0}
-														step={0.5}
-														style={{ width: "100%" }}
-													/>
+													<InputNumber min={0} step={0.5} className="w-full" />
 												</Form.Item>
 											</Col>
 
-											<Col span={8}>
+											<Col xs={24} sm={8}>
 												<Text strong>Khó:</Text>
 												<Form.Item
 													{...restField}
 													name={[name, "hard", "count"]}
 													label="Số câu"
 												>
-													<InputNumber
-														min={0}
-														style={{ width: "100%" }}
-													/>
+													<InputNumber min={0} className="w-full" />
 												</Form.Item>
 												<Form.Item
 													{...restField}
 													name={[name, "hard", "pointPerQuestion"]}
 													label="Điểm/câu"
 												>
-													<InputNumber
-														min={0}
-														step={0.5}
-														style={{ width: "100%" }}
-													/>
+													<InputNumber min={0} step={0.5} className="w-full" />
 												</Form.Item>
 											</Col>
 										</Row>
@@ -1386,12 +1662,9 @@ export default function Assignments() {
 						)}
 					</Form.List>
 
-					<Card
-						size="small"
-						style={{ marginTop: 16, backgroundColor: "#fff7e6" }}
-					>
+					<Card size="small" className="mt-4 bg-yellow-50">
 						<Text type="warning">
-							⚠️ Tổng điểm phải bằng 10. Hệ thống sẽ tự động kiểm tra khi tạo.
+							⚠️ Tổng điểm phải bằng 10.  Hệ thống sẽ tự động kiểm tra khi tạo.
 						</Text>
 					</Card>
 				</Form>
@@ -1410,43 +1683,33 @@ export default function Assignments() {
 				okText="Lưu"
 				cancelText="Hủy"
 				confirmLoading={savingAssignment}
-				width={600}
+				width={isMobile ? "100%" : 600}
+				centered
+				bodyStyle={{
+					maxHeight: "70vh",
+					overflowY: "auto",
+					overflowX: "hidden",
+				}}
 			>
-				<div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+				<div className="flex flex-col gap-2">
 					{sections.length === 0 ? (
-						<p style={{ textAlign: "center", color: "#999" }}>
-							Không có lớp nào
-						</p>
+						<p className="text-center text-gray-400">Không có lớp nào</p>
 					) : (
 						sections.map((s) => {
 							const checked = tempSelectedSectionIds.includes(s.id);
 							return (
 								<label
 									key={s.id}
-									style={{
-										display: "flex",
-										alignItems: "center",
-										gap: 8,
-										cursor: "pointer",
-										padding: "8px 12px",
-										borderRadius: 4,
-										border: "1px solid #d9d9d9",
-										transition: "all 0.3s",
-									}}
-									onMouseEnter={(e) => {
-										e.currentTarget.style.backgroundColor = "#f5f5f5";
-									}}
-									onMouseLeave={(e) => {
-										e.currentTarget.style.backgroundColor = "transparent";
-									}}
+									className={`flex items-center gap-2 cursor-pointer p-3 border rounded transition-all ${checked
+											? "bg-blue-50 border-blue-300"
+											: "border-gray-200 hover:bg-gray-50"
+										}`}
 								>
 									<input
 										type="checkbox"
 										checked={checked}
-										onChange={(e) =>
-											toggleTempSelection(s.id, e.target.checked)
-										}
-										style={{ cursor: "pointer" }}
+										onChange={(e) => toggleTempSelection(s.id, e.target.checked)}
+										className="cursor-pointer"
 									/>
 									<span>
 										{s.sectionCode} - {s.sectionName}

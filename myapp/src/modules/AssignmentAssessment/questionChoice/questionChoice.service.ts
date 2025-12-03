@@ -23,3 +23,9 @@ export async function deleteChoice(id: number) {
         where: { id },
     });
 }
+
+export async function getChoiceById(id: number) {
+    return prisma.questionChoice.findUnique({
+        where: { id },
+    });
+}

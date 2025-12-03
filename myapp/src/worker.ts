@@ -43,19 +43,44 @@ const worker = new Worker(
         const results: any[] = [];
 
         try {
-            // -------------------- PYTHON --------------------
             if (answer.language === "python") {
-                // Tạo wrapper Python
+                const code = answer.codeAnswer || "";
+
+                const fnRegex = /def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
+                let fnName = "solve";
+                let m;
+                while ((m = fnRegex.exec(code)) !== null) {
+                    const candidate = m[1];
+                    if (candidate !== "main") {
+                        fnName = candidate;
+                        break;
+                    }
+                }
+
                 const wrapper = `
-import sys
-data = sys.stdin.read().strip()
-n = int(data) if data else 0
+import sys, json
 
-${answer.codeAnswer || ""}
+raw = sys.stdin.read().strip()
 
-if "factorial" in globals():
-    print(factorial(n))
+val = None
+try:
+    val = json.loads(raw)
+except:
+    if raw.isdigit() or (raw.startswith("-") and raw[1:].isdigit()):
+        val = int(raw)
+    else:
+        val = raw
+
+${code}
+
+res = globals()["${fnName}"](val)
+if isinstance(res, bool):
+    # 🔥 BOOL -> 1 / 0 để khớp test case
+    print("1" if res else "0")
+else:
+    print(res)
 `;
+
                 fs.writeFileSync(path.join(workspace, "main.py"), wrapper);
 
                 for (const tc of answer.question.testCases) {
@@ -101,16 +126,32 @@ if "factorial" in globals():
 
             // -------------------- PHP --------------------
             else if (answer.language === "php") {
+                // 🔍 Tìm tên hàm đầu tiên mà học sinh khai báo
+                const fnMatch = answer.codeAnswer?.match(
+                    /function\s+([a-zA-Z0-9_]+)\s*\(/
+                );
+                const fnName = fnMatch ? fnMatch[1] : null;
+
                 const wrapper = `<?php
-$input = trim(file_get_contents("php://stdin"));
-$n = intval($input);
+$raw = trim(file_get_contents("php://stdin"));
+
+$input = json_decode($raw, true);
+if ($input === null && json_last_error() !== JSON_ERROR_NONE) {
+    // Nếu không phải JSON thì dùng raw string hoặc số
+    if (is_numeric($raw)) {
+        $input = intval($raw);
+    } else {
+        $input = $raw;
+    }
+}
 
 ${answer.codeAnswer || ""}
 
-if (function_exists("factorial")) {
-    echo factorial($n);
+if (function_exists("${fnName}")) {
+    echo ${fnName}($input);
 }
 ?>`;
+
                 fs.writeFileSync(path.join(workspace, "main.php"), wrapper);
 
                 for (const tc of answer.question.testCases) {
@@ -158,7 +199,7 @@ if (function_exists("factorial")) {
             else if (answer.language === "html") {
                 const filePath = path.join(workspace, "index.html");
                 fs.writeFileSync(filePath, answer.codeAnswer || "");
-console.log("🔍 HTML user code:", answer.codeAnswer);
+                console.log("🔍 HTML user code:", answer.codeAnswer);
 
                 // dùng Playwright để load trang HTML và check test case
                 const { chromium } = await import("playwright");
@@ -213,30 +254,139 @@ console.log("🔍 HTML user code:", answer.codeAnswer);
 
             // -------------------- JAVA --------------------
             else if (answer.language === "java") {
+                const code = answer.codeAnswer || "";
+
+                // ============================
+                // 1. BẮT TÊN HÀM
+                // ============================
+                const fnRegex =
+                    /((public|private|protected|static|final|abstract)\s+)*(\w+)\s+(\w+)\s*\(/g;
+                let fnName = "solve";
+                let m;
+
+                while ((m = fnRegex.exec(code)) !== null) {
+                    const name = m[4];
+                    if (name !== "main") {
+                        fnName = name;
+                        break;
+                    }
+                }
+
+                // ================================================
+                // 2. WRAPPER JAVA CHUẨN
+                // ================================================
                 const wrapper = `
 import java.util.*;
+import com.google.gson.*;
+import java.lang.reflect.*;
+
 public class Main {
+
+${code}
+
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
-        int n = sc.hasNextInt() ? sc.nextInt() : 0;
+        String raw = sc.useDelimiter("\\\\A").hasNext() ? sc.next() : "";
+        raw = raw.trim();
 
-        ${answer.codeAnswer || ""}
+        Object input = parseInput(raw);
 
-        if (Main.class.getDeclaredMethods() != null) {
+        try {
+            Object result = callUserFunction(input);
+            printResult(result);
+        } catch (Exception ex) {
+            System.out.println("ERROR: " + ex.getMessage());
+        }
+    }
+
+    // ========================================================
+    //  CALL USER FUNCTION
+    // ========================================================
+    static Object callUserFunction(Object input) throws Exception {
+
+        Class<?> cls = Main.class;
+
+        // ---------- ARRAY ----------
+        if (input instanceof List) {
+            List<Integer> list = (List<Integer>) input;
+
             try {
-                java.lang.reflect.Method f = Main.class.getDeclaredMethod("factorial", int.class);
-                System.out.println(f.invoke(null, n));
+                Method m = cls.getDeclaredMethod("${fnName}", List.class);
+                return invokeSafe(cls, m, list);
             } catch (Exception e) {}
+
+            try {
+                int[] arr = list.stream().mapToInt(Integer::intValue).toArray();
+                Method m = cls.getDeclaredMethod("${fnName}", int[].class);
+                return invokeSafe(cls, m, (Object) arr);
+            } catch (Exception e) {}
+        }
+
+        // ---------- INT ----------
+        if (input instanceof Integer) {
+            try {
+                Method m = cls.getDeclaredMethod("${fnName}", int.class);
+                return invokeSafe(cls, m, input);
+            } catch (Exception e) {}
+        }
+
+        // ---------- STRING ----------
+        try {
+            Method m = cls.getDeclaredMethod("${fnName}", String.class);
+            return invokeSafe(cls, m, input);
+        } catch (Exception e) {}
+
+        throw new Exception("No matching function signature");
+    }
+
+    // Hàm gọi reflection an toàn
+    static Object invokeSafe(Class<?> cls, Method m, Object param) throws Exception {
+        m.setAccessible(true);
+        Object instance = Modifier.isStatic(m.getModifiers())
+            ? null
+            : cls.getDeclaredConstructor().newInstance();
+        return m.invoke(instance, param);
+    }
+
+    // -------------------- PARSE INPUT --------------------
+    static Object parseInput(String raw) {
+        try {
+            JsonElement el = JsonParser.parseString(raw);
+
+            if (el.isJsonArray()) {
+                List<Integer> list = new ArrayList<>();
+                for (JsonElement x : el.getAsJsonArray()) list.add(x.getAsInt());
+                return list;
+            }
+
+            if (el.isJsonPrimitive()) {
+                JsonPrimitive p = el.getAsJsonPrimitive();
+                if (p.isNumber()) return p.getAsInt();
+                if (p.isString()) return p.getAsString();
+            }
+        } catch (Exception e) {}
+
+        try { return Integer.parseInt(raw); }
+        catch (Exception e) { return raw; }
+    }
+
+    // -------------------- PRINT RESULT --------------------
+    static void printResult(Object res) {
+        if (res instanceof Boolean) {
+            System.out.println((Boolean)res ? "1" : "0");
+        } else {
+            System.out.println(res);
         }
     }
 }
 `;
+
                 fs.writeFileSync(path.join(workspace, "Main.java"), wrapper);
 
                 for (const tc of answer.question.testCases) {
                     maxScore += tc.points;
                     try {
-                        const compile = await execa("docker", [
+                        await execa("docker", [
                             "run",
                             "--rm",
                             "-v",
@@ -247,12 +397,21 @@ public class Main {
                             "javac",
                             "Main.java",
                         ]);
+                        console.log("\n===== COMPILED JAVA FILE =====");
+                        console.log(
+                            fs.readFileSync(
+                                path.join(workspace, "Main.java"),
+                                "utf8"
+                            )
+                        );
+                        console.log("===== END JAVA FILE =====\n");
 
                         const run = await execa(
                             "docker",
                             [
                                 "run",
                                 "--rm",
+                                "--entrypoint=",
                                 "-i",
                                 "-v",
                                 `${workspace}:/workspace`,
@@ -262,10 +421,12 @@ public class Main {
                                 "java",
                                 "Main",
                             ],
-                            { input: tc.input }
+                            { input: (tc.input || "").trim() }
                         );
+                        console.log("stdout:", run.stdout);
+                        console.log("stderr:", run.stderr);
 
-                        const got = run.stdout.trim();
+                        const got = run.stdout.replace(/[\r\n]/g, "").trim();
                         const expect = (tc.expectedOutput || "").trim();
                         const ok = got === expect;
                         if (ok) score += tc.points;
@@ -276,11 +437,11 @@ public class Main {
                             expect,
                             status: ok ? "ok" : "fail",
                         });
-                    } catch (err: any) {
+                    } catch (err) {
                         results.push({
                             id: tc.id,
                             status: "error",
-                            stderr: err.stderr || err.message,
+                            stderr: (err as any).stderr || (err as any).message,
                         });
                     }
                 }
@@ -288,23 +449,100 @@ public class Main {
 
             // -------------------- C++ --------------------
             else if (answer.language === "cpp") {
+                const userCode = answer.codeAnswer || "";
+
+                // 🔍 Tìm tên hàm đầu tiên hợp lệ mà học sinh khai báo
+                const regex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
+                const banned = new Set([
+                    "if",
+                    "for",
+                    "while",
+                    "switch",
+                    "return",
+                    "sizeof",
+                    "main",
+                    "int",
+                    "long",
+                    "short",
+                    "float",
+                    "double",
+                    "bool",
+                    "char",
+                    "void",
+                    "string",
+                    "vector",
+                ]);
+
+                let fnName = "solve";
+                let m;
+                while ((m = regex.exec(userCode)) !== null) {
+                    const candidate = m[1];
+                    if (!banned.has(candidate)) {
+                        fnName = candidate;
+                        break;
+                    }
+                }
+
                 const wrapper = `
 #include <bits/stdc++.h>
 using namespace std;
 
-${answer.codeAnswer || ""}
+${userCode}
 
 int main() {
-    int n;
-    if (!(cin >> n)) n = 0;
-    cout << factorial(n);
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    string raw;
+    if (!getline(cin, raw)) return 0;
+
+    auto trim = [](string &s) {
+        while (!s.empty() && isspace((unsigned char)s.front())) s.erase(s.begin());
+        while (!s.empty() && isspace((unsigned char)s.back())) s.pop_back();
+    };
+    trim(raw);
+
+    vector<long long> arr;
+    bool isArray = false;
+
+    // Nếu input dạng [1, 2, 3]
+    if (!raw.empty() && raw.front() == '[') {
+        isArray = true;
+        // bỏ [ ]
+        if (raw.front() == '[') raw.erase(raw.begin());
+        if (!raw.empty() && raw.back() == ']') raw.pop_back();
+
+        string token;
+        stringstream ss(raw);
+        while (getline(ss, token, ',')) {
+            trim(token);
+            if (!token.empty()) {
+                arr.push_back(stoll(token));
+            }
+        }
+    }
+
+    cout << boolalpha; // 🔥 bool -> "true"/"false"
+
+    if (isArray) {
+        auto result = ${fnName}(arr);
+        cout << result;
+    } else {
+        long long n = stoll(raw);
+        auto result = ${fnName}(n);
+        cout << result;
+    }
+
+    return 0;
 }
 `;
+
                 fs.writeFileSync(path.join(workspace, "main.cpp"), wrapper);
 
                 for (const tc of answer.question.testCases) {
                     maxScore += tc.points;
                     try {
+                        // compile
                         await execa("docker", [
                             "run",
                             "--rm",
@@ -319,6 +557,7 @@ int main() {
                             "main",
                         ]);
 
+                        // run
                         const run = await execa(
                             "docker",
                             [
@@ -338,6 +577,7 @@ int main() {
                         const got = run.stdout.trim();
                         const expect = (tc.expectedOutput || "").trim();
                         const ok = got === expect;
+
                         if (ok) score += tc.points;
 
                         results.push({
@@ -435,14 +675,21 @@ public class Program {
                 const wrapper = `
 const fs = require("fs");
 const raw = fs.readFileSync(0, "utf8").trim();
-const n = Number(raw);
+let input;
+
+try {
+  input = JSON.parse(raw);   // <-- Parse array
+} catch {
+  input = raw;
+}
 
 ${answer.codeAnswer || ""}
 
-if (typeof factorial === "function") {
-  console.log(String(factorial(n)));
+if (typeof sumArray === "function") {
+  console.log(String(sumArray(input)));
 }
 `;
+
                 fs.writeFileSync(path.join(workspace, "main.js"), wrapper);
 
                 for (const tc of answer.question.testCases) {
@@ -519,7 +766,7 @@ if (typeof factorial === "function") {
         connection: {
             host: process.env.REDIS_HOST,
             port: Number(process.env.REDIS_PORT),
-        }
+        },
     }
 );
 

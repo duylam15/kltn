@@ -27,13 +27,12 @@ import {
 	PlusOutlined,
 	GlobalOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/authContext";
+import instance from "../../utils/axiosInstance";
 
 const { Title, Text } = Typography;
-const API_BASE = "http://localhost:4000/api/v1";
 
 type Material = {
 	id: number;
@@ -71,7 +70,6 @@ export default function Materials() {
 	const [materials, setMaterials] = useState<CourseMaterial[]>([]);
 	const [keyword, setKeyword] = useState("");
 
-	// Modal thêm tài liệu
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [publicMaterials, setPublicMaterials] = useState<Material[]>([]);
 	const [myMaterials, setMyMaterials] = useState<Material[]>([]);
@@ -87,7 +85,7 @@ export default function Materials() {
 	const fetchData = async () => {
 		try {
 			setLoading(true);
-			const res = await axios.get(`${API_BASE}/materials/class/${sectionId}`);
+			const res = await instance.get(`/materials/class/${sectionId}`);
 
 			if (res.data.success) {
 				setMaterials(res.data.data || []);
@@ -100,11 +98,10 @@ export default function Materials() {
 		}
 	};
 
-	// Lấy tài liệu public
 	const fetchPublicMaterials = async () => {
 		try {
 			setLoadingPublic(true);
-			const res = await axios.get(`${API_BASE}/materials/public`, {
+			const res = await instance.get(`/materials/public`, {
 				params: {
 					userId: user?.id,
 					keyword: searchPublic,
@@ -124,11 +121,10 @@ export default function Materials() {
 		}
 	};
 
-	// Lấy tài liệu của tôi
 	const fetchMyMaterials = async () => {
 		try {
 			setLoadingMy(true);
-			const res = await axios.get(`${API_BASE}/materials/teacher/${user?.id}`);
+			const res = await instance.get(`/materials/teacher/${user?.id}`);
 
 			if (res.data.success) {
 				setMyMaterials(res.data.data || []);
@@ -141,17 +137,15 @@ export default function Materials() {
 		}
 	};
 
-	// Mở modal
 	const showAddModal = () => {
 		setIsModalVisible(true);
 		fetchPublicMaterials();
 		fetchMyMaterials();
 	};
 
-	// Gán tài liệu vào lớp
 	const handleAssignMaterial = async (materialId: number) => {
 		try {
-			const res = await axios.post(`${API_BASE}/materials/assign`, {
+			const res = await instance.post(`/materials/assign`, {
 				courseSectionId: sectionId,
 				materialId,
 				assignedBy: user?.id,
@@ -177,7 +171,7 @@ export default function Materials() {
 		checked: boolean
 	) => {
 		try {
-			const res = await axios.patch(`${API_BASE}/materials/visibility`, {
+			const res = await instance.patch(`/materials/visibility`, {
 				courseSectionId: sectionId,
 				materialId,
 				isOpen: checked,
@@ -209,18 +203,6 @@ export default function Materials() {
 		}
 	};
 
-	const handleDownload = (record: CourseMaterial) => {
-		if (record.material.filePath && record.material.fileName) {
-			const link = document.createElement("a");
-			link.href = `http://localhost:4000/${record.material.filePath}`;
-			link.download = record.material.fileName;
-			link.click();
-			toast.success("Đang tải xuống...");
-		} else {
-			toast.error("Tài liệu này chưa có file để tải");
-		}
-	};
-
 	const getFileTypeTag = (fileType: string) => {
 		const type = fileType?.toLowerCase();
 		if (type?.includes("pdf")) return <Tag color="red">PDF</Tag>;
@@ -246,18 +228,21 @@ export default function Materials() {
 			title: "Tiêu đề",
 			dataIndex: ["material", "title"],
 			key: "title",
-			width: "30%",
+			width: 250,
+			fixed: "left" as const,
 			sorter: (a: CourseMaterial, b: CourseMaterial) =>
 				a.material.title.localeCompare(b.material.title),
 			render: (_: any, record: CourseMaterial) => (
 				<div>
-					<div style={{ fontWeight: 600, color: "#1890ff", marginBottom: 4 }}>
+					<div style={{ fontWeight: 600, color: "#1890ff", marginBottom: 4, fontSize: 14 }}>
 						<FileOutlined style={{ marginRight: 8 }} />
 						{record.material.title}
 					</div>
 					{record.material.description && (
 						<div style={{ fontSize: 12, color: "#666" }}>
-							{record.material.description}
+							{record.material.description.length > 50
+								? record.material.description.substring(0, 50) + "..."
+								: record.material.description}
 						</div>
 					)}
 				</div>
@@ -266,15 +251,15 @@ export default function Materials() {
 		{
 			title: "File",
 			key: "fileInfo",
-			width: "20%",
+			width: 180,
 			render: (_: any, record: CourseMaterial) => (
 				<div>
 					<div style={{ marginBottom: 4 }}>
 						{record.material.fileName ? (
 							<Tooltip title={record.material.fileName}>
 								<span style={{ fontSize: 12, color: "#666" }}>
-									{record.material.fileName.length > 30
-										? record.material.fileName.substring(0, 30) + "..."
+									{record.material.fileName.length > 25
+										? record.material.fileName.substring(0, 25) + "..."
 										: record.material.fileName}
 								</span>
 							</Tooltip>
@@ -282,10 +267,10 @@ export default function Materials() {
 							<Tag color="red">Chưa có file</Tag>
 						)}
 					</div>
-					<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+					<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
 						{getFileTypeTag(record.material.fileType || "")}
 						{record.material.fileSize && (
-							<Tag color="default" style={{ margin: 0 }}>
+							<Tag color="default" style={{ margin: 0, fontSize: 11 }}>
 								{formatFileSize(record.material.fileSize)}
 							</Tag>
 						)}
@@ -296,15 +281,17 @@ export default function Materials() {
 		{
 			title: "Người tải lên",
 			key: "uploader",
-			width: "15%",
+			width: 150,
 			render: (_: any, record: CourseMaterial) => (
 				<div>
-					<div style={{ fontWeight: 500 }}>
+					<div style={{ fontWeight: 500, fontSize: 13 }}>
 						{record.material.uploader?.fullName || "Không rõ"}
 					</div>
 					{record.material.uploader?.email && (
 						<div style={{ fontSize: 11, color: "#666" }}>
-							{record.material.uploader.email}
+							{record.material.uploader.email.length > 20
+								? record.material.uploader.email.substring(0, 20) + "..."
+								: record.material.uploader.email}
 						</div>
 					)}
 				</div>
@@ -314,13 +301,13 @@ export default function Materials() {
 			title: "Ngày tải lên",
 			dataIndex: ["material", "uploadedAt"],
 			key: "uploadedAt",
-			width: "12%",
+			width: 110,
 			sorter: (a: CourseMaterial, b: CourseMaterial) =>
 				new Date(a.material.uploadedAt).getTime() -
 				new Date(b.material.uploadedAt).getTime(),
 			render: (date: string) => (
 				<div>
-					<div>{dayjs(date).format("DD/MM/YYYY")}</div>
+					<div style={{ fontSize: 12 }}>{dayjs(date).format("DD/MM/YYYY")}</div>
 					<div style={{ fontSize: 11, color: "#666" }}>
 						{dayjs(date).format("HH:mm")}
 					</div>
@@ -330,47 +317,32 @@ export default function Materials() {
 		{
 			title: "Trạng thái",
 			key: "status",
-			width: "13%",
+			width: 110,
 			align: "center" as const,
 			render: (_: any, record: CourseMaterial) => (
 				<Switch
-					checkedChildren={
-						<>
-							<CheckCircleOutlined /> Hiển thị
-						</>
-					}
-					unCheckedChildren={
-						<>
-							<EyeInvisibleOutlined /> Ẩn
-						</>
-					}
+					checkedChildren={<CheckCircleOutlined />}
+					unCheckedChildren={<EyeInvisibleOutlined />}
 					checked={record.isOpen}
 					onChange={(checked) =>
 						handleToggleVisibility(record.materialId, checked)
 					}
+					size="small"
 				/>
 			),
 		},
 		{
 			title: "Hành động",
 			key: "actions",
-			width: "10%",
+			width: 100,
 			align: "center" as const,
 			render: (_: any, record: CourseMaterial) => (
 				<div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
-					<Tooltip title="Xem tài liệu">
+					<Tooltip title="Xem">
 						<Button
 							size="small"
 							icon={<EyeOutlined />}
 							onClick={() => handleView(record)}
-							disabled={!record.material.filePath}
-						/>
-					</Tooltip>
-					<Tooltip title="Tải xuống">
-						<Button
-							size="small"
-							icon={<DownloadOutlined />}
-							onClick={() => handleDownload(record)}
 							disabled={!record.material.filePath}
 						/>
 					</Tooltip>
@@ -379,19 +351,20 @@ export default function Materials() {
 		},
 	];
 
-	// Columns cho modal thêm tài liệu
 	const materialPickerColumns = [
 		{
 			title: "Tiêu đề",
 			dataIndex: "title",
 			key: "title",
-			width: "30%",
+			width: 250,
 			render: (title: string, record: Material) => (
 				<div>
-					<div style={{ fontWeight: 600, marginBottom: 4 }}>{title}</div>
+					<div style={{ fontWeight: 600, marginBottom: 4, fontSize: 13 }}>{title}</div>
 					{record.description && (
-						<div style={{ fontSize: 12, color: "#666" }}>
-							{record.description}
+						<div style={{ fontSize: 11, color: "#666" }}>
+							{record.description.length > 40
+								? record.description.substring(0, 40) + "..."
+								: record.description}
 						</div>
 					)}
 				</div>
@@ -400,16 +373,20 @@ export default function Materials() {
 		{
 			title: "File",
 			key: "file",
-			width: "25%",
+			width: 180,
 			render: (_: any, record: Material) => (
 				<div>
-					<div style={{ fontSize: 12, marginBottom: 4 }}>
-						{record.fileName || "N/A"}
+					<div style={{ fontSize: 11, marginBottom: 4 }}>
+						{record.fileName ? (
+							record.fileName.length > 25
+								? record.fileName.substring(0, 25) + "..."
+								: record.fileName
+						) : "N/A"}
 					</div>
-					<div style={{ display: "flex", gap: 4 }}>
+					<div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
 						{getFileTypeTag(record.fileType || "")}
 						{record.fileSize && (
-							<Tag>{formatFileSize(record.fileSize)}</Tag>
+							<Tag style={{ fontSize: 10 }}>{formatFileSize(record.fileSize)}</Tag>
 						)}
 					</div>
 				</div>
@@ -418,21 +395,26 @@ export default function Materials() {
 		{
 			title: "Người tải",
 			key: "uploader",
-			width: "20%",
-			render: (_: any, record: Material) =>
-				record.uploader?.fullName || "Không rõ",
+			width: 130,
+			render: (_: any, record: Material) => (
+				<span style={{ fontSize: 12 }}>
+					{record.uploader?.fullName || "Không rõ"}
+				</span>
+			),
 		},
 		{
 			title: "Ngày tải",
 			dataIndex: "uploadedAt",
 			key: "uploadedAt",
-			width: "15%",
-			render: (date: string) => dayjs(date).format("DD/MM/YYYY"),
+			width: 100,
+			render: (date: string) => (
+				<span style={{ fontSize: 11 }}>{dayjs(date).format("DD/MM/YYYY")}</span>
+			),
 		},
 		{
 			title: "",
 			key: "action",
-			width: "10%",
+			width: 90,
 			align: "center" as const,
 			render: (_: any, record: Material) => {
 				const alreadyAdded = materials.some(
@@ -507,86 +489,236 @@ export default function Materials() {
 		);
 
 	return (
-		<div style={{ padding: 16 }}>
-			{/* Statistics Cards */}
-			<Row gutter={16} style={{ marginBottom: 16 }}>
-				<Col xs={24} sm={12} md={6}>
-					<Card>
-						<Statistic
-							title="Tổng tài liệu"
-							value={stats.totalMaterials}
-							prefix={<FolderOpenOutlined />}
-							valueStyle={{ color: "#1890ff" }}
-						/>
-					</Card>
-				</Col>
-				<Col xs={24} sm={12} md={6}>
-					<Card>
-						<Statistic
-							title="Đang hiển thị"
-							value={stats.visibleMaterials}
-							prefix={<CheckCircleOutlined />}
-							valueStyle={{ color: "#52c41a" }}
-						/>
-					</Card>
-				</Col>
-				<Col xs={24} sm={12} md={6}>
-					<Card>
-						<Statistic
-							title="Đã ẩn"
-							value={stats.hiddenMaterials}
-							prefix={<EyeInvisibleOutlined />}
-							valueStyle={{ color: "#faad14" }}
-						/>
-					</Card>
-				</Col>
-				<Col xs={24} sm={12} md={6}>
-					<Card>
-						<Statistic
-							title="Tổng dung lượng"
-							value={formatFileSize(stats.totalFileSize)}
-							prefix={<FileOutlined />}
-							valueStyle={{ color: "#722ed1" }}
-						/>
-					</Card>
-				</Col>
-			</Row>
+		<div className="materials-container" style={{ padding: "8px 12px" }}>
+			<style>
+				{`
+	/* MOBILE (<=768px) */
+	@media (max-width: 768px) {
+
+		/* Ẩn stats row */
+		.stats-row {
+			display: none !important;
+		}
+
+		.materials-title {
+			font-size: 16px !important;
+			margin: 0 0 12px 0 !important;
+		}
+
+		.header-actions {
+			flex-direction: column !important;
+			gap: 8px !important;
+			width: 100%;
+		}
+
+		.search-input {
+			width: 100% !important;
+		}
+
+		.action-buttons {
+			width: 100%;
+			display: flex;
+			gap: 8px;
+		}
+
+		.action-buttons button {
+			flex: 1;
+		}
+
+		.ant-modal {
+			max-width: calc(100vw - 16px) !important;
+			margin: 8px !important;
+		}
+
+		/* Vuốt ngang table */
+		.ant-table-wrapper::after {
+			content: "← Vuốt để xem thêm →";
+			display: block;
+			text-align: center;
+			font-size: 11px;
+			color: #999;
+			padding: 8px 0 4px;
+			font-style: italic;
+		}
+
+		.ant-statistic-title {
+			font-size: 12px !important;
+		}
+
+		.ant-statistic-content {
+			font-size: 18px !important;
+		}
+	}
+
+	/* TABLET (769px - 1024px) */
+	@media (min-width: 769px) and (max-width: 1024px) {
+		.search-input {
+			width: 220px !important;
+		}
+	}
+
+	/* DESKTOP (>1024px) */
+	@media (min-width: 1025px) {
+		.materials-container {
+			padding: 16px !important;
+		}
+	}
+
+	/* Scrollbar Table */
+	.ant-table-body::-webkit-scrollbar {
+		height: 8px;
+	}
+
+	.ant-table-body::-webkit-scrollbar-track {
+		background: #f1f1f1;
+		border-radius: 4px;
+	}
+
+	.ant-table-body::-webkit-scrollbar-thumb {
+		background: #888;
+		border-radius: 4px;
+	}
+
+	.ant-table-body::-webkit-scrollbar-thumb:hover {
+		background: #555;
+	}
+`}
+			</style>
 
 			{/* Header + Search + Actions */}
 			<div
 				style={{
 					display: "flex",
 					justifyContent: "space-between",
-					alignItems: "center",
+					alignItems: "flex-start",
 					marginBottom: 16,
-					gap: 8,
+					marginTop: -16,
+					gap: 12,
 					flexWrap: "wrap",
 				}}
 			>
-				<Title level={4} style={{ margin: 0 }}>
-					Tài liệu lớp học
-				</Title>
-				<div style={{ display: "flex", gap: 8 }}>
+				{/* === NEW: Thay Title bằng các STATISTICS NHỎ === */}
+				<div
+					className="header-mini-stats hide-on-mobile"
+					style={{
+						display: "flex",
+						gap: 8,
+						flexWrap: "wrap",
+						alignItems: "center",
+						flex: "1 1 auto",
+					}}
+				>
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 12,
+							border: "1px solid #ddd",
+							borderRadius: 6,
+							padding: "6px 10px",
+							background: "#fff",
+							whiteSpace: "nowrap",
+						}}
+					>
+						<FolderOpenOutlined style={{ fontSize: 14, color: "#1890ff" }} />
+						<span>Tổng tài liệu:</span>
+						<strong>{stats.totalMaterials}</strong>
+					</div>
+
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 12,
+							border: "1px solid #ddd",
+							borderRadius: 6,
+							padding: "6px 10px",
+							background: "#fff",
+							whiteSpace: "nowrap",
+						}}
+					>
+						<CheckCircleOutlined style={{ fontSize: 14, color: "#52c41a" }} />
+						<span>Đang hiển thị:</span>
+						<strong style={{ color: "#52c41a" }}>{stats.visibleMaterials}</strong>
+					</div>
+
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 12,
+							border: "1px solid #ddd",
+							borderRadius: 6,
+							padding: "6px 10px",
+							background: "#fff",
+							whiteSpace: "nowrap",
+						}}
+					>
+						<EyeInvisibleOutlined style={{ fontSize: 14, color: "#faad14" }} />
+						<span>Đã ẩn:</span>
+						<strong style={{ color: "#faad14" }}>{stats.hiddenMaterials}</strong>
+					</div>
+
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 12,
+							border: "1px solid #ddd",
+							borderRadius: 6,
+							padding: "6px 10px",
+							background: "#fff",
+							whiteSpace: "nowrap",
+						}}
+					>
+						<FileOutlined style={{ fontSize: 14, color: "#722ed1" }} />
+						<span>Dung lượng:</span>
+						<strong style={{ color: "#722ed1" }}>
+							{formatFileSize(stats.totalFileSize)}
+						</strong>
+					</div>
+				</div>
+
+				{/* SEARCH + ACTIONS */}
+				<div
+					className="header-actions"
+					style={{
+						display: "flex",
+						gap: 8,
+						alignItems: "center",
+						flexWrap: "wrap",
+					}}
+				>
 					<Input
 						allowClear
 						prefix={<SearchOutlined />}
-						placeholder="Tìm theo tiêu đề, mô tả, tên file, người tải..."
+						placeholder="Tìm kiếm..."
 						value={keyword}
 						onChange={(e) => setKeyword(e.target.value)}
-						style={{ width: 300 }}
+						className="search-input"
+						style={{ width: 250 }}
 					/>
-					<Button
-						type="primary"
-						icon={<PlusOutlined />}
-						onClick={showAddModal}
-					>
-						Thêm tài liệu
-					</Button>
-					<Button icon={<ReloadOutlined />} onClick={fetchData}>
-						Làm mới
-					</Button>
+
+					<div className="action-buttons" style={{ display: "flex", gap: 8 }}>
+						<Button icon={<ReloadOutlined />} onClick={fetchData}>
+							<span className="btn-text">Làm mới</span>
+						</Button>
+						<Button
+							type="primary"
+							icon={<PlusOutlined />}
+							onClick={showAddModal}
+						>
+							<span className="btn-text">Thêm</span>
+						</Button>
+					</div>
 				</div>
 			</div>
+
+
 
 			{/* Table */}
 			{filteredMaterials.length === 0 ? (
@@ -598,19 +730,23 @@ export default function Materials() {
 					</Text>
 				</Card>
 			) : (
-				<Table<CourseMaterial>
-					dataSource={filteredMaterials}
-					columns={columns}
-					rowKey="id"
-					bordered
-					pagination={{
-						pageSize: 10,
-						showSizeChanger: true,
-						showTotal: (total) => `Tổng ${total} tài liệu`,
-						pageSizeOptions: ["10", "20", "50"],
-					}}
-					scroll={{ x: "max-content" }}
-				/>
+				<div style={{ overflowX: "auto" }}>
+					<Table<CourseMaterial>
+						dataSource={filteredMaterials}
+						columns={columns}
+						rowKey="id"
+						bordered
+						pagination={{
+							pageSize: 10,
+							showSizeChanger: true,
+							showTotal: (total) => `Tổng ${total} tài liệu`,
+							pageSizeOptions: ["10", "20", "50"],
+							responsive: true,
+						}}
+						scroll={{ x: 900 }}
+						size="middle"
+					/>
+				</div>
 			)}
 
 			{/* Modal thêm tài liệu */}
@@ -620,7 +756,13 @@ export default function Materials() {
 				onCancel={() => setIsModalVisible(false)}
 				footer={null}
 				width={1000}
-				bodyStyle={{ padding: "16px 0" }}
+				style={{ maxWidth: "calc(100vw - 16px)" }}
+				centered
+				bodyStyle={{
+					maxHeight: "70vh",
+					overflowY: "auto",
+					overflowX: "hidden",
+				}}
 			>
 				<Tabs
 					defaultActiveKey="my"
@@ -629,11 +771,11 @@ export default function Materials() {
 							key: "my",
 							label: (
 								<span>
-									<FolderOpenOutlined /> Tài liệu của tôi
+									<FolderOpenOutlined /> Của tôi
 								</span>
 							),
 							children: (
-								<div>
+								<div style={{ padding: "0 16px" }}>
 									<Input
 										allowClear
 										prefix={<SearchOutlined />}
@@ -642,14 +784,17 @@ export default function Materials() {
 										onChange={(e) => setSearchMy(e.target.value)}
 										style={{ marginBottom: 16 }}
 									/>
-									<Table<Material>
-										dataSource={filteredMyMaterials}
-										columns={materialPickerColumns}
-										rowKey="id"
-										loading={loadingMy}
-										pagination={{ pageSize: 5 }}
-										scroll={{ x: "max-content" }}
-									/>
+									<div style={{ overflowX: "auto" }}>
+										<Table<Material>
+											dataSource={filteredMyMaterials}
+											columns={materialPickerColumns}
+											rowKey="id"
+											loading={loadingMy}
+											pagination={{ pageSize: 5, responsive: true }}
+											scroll={{ x: 750 }}
+											size="small"
+										/>
+									</div>
 								</div>
 							),
 						},
@@ -657,16 +802,17 @@ export default function Materials() {
 							key: "public",
 							label: (
 								<span>
-									<GlobalOutlined /> Tài liệu công khai
+									<GlobalOutlined /> Công khai
 								</span>
 							),
 							children: (
-								<div>
+								<div style={{ padding: "0 16px" }}>
 									<div
 										style={{
 											display: "flex",
 											gap: 8,
 											marginBottom: 16,
+											flexWrap: "wrap",
 										}}
 									>
 										<Input
@@ -675,7 +821,7 @@ export default function Materials() {
 											placeholder="Tìm trong tài liệu công khai..."
 											value={searchPublic}
 											onChange={(e) => setSearchPublic(e.target.value)}
-											style={{ flex: 1 }}
+											style={{ flex: 1, minWidth: 200 }}
 										/>
 										<Button
 											icon={<ReloadOutlined />}
@@ -684,14 +830,17 @@ export default function Materials() {
 											Tìm kiếm
 										</Button>
 									</div>
-									<Table<Material>
-										dataSource={filteredPublicMaterials}
-										columns={materialPickerColumns}
-										rowKey="id"
-										loading={loadingPublic}
-										pagination={{ pageSize: 5 }}
-										scroll={{ x: "max-content" }}
-									/>
+									<div style={{ overflowX: "auto" }}>
+										<Table<Material>
+											dataSource={filteredPublicMaterials}
+											columns={materialPickerColumns}
+											rowKey="id"
+											loading={loadingPublic}
+											pagination={{ pageSize: 5, responsive: true }}
+											scroll={{ x: 750 }}
+											size="small"
+										/>
+									</div>
 								</div>
 							),
 						},

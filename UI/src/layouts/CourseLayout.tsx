@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useParams } from "react-router-dom";
 import { Card, Tabs, Tag, Skeleton, Typography } from "antd";
-import { API_URL } from "../utils/api";
+import instance from "../utils/axiosInstance";
 
 const tabDefs = [
 	{ key: "overview", label: "Tổng quan" },          // cái nhìn chung
@@ -31,10 +31,11 @@ const CourseLayout: React.FC = () => {
 		let mounted = true;
 		(async () => {
 			try {
-				const res = await fetch(
-					`${API_URL}/api/v1/course-sections/${courseId}`
+				const res = await instance.get(
+					`/course-sections/${courseId}`
 				);
-				const json = await res.json();
+				const json = await res.data;
+				console.log("Fetched section data:", json);
 				if (mounted) {
 					setSection(json?.data ?? null);
 					setLoading(false);

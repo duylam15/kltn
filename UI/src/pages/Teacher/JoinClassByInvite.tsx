@@ -2,10 +2,9 @@ import React, { useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Card, Form, Input, Button, Alert, Result, Typography } from "antd";
 import { UserOutlined, CheckCircleOutlined } from "@ant-design/icons";
-import axios from "axios";
 import toast from "react-hot-toast";
+import instance from "../../utils/axiosInstance";
 
-const API_BASE = "http://localhost:4000/api/v1";
 
 export default function JoinClassByInvite() {
 	const [searchParams] = useSearchParams();
@@ -30,7 +29,7 @@ export default function JoinClassByInvite() {
 
 			try {
 				console.log(`🔍 Searching for student with code: ${studentCode}`);
-				const searchRes = await axios.get(`${API_BASE}/students/code/${studentCode}`);
+				const searchRes = await instance.get(`/students/code/${studentCode}`);
 
 				if (searchRes.data.success && searchRes.data.data) {
 					// Đã có tài khoản
@@ -64,7 +63,7 @@ export default function JoinClassByInvite() {
 				};
 
 				try {
-					const createRes = await axios.post(`${API_BASE}/students`, createPayload);
+					const createRes = await instance.post(`/students`, createPayload);
 
 					if (createRes.data.success && createRes.data.data) {
 						studentId = createRes.data.data.student.id;
@@ -80,7 +79,7 @@ export default function JoinClassByInvite() {
 					if (createErrorMsg.includes("already exists") || createErrorMsg.includes("đã tồn tại")) {
 						console.log("⚠️ Student was just created, trying to fetch again...");
 						try {
-							const retryRes = await axios.get(`${API_BASE}/students/code/${studentCode}`);
+							const retryRes = await instance.get(`/students/code/${studentCode}`);
 							if (retryRes.data.success && retryRes.data.data) {
 								studentId = retryRes.data.data.id;
 								console.log(`✅ Retrieved student ID after retry: ${studentId}`);
@@ -104,7 +103,7 @@ export default function JoinClassByInvite() {
 				};
 
 				try {
-					const enrollRes = await axios.post(`${API_BASE}/sections-enrollments`, enrollPayload);
+					const enrollRes = await instance.post(`/sections-enrollments`, enrollPayload);
 
 					if (enrollRes.data.success) {
 						console.log(`✅ Successfully enrolled student into class`);

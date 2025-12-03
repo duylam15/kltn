@@ -30,12 +30,12 @@ import {
   RocketOutlined,
   ArrowRightOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/vi";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
+import instance from "../../utils/axiosInstance";
 
 dayjs.extend(relativeTime);
 dayjs.locale("vi");
@@ -84,13 +84,22 @@ export default function Overview() {
         sessionsRes,
         gradesRes,
       ] = await Promise.all([
-        axios.get(`${API_BASE}/sections-enrollments/section/${sectionId}/students`),
-        axios.get(`${API_BASE}/sections-groups/sections/${sectionId}/groups`),
-        axios.get(`${API_BASE}/sections-assignments/sections/${sectionId}/assignments`),
-        axios.get(`${API_BASE}/materials/class/${sectionId}`),
-        axios.get(`${API_BASE}/attendance/sections/${sectionId}/sessions`),
-        axios.get(`${API_BASE}/grades/sections/${sectionId}/gradebook?includeUnpublished=true`),
+        instance.get(`/sections-enrollments/section/${sectionId}/students`),
+
+        instance.get(`/sections-groups/sections/${sectionId}/groups`),
+
+        instance.get(`/sections-assignments/sections/${sectionId}/assignments`),
+
+        instance.get(`/materials/class/${sectionId}`),
+
+        instance.get(`/attendance/sections/${sectionId}/sessions`),
+
+        instance.get(`/students-grades/gradebook/${sectionId}`, {
+          params: { includeUnpublished: true }
+        }),
       ]);
+
+      console.log("Grades Res:", gradesRes);
 
       const students = studentsRes.data.data || [];
       const groups = groupsRes.data.data || [];
@@ -170,7 +179,7 @@ export default function Overview() {
             );
             const avgScore =
               scores.length > 0
-                ? scores.reduce((sum: number, col: any) => sum + (col.percentage || 0), 0) /
+                ? (scores.reduce((sum: number, col: any) => sum + (col.percentage || 0), 0) as number) /
                 scores.length
                 : 0;
             return { ...s, avgScore };
@@ -182,7 +191,6 @@ export default function Overview() {
       }
     } catch (err) {
       console.error("Lỗi tải dữ liệu overview:", err);
-      toast.error("Không thể tải dữ liệu tổng quan");
     } finally {
       setLoading(false);
     }
@@ -215,7 +223,7 @@ export default function Overview() {
       }}>
         <Space align="center" style={{ marginBottom: 8 }}>
           <Title level={3} style={{ margin: 0, color: '#262626' }}>
-            📊 Tổng quan lớp học
+            Tổng quan lớp học
           </Title>
         </Space>
         <Text type="secondary" style={{ fontSize: 13, marginLeft: 12 }}>

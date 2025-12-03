@@ -27,7 +27,7 @@ const processQueue = (error: any = null) => {
 
 // Response interceptor
 instance.interceptors.response.use(
-    (response) => response.data ?? response,
+    (response) => response,
     async (error) => {
         const originalRequest = error.config;
 

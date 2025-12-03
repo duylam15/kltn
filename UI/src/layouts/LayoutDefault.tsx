@@ -20,16 +20,15 @@ import {
   Tag
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import api from "../utils/axiosInstance";
-import { Card, Skeleton } from "antd";
+import { Skeleton } from "antd";
 import { useAuth } from "../context/authContext";
-import { API_URL } from "../utils/api";
+import instance from "../utils/axiosInstance";
 
 export default function LayoutDefault() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const { user,  logout } = useAuth();
+  const { user, logout } = useAuth();
 
   // Menu cho thanh navigation dọc (sidebar) - giống Google Classroom
   const sidebarMenu = [
@@ -51,7 +50,7 @@ export default function LayoutDefault() {
   const [loading, setLoading] = useState(false);
 
   const getInitial = () =>
-  user?.fullName ? user.fullName.charAt(0).toUpperCase() : "U";
+    user?.fullName ? user.fullName.charAt(0).toUpperCase() : "U";
 
   useEffect(() => {
     let mounted = true;
@@ -66,10 +65,10 @@ export default function LayoutDefault() {
     setLoading(true);
     (async () => {
       try {
-        const res = await fetch(
-          `${API_URL}/api/v1/course-sections/${courseId}`
+        const res = await instance.get(
+          `/course-sections/${courseId}`
         );
-        const json = await res.json();
+        const json = await res.data;
         if (mounted) {
           setSection(json?.data ?? null);
           setLoading(false);
@@ -147,23 +146,23 @@ export default function LayoutDefault() {
             </button>
 
             {/* User Profile */}
-<button
-  className="ml-2 p-1 rounded-full hover:bg-gray-100 transition-colors"
-  onClick={() => navigate("/student/profile")}
-  title="Hồ sơ cá nhân"
->
-  {user?.avatarUrl ? (
-    <img
-      src={user.avatarUrl}
-      alt="avatar"
-      className="h-8 w-8 rounded-full object-cover"
-    />
-  ) : (
-    <div className="h-8 w-8 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 text-white text-sm font-medium flex items-center justify-center">
-      {getInitial()}
-    </div>
-  )}
-</button>
+            <button
+              className="ml-2 p-1 rounded-full hover:bg-gray-100 transition-colors"
+              onClick={() => navigate("/student/profile")}
+              title="Hồ sơ cá nhân"
+            >
+              {user?.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt="avatar"
+                  className="h-8 w-8 rounded-full object-cover"
+                />
+              ) : (
+                <div className="h-8 w-8 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 text-white text-sm font-medium flex items-center justify-center">
+                  {getInitial()}
+                </div>
+              )}
+            </button>
 
             {/* Logout Button */}
             <button

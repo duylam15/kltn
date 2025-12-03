@@ -36,15 +36,14 @@ import {
 	FormOutlined,
 	UnorderedListOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import { BookOpen } from "lucide-react";
+import instance from "../../utils/axiosInstance";
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 const { Option } = Select;
-const API_BASE = "http://localhost:4000/api/v1";
 
 type Choice = {
 	id?: number;
@@ -93,7 +92,7 @@ type Question = {
 	updatedAt?: string;
 };
 
-export default function Questions() {
+export default function QuestionsAdmin() {
 	const [loading, setLoading] = useState(true);
 	const [questions, setQuestions] = useState<Question[]>([]);
 	const [keyword, setKeyword] = useState("");
@@ -136,8 +135,8 @@ export default function Questions() {
 	async function fetchQuestions() {
 		try {
 			setLoading(true);
-			const res = await axios.get<{ success: boolean; data: Question[] }>(
-				`${API_BASE}/questions`
+			const res = await instance.get<{ success: boolean; data: Question[] }>(
+				`/questions`
 			);
 			if (res.data.success) {
 				setQuestions(res.data.data || []);
@@ -151,16 +150,16 @@ export default function Questions() {
 
 	async function fetchSubjects() {
 		try {
-			const res = await axios.get<{ success: boolean; data: Subject[] }>(
-				`${API_BASE}/subjects`
+			const res = await instance.get<{ success: boolean; data: Subject[] }>(
+				`/subjects`
 			);
 			if (res.data.success) {
 				setSubjects(res.data.data || []);
 
 				// Fetch all chapters for all subjects
 				const chaptersPromises = res.data.data.map((subject) =>
-					axios.get<{ success: boolean; data: { items: Chapter[] } }>(
-						`${API_BASE}/chapters?subject_id=${subject.id}`
+					instance.get<{ success: boolean; data: { items: Chapter[] } }>(
+						`/chapters?subject_id=${subject.id}`
 					)
 				);
 
@@ -177,8 +176,8 @@ export default function Questions() {
 
 	async function fetchChaptersBySubject(subjectId: number) {
 		try {
-			const res = await axios.get<{ success: boolean; data: Chapter[] }>(
-				`${API_BASE}/chapters?subject_id=${subjectId}`
+			const res = await instance.get<{ success: boolean; data: Chapter[] }>(
+				`/chapters?subject_id=${subjectId}`
 			);
 			if (res.data.success) {
 				return res.data.data || [];
@@ -192,8 +191,8 @@ export default function Questions() {
 
 	async function fetchTestCases(questionId: number) {
 		try {
-			const res = await axios.get<{ success: boolean; data: TestCase[] }>(
-				`${API_BASE}/test-cases/question/${questionId}`
+			const res = await instance.get<{ success: boolean; data: TestCase[] }>(
+				`/test-cases/question/${questionId}`
 			);
 			if (res.data.success) {
 				return res.data.data || [];
@@ -247,7 +246,7 @@ export default function Questions() {
 
 	const handleDelete = async (id: number) => {
 		try {
-			await axios.delete(`${API_BASE}/questions/${id}`);
+			await instance.delete(`/questions/${id}`);
 			toast.success("Đã xóa câu hỏi");
 			setQuestions((prev) => prev.filter((q) => q.id !== id));
 		} catch (err) {
@@ -259,7 +258,7 @@ export default function Questions() {
 		try {
 			const values = await form.validateFields();
 
-			let payload: any = {
+			const payload: any = {
 				type: values.type || "multiple_choice",
 				content: values.content.trim(),
 				points: values.points ? Number(values.points) : 5,
@@ -300,11 +299,11 @@ export default function Questions() {
 			let questionId: number;
 
 			if (editing) {
-				await axios.put(`${API_BASE}/questions/${editing.id}`, payload);
+				await instance.put(`/questions/${editing.id}`, payload);
 				questionId = editing.id;
 				toast.success("Đã cập nhật câu hỏi");
 			} else {
-				const res = await axios.post(`${API_BASE}/questions`, payload);
+				const res = await instance.post(`/questions`, payload);
 				questionId = res.data.data.id;
 				toast.success("Đã thêm câu hỏi mới");
 			}
@@ -318,13 +317,13 @@ export default function Questions() {
 					if (editing) {
 						const existingTestCases = await fetchTestCases(questionId);
 						for (const tc of existingTestCases) {
-							await axios.delete(`${API_BASE}/test-cases/${tc.id}`);
+							await instance.delete(`/test-cases/${tc.id}`);
 						}
 					}
 
 					// Create new test cases
 					for (const tc of testCases) {
-						await axios.post(`${API_BASE}/test-cases`, {
+						await instance.post(`/test-cases`, {
 							questionId,
 							input: tc.input,
 							expectedOutput: tc.expectedOutput,
@@ -532,6 +531,7 @@ export default function Questions() {
 			key: "actions",
 			align: "center" as const,
 			width: "13%",
+			fixed: "right" as const,
 			render: (_: any, record: Question) => (
 				<Space size="small">
 					<Tooltip title="Xem chi tiết">
@@ -666,14 +666,28 @@ export default function Questions() {
 					<div className="flex items-center gap-2">
 						<div className="mt-1">
 							<BookOpen />
-						</div>{" "}
+						</div>
 						Quản lý Câu hỏi
 					</div>
 				</Title>
-				<div style={{ display: "flex", gap: 8 }}>
+
+				{/* Thanh tác vụ */}
+				<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+					{/* Tìm kiếm */}
+					<Input
+						allowClear
+						prefix={<SearchOutlined />}
+						placeholder="Tìm theo nội dung/môn học/chương..."
+						value={keyword}
+						onChange={(e) => setKeyword(e.target.value)}
+						style={{ width: 260 }}
+					/>
+					{/* Nút refresh */}
 					<Button icon={<ReloadOutlined />} onClick={handleReload}>
 						Làm mới
 					</Button>
+
+					{/* Nút thêm */}
 					<Button
 						type="primary"
 						icon={<PlusOutlined />}
@@ -693,77 +707,6 @@ export default function Questions() {
 				</div>
 			</div>
 
-			{/* Filters */}
-			<Card style={{ marginBottom: 16 }}>
-				<Row gutter={16}>
-					<Col span={6}>
-						<Input
-							allowClear
-							prefix={<SearchOutlined />}
-							placeholder="Tìm kiếm theo nội dung, môn học, chương..."
-							value={keyword}
-							onChange={(e) => setKeyword(e.target.value)}
-						/>
-					</Col>
-					<Col span={4}>
-						<Select
-							allowClear
-							placeholder="Lọc theo loại"
-							style={{ width: "100%" }}
-							value={filterType}
-							onChange={setFilterType}
-						>
-							<Option value="multiple_choice">Trắc nghiệm</Option>
-							<Option value="essay">Tự luận</Option>
-							<Option value="coding">Code</Option>
-						</Select>
-					</Col>
-					<Col span={5}>
-						<Select
-							allowClear
-							placeholder="Lọc theo môn học"
-							style={{ width: "100%" }}
-							value={filterSubject}
-							onChange={handleFilterSubjectChange}
-						>
-							{subjects.map((s) => (
-								<Option key={s.id} value={s.id}>
-									{s.subjectCode} - {s.subjectName}
-								</Option>
-							))}
-						</Select>
-					</Col>
-					<Col span={5}>
-						<Select
-							allowClear
-							placeholder="Lọc theo chương"
-							style={{ width: "100%" }}
-							value={filterChapter}
-							onChange={setFilterChapter}
-							disabled={!filterSubject}
-						>
-							{chapters.map((c) => (
-								<Option key={c.id} value={c.id}>
-									{c.chapterCode} - {c.chapterName}
-								</Option>
-							))}
-						</Select>
-					</Col>
-					<Col span={4}>
-						<Select
-							allowClear
-							placeholder="Lọc theo độ khó"
-							style={{ width: "100%" }}
-							value={filterDifficulty}
-							onChange={setFilterDifficulty}
-						>
-							<Option value="easy">Dễ</Option>
-							<Option value="medium">Trung bình</Option>
-							<Option value="hard">Khó</Option>
-						</Select>
-					</Col>
-				</Row>
-			</Card>
 
 			{loading ? (
 				<div style={{ textAlign: "center", padding: 60 }}>
@@ -1139,6 +1082,12 @@ export default function Questions() {
 					</Button>,
 				]}
 				width={800}
+				centered
+				bodyStyle={{
+					maxHeight: "70vh",
+					overflowY: "auto",
+					overflowX: "hidden",
+				}}
 			>
 				{selectedQuestion && (
 					<div>

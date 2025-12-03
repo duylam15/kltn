@@ -13,7 +13,6 @@ import { Rnd } from "react-rnd";
 
 
 import type { ColumnsType } from "antd/es/table";
-import axios from "axios";
 import type { Dayjs } from "dayjs";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip,
@@ -21,6 +20,7 @@ import {
 } from "recharts";
 import { PrettyTooltip } from "../../components/PrettyTooltip";
 import { exportToXlsx } from "../../utils/xlsx-export";
+import instance from "../../utils/axiosInstance";
 
 /* === Types & API === */
 type CatalogTerm = { id:number; code:string; name:string; startDate:string; endDate:string };
@@ -32,7 +32,6 @@ type TotalRow = { sectionId:number; studentId:number; studentCode:string; studen
 type BucketSeriesRes = { scheme:string; buckets: { label:string; from:number; to:number }[]; total: number; series: { label:string; count:number }[]; };
 type AttendanceItem = { sectionId:number; present:number; late:number; excused:number; absent:number; total:number; rate:number; };
 
-const API_BASE = "http://localhost:4000/api/v1";
 
 /* === CSS Glassmorphism === */
 const glassStyle: React.CSSProperties = {
@@ -133,7 +132,7 @@ function useCatalog() {
   const reload = async () => {
     try {
       setLoading(true);
-      const { data } = await axios.get(`${API_BASE}/catalog/catalog`, {
+      const { data } = await instance.get(`/catalog/catalog`, {
         params: { scopes: "terms,subjects,sections,teachers" },
       });
       setTerms(data.terms || []);
@@ -185,7 +184,7 @@ export default function AdminStats() {
     <div className="min-h-screen p-4 md:p-6" style={{ background: "#ffffff" }}>
       <Space direction="vertical" size={24} style={{ width: "100%" }}>
         {/* Header */}
-        <Card style={glassStyle} bodyStyle={{ padding: "20px 24px" }}>
+        <div style={glassStyle}>
           <div className="flex items-center gap-3">
             <div style={kpiIconStyle("#6c5ce7", "#8e79ff")}>📊</div>
             <div>
@@ -193,7 +192,7 @@ export default function AdminStats() {
               <p className="m-0 text-sm text-gray-600">Tổng hợp dữ liệu theo lớp, môn, học kỳ</p>
             </div>
           </div>
-        </Card>
+        </div>
 
         <Tabs
           activeKey={activeKey}
@@ -273,7 +272,7 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
       if (minScore != null) params.minTotal = minScore;
       if (maxScore != null) params.maxTotal = maxScore;
 
-      const { data } = await axios.get(`${API_BASE}/stats/grades`, { params });
+      const { data } = await instance.get(`/stats/grades`, { params });
       setItems(data.items || []);
     } catch (e:any) {
       message.error(e?.response?.data?.message || "Không tải được điểm");
@@ -770,7 +769,7 @@ function AttendanceTab({
         params.from = (range[0] as any).startOf("day").toISOString();
         params.to   = (range[1] as any).endOf("day").toISOString();
       }
-      const { data } = await axios.get(`${API_BASE}/stats/attendance`, { params });
+      const { data } = await instance.get(`/stats/attendance`, { params });
       setItems(data.items || []);
     } catch (e: any) {
       message.error(e?.response?.data?.message || "Không tải được chuyên cần");
@@ -1023,8 +1022,8 @@ function DepartmentTab({
       if (maxScore != null) gradeParams.maxTotal = maxScore;
 
       const [gRes, aRes] = await Promise.all([
-        axios.get(`${API_BASE}/stats/grades`, { params: gradeParams }),
-        axios.get(`${API_BASE}/stats/attendance`, { params: { mode: "section", ids: sectionIds.join(",") } }),
+        instance.get(`/stats/grades`, { params: gradeParams }),
+        instance.get(`/stats/attendance`, { params: { mode: "section", ids: sectionIds.join(",") } }),
       ]);
       setGrades(gRes.data.items || []);
       setAttendance(aRes.data.items || []);

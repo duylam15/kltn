@@ -541,6 +541,7 @@ model Submission {
   submittedAt DateTime  @default(now())
   gradedAt    DateTime?
   attempt     Int       @default(1) // 👈 số lần nộp
+  isFinal     Boolean   @default(false) // 👈 submission được chọn để tính điểm
 
   startedAt   DateTime?
   completedAt DateTime?
@@ -556,17 +557,20 @@ model Submission {
 enum JudgeStatus {
   queued
   running
+  graded
+  pending_review  // 🔥 THÊM
   passed
   failed
   compile_error
   runtime_error
   timeout
 }
-
 model SubmissionAnswer {
   id           Int @id @default(autoincrement())
   submissionId Int
   questionId   Int
+
+  essayAnswer     String?              @db.Text
 
   codeAnswer      String?              @db.Text
   language        ProgrammingLanguage?
@@ -707,120 +711,152 @@ model AttendanceLog {
 }
 
 // ============================================================
-// NHÓM 7: HỆ THỐNG XEM ĐIỂM & ĐÁNH GIÁ (Grade Management)
+// NHÓM 7: HỆ THỐNG TÍNH ĐIỂM (Grade Management)
 // ============================================================
 
+/// Cấu hình cột điểm cho từng CourseSection
+/// Mỗi cột điểm có thể là: điểm chuyên cần, điểm đồ án, hoặc điểm quá trình
 enum GradeColumnType {
-  attendance
-  assignment
-  midterm
-  final
-  participation
-  project
-  custom
+  attendance_final    // Điểm chuyên cần (kết hợp điểm danh + bài tập)
+  project            // Điểm đồ án
+  process            // Điểm quá trình (tổng hợp tất cả)
 }
 
+/// Cách tính điểm cho cột điểm
 enum GradeCalculationMethod {
-  average
-  weighted_average
-  sum
-  best_n
-  latest
-  highest
-  percentage
+  manual             // Nhập tay
+  auto_sum           // Tự động cộng tổng các thành phần
+  auto_average       // Tự động tính trung bình
+  weighted_average   // Tính theo trọng số (dùng cho điểm quá trình)
 }
 
+/// Bảng cấu hình cột điểm cho từng lớp học phần
 model GradeColumn {
-  id                Int                    @id @default(autoincrement())
-  sectionId         Int
-  name              String                 @db.VarChar(200)
-  type              GradeColumnType
-  description       String?                @db.Text
-  maxScore          Float                  @default(100)
-  weight            Float?
-  calculationMethod GradeCalculationMethod @default(average)
-  bestNCount        Int?
-  dropLowest        Int?                   @default(0)
-  isPublished       Boolean                @default(false)
-  displayOrder      Int                    @default(0)
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
-
-  section            CourseSection                  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  attendanceSessions GradeColumnAttendanceSession[]
-  assignments        GradeColumnAssignment[]
-  studentGrades      StudentGrade[]
-  parentLinks        GradeColumnLink[]              @relation("ParentColumn")
-  childLinks         GradeColumnLink[]              @relation("ChildColumn")
-
-  @@index([sectionId])
+  id           Int                      @id @default(autoincrement())
+  sectionId    Int
+  
+  name         String                   @db.VarChar(100)  // Tên cột: "Điểm chuyên cần", "Điểm đồ án", "Điểm quá trình"
+  type         GradeColumnType
+  method       GradeCalculationMethod   @default(auto_average)
+  
+  maxScore     Float                    @default(10)      // Điểm tối đa (thường là 10)
+  weight       Float?                    @default(0)       // Trọng số trong điểm tổng (0. 1, 0.4, 0. 5...)
+  
+  displayOrder Int                      @default(0)       // Thứ tự hiển thị
+  isActive     Boolean                  @default(true)
+  
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  
+  section                 CourseSection                  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  
+  // Relations đến các nguồn điểm
+  attendanceSessions      GradeColumnAttendanceSession[] // Link đến các buổi điểm danh
+  assignments             GradeColumnAssignment[]        // Link đến các bài tập/đồ án
+  dependentColumns        GradeColumnDependency[]        @relation("DependentColumn")    // Cột này phụ thuộc vào cột nào
+  sourceForColumns        GradeColumnDependency[]        @relation("SourceColumn")       // Cột này là nguồn cho cột nào
+  
+  // Điểm sinh viên
+  studentGrades           StudentGrade[]
+  
+  @@unique([sectionId, name])
+  @@index([sectionId, type])
+  @@index([isActive])
 }
 
+/// Liên kết giữa cột điểm và buổi điểm danh
+/// Dùng để tính điểm danh tự động từ nhiều buổi
 model GradeColumnAttendanceSession {
-  id            Int      @id @default(autoincrement())
-  gradeColumnId Int
-  sessionId     Int
-  weight        Float?   @default(1)
-  addedAt       DateTime @default(now())
-
-  gradeColumn GradeColumn       @relation(fields: [gradeColumnId], references: [id], onDelete: Cascade)
-  session     AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@unique([gradeColumnId, sessionId])
-  @@index([sessionId])
+  id               Int      @id @default(autoincrement())
+  gradeColumnId    Int
+  attendanceSessionId Int
+  
+  weight           Float    @default(1)  // Trọng số của buổi này (thường để bằng nhau)
+  maxScore         Float?                 // Điểm tối đa của buổi (override từ AttendanceSession. sessionScore)
+  
+  createdAt        DateTime @default(now())
+  
+  gradeColumn      GradeColumn       @relation(fields: [gradeColumnId], references: [id], onDelete: Cascade)
+  attendanceSession AttendanceSession @relation(fields: [attendanceSessionId], references: [id], onDelete: Cascade)
+  
+  @@unique([gradeColumnId, attendanceSessionId])
+  @@index([gradeColumnId])
+  @@index([attendanceSessionId])
 }
 
+/// Liên kết giữa cột điểm và bài tập
+/// Dùng để tính điểm bài tập hoặc đồ án tự động
 model GradeColumnAssignment {
   id            Int      @id @default(autoincrement())
   gradeColumnId Int
   assignmentId  Int
-  weight        Float?   @default(1)
-  addedAt       DateTime @default(now())
-
-  gradeColumn GradeColumn @relation(fields: [gradeColumnId], references: [id], onDelete: Cascade)
-  assignment  Assignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-
+  
+  weight        Float    @default(1)  // Trọng số của bài này
+  maxScore      Float?                // Điểm tối đa (override từ Assignment.maxScore)
+  
+  createdAt     DateTime @default(now())
+  
+  gradeColumn   GradeColumn @relation(fields: [gradeColumnId], references: [id], onDelete: Cascade)
+  assignment    Assignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  
   @@unique([gradeColumnId, assignmentId])
+  @@index([gradeColumnId])
   @@index([assignmentId])
 }
 
+/// Quan hệ phụ thuộc giữa các cột điểm
+/// Ví dụ: Cột "Điểm quá trình" phụ thuộc vào "Điểm chuyên cần" và "Điểm đồ án"
+model GradeColumnDependency {
+  id                  Int      @id @default(autoincrement())
+  dependentColumnId   Int      // Cột đích (cột sẽ được tính)
+  sourceColumnId      Int      // Cột nguồn (cột dùng để tính)
+  
+  weight              Float    @default(1)  // Trọng số/hệ số của cột nguồn trong công thức
+  
+  createdAt           DateTime @default(now())
+  
+  dependentColumn     GradeColumn @relation("DependentColumn", fields: [dependentColumnId], references: [id], onDelete: Cascade)
+  sourceColumn        GradeColumn @relation("SourceColumn", fields: [sourceColumnId], references: [id], onDelete: Cascade)
+  
+  @@unique([dependentColumnId, sourceColumnId])
+  @@index([dependentColumnId])
+  @@index([sourceColumnId])
+}
+
+/// Điểm của sinh viên cho mỗi cột điểm
 model StudentGrade {
-  id              Int       @id @default(autoincrement())
-  gradeColumnId   Int
-  studentId       Int
-  score           Float?
-  maxScore        Float?
-  percentage      Float?
-  note            String?   @db.Text
-  isOverridden    Boolean   @default(false)
-  overriddenScore Float?
-  overriddenAt    DateTime?
-  overriddenBy    Int?
-  calculatedAt    DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  gradeColumn      GradeColumn @relation(fields: [gradeColumnId], references: [id], onDelete: Cascade)
+  id            Int      @id @default(autoincrement())
+  studentId     Int
+  gradeColumnId Int
+  
+  score         Float?                    // Điểm thực tế
+  maxScore      Float    @default(10)    // Điểm tối đa
+  
+  isAutoCalculated Boolean @default(true) // true = tự động tính, false = nhập tay
+  calculatedAt     DateTime?               // Thời điểm tính điểm tự động lần cuối
+  
+  // Thông tin override/điều chỉnh điểm
+  isOverridden     Boolean   @default(false)
+  overriddenScore  Float?                 // Điểm sau khi điều chỉnh
+  overriddenBy     Int?                   // Admin/GV điều chỉnh
+  overriddenAt     DateTime? 
+  overrideReason   String?   @db.Text
+  
+  note             String?   @db.Text     // Ghi chú
+  
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  
   student          Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  overriddenByUser User?       @relation("GradeOverriddenBy", fields: [overriddenBy], references: [id])
-
-  @@unique([gradeColumnId, studentId])
+  gradeColumn      GradeColumn @relation(fields: [gradeColumnId], references: [id], onDelete: Cascade)
+  overriddenByUser User?       @relation("GradeOverriddenBy", fields: [overriddenBy], references: [id], onDelete: SetNull)
+  
+  @@unique([studentId, gradeColumnId])
   @@index([studentId])
   @@index([gradeColumnId])
+  @@index([isOverridden])
 }
 
-model GradeColumnLink {
-  id             Int      @id @default(autoincrement())
-  parentColumnId Int
-  childColumnId  Int
-  weight         Float?   @default(1)
-  addedAt        DateTime @default(now())
-
-  parentColumn GradeColumn @relation("ParentColumn", fields: [parentColumnId], references: [id], onDelete: Cascade)
-  childColumn  GradeColumn @relation("ChildColumn", fields: [childColumnId], references: [id], onDelete: Cascade)
-
-  @@unique([parentColumnId, childColumnId])
-  @@index([childColumnId])
-}
 
 // ============================================================
 // NHÓM 8: DIỄN ĐÀN & THẢO LUẬN (Forum & Discussion)

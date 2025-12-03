@@ -27,3 +27,9 @@ export const deleteChoiceSchema = z.object({
         id: z.string().regex(/^\d+$/), // choiceId
     }),
 });
+
+export const getChoiceSchema = z.object({
+    params: z.object({
+        id: z.string().regex(/^\d+$/).transform(Number),
+    }),
+});

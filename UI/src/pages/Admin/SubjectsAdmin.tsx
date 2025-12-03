@@ -32,15 +32,14 @@ import {
   EyeOutlined,
   FolderOpenOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import { Book } from "lucide-react";
+import instance from "../../utils/axiosInstance";
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 const { Panel } = Collapse;
-const API_BASE = "http://localhost:4000/api/v1";
 
 // Cập nhật type Subject
 type Subject = {
@@ -101,7 +100,7 @@ type ApiResponse = {
   };
 };
 
-export default function Subjects() {
+export default function SubjectsAdmin() {
   const [loading, setLoading] = useState(true);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [keyword, setKeyword] = useState("");
@@ -149,13 +148,13 @@ export default function Subjects() {
       const values = await chapterForm.validateFields();
 
       if (editingChapter) {
-        await axios.patch(
-          `${API_BASE}/chapters/${editingChapter.id}`,
+        await instance.patch(
+          `/chapters/${editingChapter.id}`,
           values
         );
         toast.success("Đã cập nhật chương");
       } else {
-        await axios.post(`${API_BASE}/chapters`, values);
+        await instance.post(`/chapters`, values);
         toast.success("Đã thêm chương mới");
       }
 
@@ -175,7 +174,7 @@ export default function Subjects() {
 
   const handleDeleteChapter = async (chapterId: number) => {
     try {
-      await axios.delete(`${API_BASE}/chapters/${chapterId}`);
+      await instance.delete(`/chapters/${chapterId}`);
       toast.success("Đã xóa chương");
 
       // Refresh subject detail
@@ -199,8 +198,8 @@ export default function Subjects() {
       const params: any = { page, limit };
       if (search) params.q = search;
 
-      const res = await axios.get<ApiResponse>(
-        `${API_BASE}/subjects`,
+      const res = await instance.get<ApiResponse>(
+        `/subjects`,
         { params }
       );
 
@@ -228,7 +227,7 @@ export default function Subjects() {
       setDetailModalOpen(true);
 
       // Lấy chi tiết môn học (đã có chapters)
-      const subjectRes = await axios.get(`${API_BASE}/subjects/${subjectId}`);
+      const subjectRes = await instance.get(`/subjects/${subjectId}`);
 
       if (subjectRes.data.success) {
         setSelectedSubject(subjectRes.data.data);
@@ -264,8 +263,8 @@ export default function Subjects() {
     try {
       setLoadingChapters((prev) => [...prev, chapterId]);
 
-      const res = await axios.get(
-        `${API_BASE}/chapters/${chapterId}/questions`
+      const res = await instance.get(
+        `/chapters/${chapterId}/questions`
       );
 
       if (res.data.success) {
@@ -285,8 +284,8 @@ export default function Subjects() {
   // 🆕 Lấy thống kê câu hỏi theo độ khó
   const fetchChapterStats = async (chapterId: number) => {
     try {
-      const res = await axios.get(
-        `${API_BASE}/chapters/${chapterId}/questions/stats`
+      const res = await instance.get(
+        `/chapters/${chapterId}/questions/stats`
       );
       return res.data.data;
     } catch (err) {
@@ -297,7 +296,7 @@ export default function Subjects() {
 
   const handleDelete = async (id: number) => {
     try {
-      await axios.delete(`${API_BASE}/subjects/${id}`);
+      await instance.delete(`/subjects/${id}`);
       toast.success("Đã xóa môn học");
       fetchSubjects(pagination.current, pagination.pageSize, keyword);
     } catch (err: any) {
@@ -316,13 +315,13 @@ export default function Subjects() {
       };
 
       if (editing) {
-        await axios.patch(
-          `${API_BASE}/subjects/${editing.id}`,
+        await instance.patch(
+          `/subjects/${editing.id}`,
           payload
         );
         toast.success("Đã cập nhật môn học");
       } else {
-        await axios.post(`${API_BASE}/subjects`, payload);
+        await instance.post(`/subjects`, payload);
         toast.success("Đã thêm môn học mới");
       }
 
@@ -511,7 +510,7 @@ export default function Subjects() {
             <div className="">
               <Book />
             </div>{" "}
-            Quản lý Môn học (Ngân hàng câu hỏi)
+            Quản lý Môn học
           </div>
         </Title>
         <div style={{ display: "flex", gap: 8 }}>
@@ -523,7 +522,6 @@ export default function Subjects() {
             onChange={(e) => setKeyword(e.target.value)}
             onSearch={handleSearch}
             style={{ width: 400 }}
-            enterButton
           />
           <Button
             icon={<ReloadOutlined />}
@@ -544,33 +542,6 @@ export default function Subjects() {
           </Button>
         </div>
       </div>
-
-      {/* Statistics */}
-      <Card style={{ marginBottom: 16 }}>
-        <Space size="large">
-          <Statistic
-            title="Tổng số môn học"
-            value={pagination.total}
-            prefix={<BookOutlined />}
-          />
-          <Statistic
-            title="Tổng số chương"
-            value={subjects.reduce(
-              (sum, s) => sum + (s._count?.chapters || 0),
-              0
-            )}
-            prefix={<FileTextOutlined />}
-          />
-          <Statistic
-            title="Tổng số câu hỏi"
-            value={subjects.reduce(
-              (sum, s) => sum + (s._count?.questions || 0),
-              0
-            )}
-            prefix={<QuestionCircleOutlined />}
-          />
-        </Space>
-      </Card>
 
       {loading ? (
         <div style={{ textAlign: "center", padding: 60 }}>

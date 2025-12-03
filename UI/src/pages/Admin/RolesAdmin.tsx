@@ -22,15 +22,14 @@ import {
 	DeleteOutlined,
 	KeyOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import dayjs from "dayjs";
 import { toast } from 'react-hot-toast';
 import { useAuth } from "../../context/authContext";
 import { User } from "lucide-react";
+import instance from "../../utils/axiosInstance";
 
 const { Title } = Typography;
 const { TextArea } = Input;
-const API_BASE = "http://localhost:4000/api/v1";
 
 type Permission = {
 	id: number;
@@ -140,7 +139,7 @@ const CustomCheckbox: React.FC<CustomCheckboxProps> = ({
 	);
 };
 
-export default function Roles() {
+export default function RolesAdmin() {
 	const [loading, setLoading] = useState(true);
 	const [roles, setRoles] = useState<Role[]>([]);
 	const [permissions, setPermissions] = useState<Permission[]>([]);
@@ -167,8 +166,8 @@ export default function Roles() {
 	async function fetchRoles() {
 		try {
 			setLoading(true);
-			const res = await axios.get<{ success: boolean; data: Role[] }>(
-				`${API_BASE}/roles`
+			const res = await instance.get<{ success: boolean; data: Role[] }>(
+				`/roles`
 			);
 			if (res.data.success) {
 				setRoles(res.data.data || []);
@@ -182,8 +181,8 @@ export default function Roles() {
 
 	async function fetchPermissions() {
 		try {
-			const res = await axios.get<{ success: boolean; data: Permission[] }>(
-				`${API_BASE}/permissions`
+			const res = await instance.get<{ success: boolean; data: Permission[] }>(
+				`/permissions`
 			);
 			if (res.data.success) {
 				setPermissions(res.data.data || []);
@@ -195,7 +194,7 @@ export default function Roles() {
 
 	const handleDelete = async (id: number) => {
 		try {
-			await axios.delete(`${API_BASE}/roles/${id}`);
+			await instance.delete(`/roles/${id}`);
 			toast.success("Đã xóa vai trò");
 			setRoles((prev) => prev.filter((r) => r.id !== id));
 		} catch (err) {
@@ -213,12 +212,12 @@ export default function Roles() {
 			};
 
 			if (editing) {
-				const res = await axios.put(`${API_BASE}/roles/${editing.id}`, payload);
+				const res = await instance.put(`/roles/${editing.id}`, payload);
 				toast.success('Successfully created!');
 
 				console.log(res);
 			} else {
-				await axios.post(`${API_BASE}/roles`, payload);
+				await instance.post(`/roles`, payload);
 				toast.success("🎉 Đã thêm vai trò mới");
 			}
 

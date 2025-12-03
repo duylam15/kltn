@@ -26,11 +26,10 @@ import {
 } from "@ant-design/icons";
 import type { UploadProps } from "antd";
 import dayjs from "dayjs";
-import axios from "axios";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/authContext";
+import instance from "../../utils/axiosInstance";
 
-const API_BASE = "http://localhost:4000/api/v1";
 
 type UserRole = "STUDENT" | "TEACHER" | "ADMIN";
 
@@ -86,7 +85,7 @@ export default function ProfilePage() {
         }
 
         setLoading(true);
-        const res = await axios.get(`${API_BASE}/profile/${userId}`);
+        const res = await instance.get(`/profile/${userId}`);
         if (!res.data) {
           setLoading(false);
           return;
@@ -142,8 +141,8 @@ export default function ProfilePage() {
         const formData = new FormData();
         formData.append("file", file as Blob);
 
-        const res = await axios.post(
-          `${API_BASE}/profile/${userId}/avatar`,
+        const res = await instance.post(
+          `/profile/${userId}/avatar`,
           formData,
           {
             headers: { "Content-Type": "multipart/form-data" },
@@ -184,7 +183,7 @@ export default function ProfilePage() {
       }
 
       setAvatarLoading(true);
-      const res = await axios.delete(`${API_BASE}/profile/${userId}/avatar`);
+      const res = await instance.delete(`/profile/${userId}/avatar`);
       const updated: Profile = res.data.data || res.data;
       setProfile(updated);
 
@@ -216,7 +215,7 @@ const handleRemoveAvatar = async () => {
       }
 
       setAvatarLoading(true); // 👈 xoá cũng có loading
-      const res = await axios.delete(`${API_BASE}/profile/${userId}/avatar`);
+      const res = await instance.delete(`/profile/${userId}/avatar`);
       const updated: Profile = res.data.data || res.data;
       setProfile(updated);
       toast.success("Đã xoá avatar.");
@@ -246,7 +245,7 @@ const handleRemoveAvatar = async () => {
           : null,
       };
 
-      const res = await axios.put(`${API_BASE}/profile/${userId}`, payload);
+      const res = await instance.put(`/profile/${userId}`, payload);
       const updated: Profile = res.data.data || res.data;
       setProfile(updated);
 

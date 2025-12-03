@@ -25,13 +25,12 @@ import {
 	BookOutlined,
 	InfoCircleOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import { GraduationCap, UserCog } from "lucide-react";
+import instance from "../../utils/axiosInstance";
 
 const { Title } = Typography;
-const API_BASE = "http://localhost:4000/api/v1";
 
 type User = {
 	id: number;
@@ -69,7 +68,7 @@ type SubjectInstructor = {
 	teacher?: Teacher;
 };
 
-export default function Instructors() {
+export default function InstructorsAdmin() {
 	const [loading, setLoading] = useState(true);
 	const [instructors, setInstructors] = useState<SubjectInstructor[]>([]);
 	const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -125,8 +124,8 @@ export default function Instructors() {
 	async function fetchInstructors() {
 		try {
 			setLoading(true);
-			const res = await axios.get<{ success: boolean; data:   SubjectInstructor[] }>(
-				`${API_BASE}/subject-instructors`
+			const res = await instance.get<{ success: boolean; data:   SubjectInstructor[] }>(
+				`/subject-instructors`
 			);
 			console.log(res.data);
 			if (res.data.success) {
@@ -141,8 +140,8 @@ export default function Instructors() {
 
 	async function fetchTeachers() {
 		try {
-			const res = await axios.get<{ success: boolean; data: Teacher[] }>(
-				`${API_BASE}/teachers`
+			const res = await instance.get<{ success: boolean; data: Teacher[] }>(
+				`/teachers`
 			);
 			if (res.data.success) {
 				setTeachers(res.data.data || []);
@@ -154,8 +153,8 @@ export default function Instructors() {
 
 	async function fetchSubjects() {
 		try {
-			const res = await axios.get<{ success: boolean; data: Subject[] }>(
-				`${API_BASE}/subjects`
+			const res = await instance.get<{ success: boolean; data: Subject[] }>(
+				`/subjects`
 			);
 			if (res.data.success) {
 				setSubjects(res.data.data || []);
@@ -167,8 +166,8 @@ export default function Instructors() {
 
 	const handleDelete = async (subjectId: number, teacherId: number) => {
 		try {
-			await axios.delete(
-				`${API_BASE}/subject-instructors/${subjectId}/${teacherId}`
+			await instance.delete(
+				`/subject-instructors/${subjectId}/${teacherId}`
 			);
 			toast.success("Đã xóa phân công");
 			setInstructors((prev) =>
@@ -213,7 +212,7 @@ export default function Instructors() {
 
 				// Thêm phân công mới (bulk)
 				if (toAdd.length > 0) {
-					await axios.post(`${API_BASE}/subject-instructors/bulk-assign-subjects`, {
+					await instance.post(`/subject-instructors/bulk-assign-subjects`, {
 						teacherId: selectedTeacher,
 						subjectIds: toAdd,
 						role: "owner",
@@ -222,7 +221,7 @@ export default function Instructors() {
 
 				// Xóa phân công cũ (bulk)
 				if (toRemove.length > 0) {
-					await axios.delete(`${API_BASE}/subject-instructors/bulk-remove-teachers`, {
+					await instance.delete(`/subject-instructors/bulk-remove-teachers`, {
 						data: {
 							subjectId: toRemove[0], // Xóa từng môn
 							teacherIds: [selectedTeacher],
@@ -231,7 +230,7 @@ export default function Instructors() {
 
 					// Nếu có nhiều môn cần xóa, xóa lần lượt
 					for (let i = 1; i < toRemove.length; i++) {
-						await axios.delete(`${API_BASE}/subject-instructors/bulk-remove-teachers`, {
+						await instance.delete(`/subject-instructors/bulk-remove-teachers`, {
 							data: {
 								subjectId: toRemove[i],
 								teacherIds: [selectedTeacher],
@@ -276,8 +275,8 @@ export default function Instructors() {
 
 				// Thêm phân công mới (bulk)
 				if (toAdd.length > 0) {
-					await axios.post(
-						`${API_BASE}/subject-instructors/bulk-assign-teachers`,
+					await instance.post(
+						`/subject-instructors/bulk-assign-teachers`,
 						{
 							subjectId: selectedSubject,
 							teacherIds: toAdd,
@@ -288,8 +287,8 @@ export default function Instructors() {
 
 				// Xóa phân công cũ (bulk)
 				if (toRemove.length > 0) {
-					await axios.delete(
-						`${API_BASE}/subject-instructors/bulk-remove-teachers`,
+					await instance.delete(
+						`/subject-instructors/bulk-remove-teachers`,
 						{
 							data: {
 								subjectId: selectedSubject,

@@ -9,14 +9,13 @@ const router = Router();
 // tạo permission → cần quyền "permission.create"
 router.post(
     "/",
-    requirePermission(["permission.create"]),
     permissionController.createPermission
 );
 
 // xem danh sách → cần quyền "permission.view"
 router.get(
     "/",
-    requirePermission(["notification:viewxx", "notification:dexxlete"]),
+    // requirePermission(["notification:viewxx", "notification:dexxlete"]),
     permissionController.listPermissions
 );
 

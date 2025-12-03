@@ -6,3 +6,13 @@ body {
     margin: 0px;
     background:#f8fafd;
 }
+
+/* Viền ngoài bảng */
+.ant-table-bordered .ant-table-container {
+  border: 1px solid #e3e3e3 !important;
+}
+
+/* Viền giữa các ô */
+.ant-table-bordered .ant-table-cell {
+  border: 1px solid #e3e3e3 !important;
+}

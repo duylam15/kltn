@@ -18,17 +18,16 @@ import {
 	FileText,
 } from "lucide-react";
 import { useState } from "react";
-import api from "../utils/axiosInstance";
 import { useAuth } from "../context/authContext";
 
 export default function LayoutAdmin() {
 	const navigate = useNavigate();
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-	const { user,  logout } = useAuth();
+	const { user, logout } = useAuth();
 
-	  const getInitial = () =>
-  user?.fullName ? user.fullName.charAt(0).toUpperCase() : "A";
+	const getInitial = () =>
+		user?.fullName ? user.fullName.charAt(0).toUpperCase() : "A";
 
 	// Hàm check quyền
 	const hasPermission = (perm: string) =>
@@ -37,23 +36,22 @@ export default function LayoutAdmin() {
 	const sidebarMenu = [
 		// Tổng quan
 		{ to: "/admin", label: "Thống kê", icon: LineChart, end: true },
-		{ to: "/admin/reports", label: "Báo cáo", icon: ClipboardList },
 
 		// Quản lý học tập
-		{ to: "/admin/subjects", label: "Môn học", icon: Book },
 		{ to: "/admin/courses", label: "Học phần", icon: Layers },
+		{ to: "/admin/subjects", label: "Môn học", icon: Book },
 		{ to: "/admin/assignments", label: "Bài tập", icon: FileQuestion },
 		{ to: "/admin/questions", label: "Câu hỏi", icon: BookOpen },
 		{ to: "/admin/materials", label: "Tài liệu", icon: FileText },
 
 		// Quản lý con người
-		{ to: "/admin/teachers", label: "Giảng viên", icon: GraduationCap, required: "*" },
-		{ to: "/admin/students", label: "Sinh viên", icon: Users, required: "*" },
+		{ to: "/admin/teachers", label: "Giảng viên", icon: GraduationCap },
+		{ to: "/admin/students", label: "Sinh viên", icon: Users },
 		{ to: "/admin/instructors", label: "Phân công", icon: UserCog },
 
 		// Hệ thống
-		{ to: "/admin/roles", label: "Vai trò", icon: User, required: "role:view" },
-		{ to: "/admin/notifications", label: "Thông báo", icon: Bell },
+		{ to: "/admin/roles", label: "Vai trò", icon: User },
+		// { to: "/admin/roles", label: "Vai trò", icon: User, required: "role:view" },
 	];
 
 
@@ -61,8 +59,6 @@ export default function LayoutAdmin() {
 		await logout();
 		navigate("/login");
 	};
-
-
 
 	return (
 		<div className="h-screen flex flex-col">
@@ -97,23 +93,23 @@ export default function LayoutAdmin() {
 					{/* Right Section */}
 					<div className="ml-auto flex items-center gap-1">
 						{/* User Profile */}
-						            <button
-  className="ml-2 p-1 rounded-full hover:bg-gray-100 transition-colors"
-  onClick={() => navigate("/admin/profile")}
-  title="Hồ sơ cá nhân"
->
-  {user?.avatarUrl ? (
-    <img
-      src={user.avatarUrl}
-      alt="avatar"
-      className="h-8 w-8 rounded-full object-cover"
-    />
-  ) : (
-    <div className="h-8 w-8 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 text-white text-sm font-medium flex items-center justify-center">
-      {getInitial()}
-    </div>
-  )}
-</button>
+						<button
+							className="ml-2 p-1 rounded-full hover:bg-gray-100 transition-colors"
+							onClick={() => navigate("/admin/profile")}
+							title="Hồ sơ cá nhân"
+						>
+							{user?.avatarUrl ? (
+								<img
+									src={user.avatarUrl}
+									alt="avatar"
+									className="h-8 w-8 rounded-full object-cover"
+								/>
+							) : (
+								<div className="h-8 w-8 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 text-white text-sm font-medium flex items-center justify-center">
+									{getInitial()}
+								</div>
+							)}
+						</button>
 
 						{/* Logout */}
 						<button
@@ -149,7 +145,7 @@ export default function LayoutAdmin() {
 					{/* Navigation */}
 					<div className="flex flex-col h-full">
 						<nav className="px-3 py-4 overflow-y-auto flex-1 min-h-0">
-							{sidebarMenu.map((item) => {
+							{sidebarMenu.map((item: any) => {
 								if (item.required && !hasPermission(item.required)) return null;
 								return (
 									<NavLink

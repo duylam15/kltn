@@ -1,45 +1,50 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Table,
   Button,
   Spin,
   Typography,
   Tag,
+  Modal,
   Input,
   Tooltip,
-  Switch,
-  Popconfirm,
-  Modal,
   Form,
+  Popconfirm,
   DatePicker,
   Select,
-  Checkbox,
-  Divider,
   Row,
   Col,
-  InputNumber,
+  Checkbox,
+  Divider,
   Space,
-  Badge,
+  Card,
+  Statistic,
+  InputNumber,
+  Switch,
+  Alert,
 } from "antd";
 import {
   ReloadOutlined,
   SearchOutlined,
-  EyeOutlined,
-  FileTextOutlined,
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  UserOutlined,
-  HistoryOutlined,
-  SaveOutlined,
-  CheckCircleOutlined,
+  BookOutlined,
+  ApartmentOutlined,
+  FilterOutlined,
+  ClearOutlined,
+  ThunderboltOutlined,
+  GlobalOutlined,
+  LockOutlined,
+  ShareAltOutlined,
+  FolderOpenOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
-import { v4 as uuidv4 } from "uuid";
-
+import { FileQuestion } from "lucide-react";
 import { useAuth } from "../../context/authContext";
+import { v4 as uuidv4 } from "uuid";
+import instance from "../../utils/axiosInstance";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -47,6 +52,7 @@ const API_BASE = "http://localhost:4000/api/v1";
 
 type Assignment = {
   id: number;
+  sectionId?: number;
   title: string;
   description?: string;
   type: "exercise" | "quiz" | "project" | "exam";
@@ -55,55 +61,26 @@ type Assignment = {
   passingScore?: number;
   timeLimit?: number;
   maxAttempts?: number;
-  shuffleQuestions?: boolean;
   createdBy?: number;
   originalAssignmentId?: string;
+  shuffleQuestions?: boolean;
   showAnswersAfterSubmit?: boolean;
   allowLateSubmission?: boolean;
+  isPublic?: boolean;
   createdAt?: string;
   updatedAt?: string;
-  submissions?: Submission[];
-  sectionLinks?: Array<{
-    id: number;
-    sectionId: number;
-    assignmentId: number;
-    assignedAt: string;
-    isOpen: boolean;
-  }>;
 };
 
-type Submission = {
+type Section = {
   id: number;
-  assignmentId: number;
-  studentId: number;
-  filePath?: string;
-  answerText?: string;
-  score?: number;
-  maxScore?: number;
-  autoGraded: boolean;
-  feedback?: string;
-  submittedAt: string;
-  gradedAt?: string;
-  startedAt: string;
-  completedAt: string;
-};
-
-type Student = {
-  id: number;
-  userId: number;
-  studentCode: string;
-  className: string;
-  major: string;
-  academicYear?: string;
-  enrollmentYear?: number;
-  gpa: string;
-  status: string;
-  user: {
-    id: number;
-    fullName: string;
-    email: string;
-    phone?: string;
-    avatarUrl?: string;
+  sectionCode: string;
+  sectionName: string;
+  subject: {
+    subjectCode: string;
+    subjectName: string;
+  };
+  term: {
+    name: string;
   };
 };
 
@@ -111,336 +88,387 @@ type Question = {
   id: number;
   content: string;
   type: string;
-  difficulty?: string;
+  difficulty?: "easy" | "medium" | "hard";
   points?: number;
+  subjectId?: number;
+  chapterId?: number;
+  isPublic?: boolean;
+  subject?: {
+    id: number;
+    subjectCode: string;
+    subjectName: string;
+  };
+  chapter?: {
+    id: number;
+    chapterCode: string;
+    chapterName: string;
+  };
+  createdByUser?: {
+    id: number;
+    fullName: string;
+  };
 };
 
-export default function AssignmentTeacher() {
-  const { user } = useAuth();
-  const teacherId = user?.id;
-  const path = window.location.pathname;
-  const sectionId = Number(path.split("/")[3]);
+type QuestionSubject = {
+  id: number;
+  subjectCode: string;
+  subjectName: string;
+};
 
+type Chapter = {
+  id: number;
+  subjectId: number;
+  chapterCode: string;
+  chapterName: string;
+};
+
+export default function AssignmentsTeacherOut() {
   const [loading, setLoading] = useState(true);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [visibility, setVisibility] = useState<Record<number, boolean>>({});
   const [keyword, setKeyword] = useState("");
 
-  // Modal states
   const [form] = Form.useForm<any>();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Assignment | null>(null);
 
-  // State cho câu hỏi
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
+  const [assignedSectionIds, setAssignedSectionIds] = useState<number[]>([]);
+  const [tempSelectedSectionIds, setTempSelectedSectionIds] = useState<number[]>([]);
+  const [savingAssignment, setSavingAssignment] = useState(false);
+
   const [assignedQuestionIds, setAssignedQuestionIds] = useState<number[]>([]);
   const [tempSelectedQuestionIds, setTempSelectedQuestionIds] = useState<number[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [questionKeyword, setQuestionKeyword] = useState("");
 
-  // Modal xem điểm
-  const [scoreModalOpen, setScoreModalOpen] = useState(false);
-  const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
+  const [questionSubjects, setQuestionSubjects] = useState<QuestionSubject[]>([]);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [selectedSubjectId, setSelectedSubjectId] = useState<number | undefined>();
+  const [selectedChapterId, setSelectedChapterId] = useState<number | undefined>();
+  const [selectedDifficulty, setSelectedDifficulty] = useState<string | undefined>();
+  const [selectedType, setSelectedType] = useState<string | undefined>();
 
-  // 🔥 Modal xem lịch sử nộp bài của học sinh
-  const [submissionHistoryModalOpen, setSubmissionHistoryModalOpen] = useState(false);
-  const [selectedStudentSubmissions, setSelectedStudentSubmissions] = useState<Submission[]>([]);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+  const [autoGenModalOpen, setAutoGenModalOpen] = useState(false);
+  const [autoGenForm] = Form.useForm<any>();
+  const [generatingQuestions, setGeneratingQuestions] = useState(false);
 
-  // 🔥 State cho việc sửa điểm
-  const [editingScore, setEditingScore] = useState<{ submissionId: number; score: number } | null>(null);
+  const [quickAddModalOpen, setQuickAddModalOpen] = useState(false);
+  const [quickAddForm] = Form.useForm<any>();
+  const [addingQuestions, setAddingQuestions] = useState(false);
+  const [quickAddChapters, setQuickAddChapters] = useState<Chapter[]>([]);
 
-  const [submissionDetailModalOpen, setSubmissionDetailModalOpen] = useState(false);
-  const [selectedSubmissionDetail, setSelectedSubmissionDetail] = useState<any>(null);
-  const [loadingSubmissionDetail, setLoadingSubmissionDetail] = useState(false);
+  const [filterPublic, setFilterPublic] = useState<boolean | null>(null);
+  const [filterType, setFilterType] = useState<string | null>(null);
+
+  const { user } = useAuth();
+  const teacherId = user?.teacher?.id;
+  const userId = user?.id;
 
   useEffect(() => {
-    fetchData();
-    fetchQuestions();
-    fetchStudents();
-  }, [sectionId]);
+    fetchAssignments();
+    fetchSections();
+    fetchQuestionSubjects();
+  }, []);
 
-  const fetchData = async () => {
+  useEffect(() => {
+    if (modalOpen && userId) {
+      fetchQuestionsMineAndPublic();
+    }
+  }, [selectedSubjectId, selectedChapterId, selectedDifficulty, selectedType, modalOpen]);
+
+  useEffect(() => {
+    if (selectedSubjectId) {
+      fetchChaptersBySubject(selectedSubjectId);
+    } else {
+      setChapters([]);
+      setSelectedChapterId(undefined);
+    }
+  }, [selectedSubjectId]);
+
+  const calculateTotalPoints = () => {
+    return tempSelectedQuestionIds.reduce((total, questionId) => {
+      const question = questions.find(q => q.id === questionId);
+      return total + (question?.points || 0);
+    }, 0);
+  };
+
+  const isPointsValid = () => {
+    const totalPoints = calculateTotalPoints();
+    const maxScore = Number(form.getFieldValue('maxScore') || 10);
+    return totalPoints === maxScore;
+  };
+
+  async function fetchAssignments() {
     try {
       setLoading(true);
-      const res = await axios.get(`${API_BASE}/assignments/sections/${sectionId}/assignments`);
-
+      const res = await instance.get<{ success: boolean; data: Assignment[] }>(
+        `/assignments/teacher/${userId}`
+      );
       if (res.data.success) {
-        const assignmentsData = res.data.data || [];
-        setAssignments(assignmentsData);
-
-        const visibilityMap: Record<number, boolean> = {};
-        assignmentsData.forEach((assignment: Assignment) => {
-          if (assignment.sectionLinks && assignment.sectionLinks.length > 0) {
-            visibilityMap[assignment.id] = assignment.sectionLinks[0].isOpen;
-          }
-        });
-        setVisibility(visibilityMap);
+        setAssignments(res.data.data || []);
       }
-    } catch (err) {
-      console.error("Lỗi khi tải dữ liệu:", err);
-      toast.error("Không tải được dữ liệu bài tập");
+    } catch {
+      toast.error("Không tải được danh sách bài tập");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const fetchStudents = async () => {
+  async function fetchSections() {
     try {
-      const res = await axios.get<{ success: boolean; data: any[] }>(
-        `${API_BASE}/sections-enrollments/section/${sectionId}/students`
+      const res = await instance.get<{ success: boolean; data: any[] }>(
+        `/sections-instructors?teacher_id=${teacherId}`
       );
       if (res.data.success) {
-        setStudents(res.data.data.map((item: any) => item.student) || []);
-      }
-    } catch (err) {
-      console.error("Lỗi khi tải danh sách học sinh:", err);
-      toast.error("Không tải được danh sách học sinh");
-    }
-  };
-
-  const fetchQuestions = async () => {
-    try {
-      const res = await axios.get<{ success: boolean; data: Question[] }>(
-        `${API_BASE}/questions`
-      );
-      if (res.data.success) {
-        setQuestions(res.data.data || []);
+        setSections(res.data.data.map((item: any) => item.section) || []);
       }
     } catch {
-      toast.error("Không tải được danh sách câu hỏi");
+      toast.error("Không tải được danh sách lớp");
     }
-  };
+  }
 
-  const fetchAssignmentWithSubmissions = async (assignmentId: number) => {
+  const handleTogglePublic = async (assignmentId: number, isPublic: boolean) => {
     try {
-      const res = await axios.get<{ success: boolean; data: Assignment }>(
-        `${API_BASE}/assignments/${assignmentId}/best-submissions?sectionId=${sectionId}`
-      );
-
+      const res = await instance.put(`/assignments/${assignmentId}`, {
+        isPublic,
+      });
       if (res.data.success) {
-        console.log("Fetched assignment with best submissions:", res.data.data);
-        setSelectedAssignment(res.data.data);
-        setScoreModalOpen(true);
-      } else {
-        toast.error("Không tải được thông tin bài tập");
-      }
-    } catch (err) {
-      console.error("Lỗi khi tải chi tiết bài tập:", err);
-      toast.error("Không tải được thông tin bài tập");
-    }
-  };
-
-  const fetchStudentSubmissions = async (studentId: number, assignmentId: number) => {
-    try {
-      setLoadingSubmissions(true);
-      const res = await axios.get<{ success: boolean; data: Submission[] }>(
-        `${API_BASE}/assignments/${assignmentId}/student/${studentId}/submissions`
-      );
-
-      if (res.data.success) {
-        const sortedSubmissions = (res.data.data || []).sort(
-          (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
-        );
-        setSelectedStudentSubmissions(sortedSubmissions);
-        const student = students.find(s => s.id === studentId);
-        setSelectedStudent(student || null);
-        setSubmissionHistoryModalOpen(true);
-      }
-    } catch (err) {
-      console.error("Lỗi khi tải lịch sử nộp bài:", err);
-      toast.error("Không tải được lịch sử nộp bài");
-    } finally {
-      setLoadingSubmissions(false);
-    }
-  };
-
-  // 🔥 Hàm sửa điểm của submission
-  const handleUpdateScore = async (submissionId: number, newScore: number) => {
-    try {
-      const res = await axios.put(
-        `${API_BASE}/submissions/${submissionId}`,
-        { score: newScore }
-      );
-
-      if (res.data.success) {
-        toast.success("Đã cập nhật điểm");
-
-        // Cập nhật lại danh sách submissions
-        setSelectedStudentSubmissions(prev =>
-          prev.map(sub =>
-            sub.id === submissionId ? { ...sub, score: newScore } : sub
-          )
-        );
-
-        // Cập nhật lại bảng điểm chính
-        fetchAssignmentWithSubmissions(selectedAssignment!.id);
-        setEditingScore(null);
-      }
-    } catch (err) {
-      console.error("Lỗi khi cập nhật điểm:", err);
-      toast.error("Không thể cập nhật điểm");
-    }
-  };
-
-  // 🔥 Thêm hàm toggle showAnswersAfterSubmit
-  const handleToggleShowAnswers = async (assignmentId: number) => {
-    try {
-      // Lấy trạng thái hiện tại
-      const assignment = assignments.find(a => a.id === assignmentId);
-      if (!assignment) return;
-
-      const newStatus = !assignment.showAnswersAfterSubmit;
-
-      // Gọi API update
-      const res = await axios.put(
-        `${API_BASE}/assignments/${assignmentId}`,
-        { showAnswersAfterSubmit: newStatus }
-      );
-
-      if (res.data.success) {
-        toast.success(`Đã ${newStatus ? "bật" : "tắt"} chế độ công bố điểm`);
-
-        // Cập nhật state local
+        toast.success(`Đã ${isPublic ? "chia sẻ" : "hủy chia sẻ"} bài tập`);
         setAssignments((prev) =>
-          prev.map((a) =>
-            a.id === assignmentId
-              ? { ...a, showAnswersAfterSubmit: newStatus }
-              : a
-          )
+          prev.map((a) => (a.id === assignmentId ? { ...a, isPublic } : a))
         );
-      } else {
-        toast.error(res.data.message || "Không thể cập nhật trạng thái");
       }
     } catch (err: any) {
-      console.error("Lỗi toggle show answers:", err);
-      toast.error("Lỗi server khi cập nhật trạng thái");
+      console.error("Lỗi toggle public:", err);
+      toast.error("Không thể cập nhật trạng thái chia sẻ");
     }
   };
 
-  // 🔥 Hàm chọn submission làm điểm cuối cùng
-  const handleSetFinalScore = async (submissionId: number) => {
+  async function fetchQuestionSubjects() {
     try {
-      const submission = selectedStudentSubmissions.find(s => s.id === submissionId);
-      if (!submission || submission.score === null || submission.score === undefined) {
-        toast.error("Submission này chưa có điểm");
-        return;
+      const res = await instance.get<{
+        success: boolean;
+        data: QuestionSubject[];
+        meta: any;
+      }>(`/subjects? limit=100`);
+      if (res.data.success) {
+        setQuestionSubjects(res.data.data || []);
       }
+    } catch {
+      toast.error("Không tải được danh sách môn học");
+    }
+  }
 
-      // Cập nhật điểm cuối cùng bằng cách cập nhật tất cả submissions khác
-      const res = await axios.post(
-        `${API_BASE}/submissions/${submissionId}/set-final`,
-        {
-          studentId: selectedStudent!.id,
-          assignmentId: selectedAssignment!.id
-        }
+  async function fetchChaptersBySubject(subjectId: number): Promise<Chapter[]> {
+    try {
+      const res = await instance.get<{ success: boolean; data: Chapter[] }>(
+        `/questions/${subjectId}/chapters`
       );
+      if (res.data.success) {
+        setChapters(res.data.data || []);
+        return res.data.data || [];
+      }
+      return [];
+    } catch {
+      toast.error("Không tải được danh sách chương");
+      setChapters([]);
+      return [];
+    }
+  }
+
+  async function fetchQuestionsMineAndPublic() {
+    if (!userId) {
+      toast.error("Không tìm thấy thông tin người dùng");
+      return;
+    }
+
+    try {
+      setLoadingQuestions(true);
+      const params: any = { page: 1, limit: 1000 };
+
+      if (selectedSubjectId) params.subjectId = selectedSubjectId;
+      if (selectedChapterId) params.chapterId = selectedChapterId;
+      if (selectedDifficulty) params.difficulty = selectedDifficulty;
+      if (selectedType) params.type = selectedType;
+
+      const res = await instance.get<{
+        success: boolean;
+        data: { items: Question[] };
+      }>(`/questions/user/${userId}/mine-and-public`, { params });
 
       if (res.data.success) {
-        toast.success("Đã chọn làm điểm cuối cùng");
-
-        // Refresh submissions
-        await fetchStudentSubmissions(selectedStudent!.id, selectedAssignment!.id);
-        await fetchAssignmentWithSubmissions(selectedAssignment!.id);
+        const items = (res.data.data as any).items || res.data.data || [];
+        setQuestions(items);
       }
-    } catch (err) {
-      console.error("Lỗi khi chọn điểm cuối cùng:", err);
-      toast.error("Không thể chọn điểm cuối cùng");
-    }
-  };
-
-  // Hàm lấy chi tiết submission (answers + code results)
-  const fetchSubmissionDetail = async (submissionId: number) => {
-    try {
-      setLoadingSubmissionDetail(true);
-
-      // Fetch submission info
-      const submissionRes = await axios.get<{ success: boolean; data: Submission }>(
-        `${API_BASE}/submissions/${submissionId}`
-      );
-
-      // Fetch submission answers
-      const answersRes = await axios.get<{ success: boolean; data: any[] }>(
-        `${API_BASE}/submission-answers/submission/${submissionId}`
-      );
-
-      // Fetch code results
-      const codeResultsRes = await axios.get<{ success: boolean; data: any[] }>(
-        `${API_BASE}/code-submission-results/submission/${submissionId}`
-      );
-
-      console.log("Fetched submission detail:", {
-        submission: submissionRes.data.data,
-        answers: answersRes.data.data,
-        codeResults: codeResultsRes.data.data,
-      });
-
-      // Fetch questions for each answer
-      const answersWithQuestions = await Promise.all(
-        (answersRes.data.data || []).map(async (answer: any) => {
-          try {
-            const questionRes = await axios.get(
-              `${API_BASE}/questions/${answer.questionId}`
-            );
-            if (questionRes.data.success) {
-              return { ...answer, question: questionRes.data.data };
-            }
-            return answer;
-          } catch {
-            return answer;
-          }
-        })
-      );
-
-      setSelectedSubmissionDetail({
-        submission: submissionRes.data.data,
-        answers: answersWithQuestions.sort((a: any, b: any) =>
-          (a.question?.order || 0) - (b.question?.order || 0)
-        ),
-        codeResults: codeResultsRes.data.data || [],
-      });
-
-      setSubmissionDetailModalOpen(true);
-    } catch (err) {
-      console.error("Lỗi khi tải chi tiết bài làm:", err);
-      toast.error("Không tải được chi tiết bài làm");
+    } catch (error) {
+      console.error("Error fetching mine & public questions:", error);
+      toast.error("Không tải được danh sách câu hỏi");
     } finally {
-      setLoadingSubmissionDetail(false);
+      setLoadingQuestions(false);
     }
-  };
-
-  const handleToggleVisibility = async (assignmentId: number, checked: boolean) => {
-    try {
-      const res = await axios.patch(
-        `${API_BASE}/sections-assignments/sections/${sectionId}/assignments/${assignmentId}/visibility`,
-        { isOpen: checked }
-      );
-      if (res.data.success) {
-        toast.success(`Đã ${checked ? "mở" : "đóng"} bài tập`);
-        setVisibility((prev) => ({ ...prev, [assignmentId]: checked }));
-      } else {
-        toast.error(res.data.message || "Không thể cập nhật trạng thái");
-      }
-    } catch (err: any) {
-      console.error("Lỗi toggle visibility:", err);
-      toast.error("Lỗi server khi cập nhật trạng thái");
-    }
-  };
+  }
 
   const handleDelete = async (id: number) => {
     try {
-      await axios.delete(`${API_BASE}/assignments/${id}`);
+      await instance.delete(`/assignments/${id}`);
       toast.success("Đã xóa bài tập");
       setAssignments((prev) => prev.filter((a) => a.id !== id));
-      if (visibility[id] !== undefined) {
-        const { [id]: removed, ...rest } = visibility;
-        setVisibility(rest);
-      }
     } catch {
       toast.error("Không thể xóa bài tập");
     }
+  };
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+
+      const totalPoints = calculateTotalPoints();
+      const maxScore = Number(values.maxScore || 10);
+
+      if (tempSelectedQuestionIds.length > 0 && totalPoints !== maxScore) {
+        Modal.error({
+          title: 'Không thể lưu bài tập',
+          content: (
+            <div>
+              <p>Tổng điểm các câu hỏi đã chọn phải bằng điểm tối đa của bài tập! </p>
+              <p><strong>Điểm tối đa:</strong> {maxScore}</p>
+              <p><strong>Tổng điểm câu hỏi:</strong> {totalPoints}</p>
+              <p><strong>Chênh lệch:</strong> {Math.abs(maxScore - totalPoints)}</p>
+            </div>
+          ),
+        });
+        return;
+      }
+
+      const uniqueCode = uuidv4();
+
+      const payload = {
+        ...(values.sectionId ? { sectionId: Number(values.sectionId) } : {}),
+        title: values.title.trim(),
+        description: values.description?.trim(),
+        type: values.type,
+        dueDate: values.dueDate ? values.dueDate.toISOString() : null,
+        maxScore: Number(values.maxScore || 10),
+        passingScore: values.passingScore ? Number(values.passingScore) : null,
+        timeLimit: values.timeLimit ? Number(values.timeLimit) : null,
+        maxAttempts: values.maxAttempts ? Number(values.maxAttempts) : 1,
+        shuffleQuestions: values.shuffleQuestions || false,
+        showAnswersAfterSubmit: values.showAnswersAfterSubmit || false,
+        allowLateSubmission: values.allowLateSubmission || false,
+        isPublic: values.isPublic || false,
+        createdBy: userId,
+        originalAssignmentId: uniqueCode,
+        subjectId: values.subjectId,
+        chapterId: values.chapterId,
+      };
+
+      let assignmentId: number;
+
+      if (editing) {
+        const res = await instance.put(
+          `/assignments/${editing.id}`,
+          payload
+        );
+        assignmentId = editing.id;
+        toast.success("Đã cập nhật bài tập");
+      } else {
+        const res = await instance.post(`/assignments`, payload);
+        assignmentId = res.data.data.id;
+        toast.success("Đã tạo bài tập mới");
+      }
+
+      await saveQuestionAssignments(assignmentId);
+
+      setModalOpen(false);
+      setEditing(null);
+      form.resetFields();
+      setTempSelectedQuestionIds([]);
+      setAssignedQuestionIds([]);
+      resetFilters();
+      fetchAssignments();
+    } catch (err: any) {
+      if (err?.errorFields) return;
+      toast.error(
+        err?.response?.data?.message || "Không thể lưu thông tin bài tập"
+      );
+    }
+  };
+
+  const getStatistics = () => {
+    const totalAssignments = assignments.length;
+    const publicAssignments = assignments.filter((a) => a.isPublic).length;
+    const privateAssignments = totalAssignments - publicAssignments;
+    const assignmentsByType = {
+      exercise: assignments.filter((a) => a.type === "exercise").length,
+      quiz: assignments.filter((a) => a.type === "quiz").length,
+      project: assignments.filter((a) => a.type === "project").length,
+      exam: assignments.filter((a) => a.type === "exam").length,
+    };
+
+    return {
+      totalAssignments,
+      publicAssignments,
+      privateAssignments,
+      assignmentsByType,
+    };
+  };
+
+  const stats = getStatistics();
+
+  const saveQuestionAssignments = async (assignmentId: number) => {
+    try {
+      const toAdd = tempSelectedQuestionIds.filter(
+        (id) => !assignedQuestionIds.includes(id)
+      );
+
+      const toRemove = assignedQuestionIds.filter(
+        (id) => !tempSelectedQuestionIds.includes(id)
+      );
+
+      const addPromises = toAdd.map((questionId) =>
+        instance.post(
+          `/assignments-questions/assignments/${assignmentId}/questions/${questionId}`
+        )
+      );
+
+      const removePromises = toRemove.map((questionId) =>
+        instance.delete(
+          `/assignments-questions/assignments/${assignmentId}/questions/${questionId}`
+        )
+      );
+
+      await Promise.all([...addPromises, ...removePromises]);
+
+      if (toAdd.length > 0 || toRemove.length > 0) {
+        toast.success(`Đã cập nhật câu hỏi (thêm: ${toAdd.length}, xóa: ${toRemove.length})`);
+      }
+    } catch (error) {
+      console.error("Error saving question assignments:", error);
+      toast.error("Không thể cập nhật câu hỏi");
+      throw error;
+    }
+  };
+
+  const openAssignModal = async (assignment: Assignment) => {
+    setSelectedAssignment(assignment);
+    try {
+      const res = await instance.get<{ success: boolean; data: any[] }>(
+        `/sections-assignments/assignments/${assignment.id}/sections`
+      );
+      if (res.data.success) {
+        const sectionIds = res.data.data.map((s) => s.sectionId);
+        setAssignedSectionIds(sectionIds);
+        setTempSelectedSectionIds(sectionIds);
+      }
+    } catch {
+      toast.error("Không tải được danh sách lớp đã gán");
+      setAssignedSectionIds([]);
+      setTempSelectedSectionIds([]);
+    }
+    setAssignModalOpen(true);
   };
 
   const openCreateEditModal = async (assignment?: Assignment) => {
@@ -453,15 +481,15 @@ export default function AssignmentTeacher() {
 
       setLoadingQuestions(true);
       try {
-        const res = await axios.get<{
+        const res = await instance.get<{
           success: boolean;
           data: Array<{
             assignmentId: number;
             questionId: number;
             question: Question;
-          }>;
+          }>
         }>(
-          `${API_BASE}/assignments-questions/assignments/${assignment.id}/questions`
+          `/assignments-questions/assignments/${assignment.id}/questions`
         );
 
         if (res.data.success && res.data.data) {
@@ -486,97 +514,143 @@ export default function AssignmentTeacher() {
       setAssignedQuestionIds([]);
       setTempSelectedQuestionIds([]);
     }
+    resetFilters();
     setModalOpen(true);
   };
 
-  const handleSubmit = async () => {
-    try {
-      const values = await form.validateFields();
-      const uniqueCode = uuidv4();
-
-      const payload = {
-        title: values.title.trim(),
-        description: values.description?.trim(),
-        type: values.type,
-        dueDate: values.dueDate ? values.dueDate.toISOString() : null,
-        maxScore: Number(values.maxScore || 10),
-        passingScore: values.passingScore ? Number(values.passingScore) : null,
-        timeLimit: values.timeLimit ? Number(values.timeLimit) : null,
-        maxAttempts: values.maxAttempts ? Number(values.maxAttempts) : 1,
-        shuffleQuestions: values.shuffleQuestions || false,
-        showAnswersAfterSubmit: values.showAnswersAfterSubmit || false,
-        allowLateSubmission: values.allowLateSubmission || false,
-        createdBy: teacherId,
-        originalAssignmentId: uniqueCode,
-      };
-
-      let assignmentId: number;
-
-      if (editing) {
-        await axios.put(`${API_BASE}/assignments/${editing.id}`, payload);
-        assignmentId = editing.id;
-        toast.success("Đã cập nhật bài tập");
-      } else {
-        const res = await axios.post(`${API_BASE}/assignments`, payload);
-        assignmentId = res.data.data.id;
-
-        await axios.post(
-          `${API_BASE}/sections-assignments/sections/${sectionId}/assignments`,
-          { assignmentId }
-        );
-
-        toast.success("Đã tạo và gán bài tập vào lớp");
-      }
-
-      await saveQuestionAssignments(assignmentId);
-
-      setModalOpen(false);
+  const openAutoGenModal = (assignment?: Assignment) => {
+    if (assignment) {
+      setEditing(assignment);
+    } else {
       setEditing(null);
       form.resetFields();
-      setTempSelectedQuestionIds([]);
-      setAssignedQuestionIds([]);
-      fetchData();
+    }
+    autoGenForm.resetFields();
+    setAutoGenModalOpen(true);
+  };
+
+  const openQuickAddModal = () => {
+    quickAddForm.resetFields();
+    setQuickAddChapters([]);
+    setQuickAddModalOpen(true);
+  };
+
+  const handleAutoGenerate = async () => {
+    try {
+      const values = await autoGenForm.validateFields();
+
+      if (!editing) {
+        toast.error("Vui lòng tạo bài tập trước khi tự động tạo câu hỏi");
+        return;
+      }
+
+      setGeneratingQuestions(true);
+
+      const res = await instance.post(`/assignment-generator/generate`, {
+        assignmentId: editing.id,
+        subjectId: values.subjectId,
+        totalScore: 10,
+        chapterRules: values.chapterRules || [],
+      });
+
+      if (res.data.success) {
+        toast.success(`Đã tự động tạo ${res.data.data.totalQuestionsAdded} câu hỏi! `);
+        setAutoGenModalOpen(false);
+        autoGenForm.resetFields();
+        fetchAssignments();
+      }
     } catch (err: any) {
       if (err?.errorFields) return;
-      toast.error(
-        err?.response?.data?.message || "Không thể lưu thông tin bài tập"
-      );
+      toast.error(err?.response?.data?.message || "Không thể tự động tạo câu hỏi");
+    } finally {
+      setGeneratingQuestions(false);
     }
   };
 
-  const saveQuestionAssignments = async (assignmentId: number) => {
+  const handleQuickAddQuestions = async () => {
     try {
-      const toAdd = tempSelectedQuestionIds.filter(
-        (id) => !assignedQuestionIds.includes(id)
-      );
-
-      const toRemove = assignedQuestionIds.filter(
-        (id) => !tempSelectedQuestionIds.includes(id)
-      );
-
-      const addPromises = toAdd.map((questionId) =>
-        axios.post(
-          `${API_BASE}/assignments-questions/assignments/${assignmentId}/questions/${questionId}`
-        )
-      );
-
-      const removePromises = toRemove.map((questionId: any) =>
-        axios.delete(
-          `${API_BASE}/assignments-questions/assignments/${assignmentId}/questions/${questionId}`
-        )
-      );
-
-      await Promise.all([...addPromises, ...removePromises]);
-
-      if (toAdd.length > 0 || toRemove.length > 0) {
-        toast.success(
-          `Đã cập nhật câu hỏi (thêm: ${toAdd.length}, xóa: ${toRemove.length})`
-        );
+      const values = await quickAddForm.validateFields();
+      if (!userId) {
+        toast.error("Không tìm thấy thông tin người dùng");
+        return;
       }
-    } catch (error) {
-      console.error("Error saving question assignments:", error);
-      toast.error("Không thể cập nhật câu hỏi");
-      throw error;
+
+      setAddingQuestions(true);
+
+      const params: any = { page: 1, limit: 10000 };
+      if (values.subjectId) params.subjectId = values.subjectId;
+
+      const res = await instance.get<{
+        success: boolean;
+        data: { items: Question[] };
+      }>(`/questions/user/${userId}/mine-and-public`, { params });
+
+      if (!res.data.success) {
+        toast.error("Không thể tải danh sách câu hỏi");
+        return;
+      }
+
+      const allQuestions = (res.data.data as any).items || res.data.data || [];
+      const chapterRules = values.chapterRules || [];
+      const selectedQuestionIds: number[] = [];
+
+      for (const rule of chapterRules) {
+        const chapterId = rule.chapterId;
+        const chapterQuestions = allQuestions.filter(
+          (q: Question) => q.chapterId === chapterId
+        );
+
+        for (const difficulty of ['easy', 'medium', 'hard']) {
+          const difficultyRule = rule[difficulty];
+          if (!difficultyRule || !difficultyRule.count) continue;
+
+          const count = Number(difficultyRule.count);
+          const pointPerQuestion = Number(difficultyRule.pointPerQuestion || 1);
+
+          const filteredQuestions = chapterQuestions.filter(
+            (q: Question) =>
+              q.difficulty === difficulty &&
+              q.points === pointPerQuestion &&
+              !tempSelectedQuestionIds.includes(q.id)
+          );
+
+          const shuffled = filteredQuestions.sort(() => 0.5 - Math.random());
+          const selected = shuffled.slice(0, count);
+
+          selected.forEach((q: Question) => {
+            if (!selectedQuestionIds.includes(q.id)) {
+              selectedQuestionIds.push(q.id);
+            }
+          });
+        }
+      }
+
+      if (selectedQuestionIds.length === 0) {
+        toast.error("Không tìm thấy câu hỏi phù hợp với tiêu chí đã chọn");
+        return;
+      }
+
+      setTempSelectedQuestionIds((prev) => [...prev, ...selectedQuestionIds]);
+
+      toast.success(`Đã thêm ${selectedQuestionIds.length} câu hỏi vào bài tập`);
+      setQuickAddModalOpen(false);
+      quickAddForm.resetFields();
+      setQuickAddChapters([]);
+
+    } catch (err: any) {
+      if (err?.errorFields) return;
+      console.error("Quick add error:", err);
+      toast.error(err?.response?.data?.message || "Lỗi khi thêm câu hỏi nhanh");
+    } finally {
+      setAddingQuestions(false);
+    }
+  };
+
+  const toggleTempSelection = (sectionId: number, checked: boolean) => {
+    if (checked) {
+      setTempSelectedSectionIds((prev: number[]) => [...prev, sectionId]);
+    } else {
+      setTempSelectedSectionIds((prev: number[]) => prev.filter((id: number) => id !== sectionId));
     }
   };
 
@@ -584,430 +658,162 @@ export default function AssignmentTeacher() {
     if (checked) {
       setTempSelectedQuestionIds((prev) => [...prev, questionId]);
     } else {
-      setTempSelectedQuestionIds((prev) =>
-        prev.filter((id) => id !== questionId)
-      );
+      setTempSelectedQuestionIds((prev) => prev.filter((id) => id !== questionId));
     }
   };
 
-  const getTypeColor = (type: string) => {
-    const colors: any = {
-      exercise: "blue",
-      quiz: "purple",
-      project: "orange",
-      exam: "red",
+  const handleSaveAssignment = async () => {
+    if (!selectedAssignment) return;
+
+    setSavingAssignment(true);
+    try {
+      const toAdd = tempSelectedSectionIds.filter(
+        (id) => !assignedSectionIds.includes(id)
+      );
+
+      const toRemove = assignedSectionIds.filter(
+        (id) => !tempSelectedSectionIds.includes(id)
+      );
+
+      const addPromises = toAdd.map((sectionId) =>
+        instance.post(`/sections-assignments/sections/${sectionId}/assignments`, {
+          assignmentId: selectedAssignment.id,
+        })
+      );
+
+      const removePromises = toRemove.map((sectionId) =>
+        instance.delete(
+          `/sections-assignments/sections/${sectionId}/assignments/${selectedAssignment.id}`
+        )
+      );
+
+      await Promise.all([...addPromises, ...removePromises]);
+      toast.success("Đã cập nhật gán lớp thành công");
+      setAssignedSectionIds(tempSelectedSectionIds);
+      setAssignModalOpen(false);
+      setSelectedAssignment(null);
+    } catch (error) {
+      toast.error("Không thể cập nhật gán lớp");
+    } finally {
+      setSavingAssignment(false);
+    }
+  };
+
+  const resetFilters = () => {
+    setSelectedSubjectId(undefined);
+    setSelectedChapterId(undefined);
+    setSelectedDifficulty(undefined);
+    setSelectedType(undefined);
+    setQuestionKeyword("");
+  };
+
+  const renderDifficultyTag = (difficulty?: string) => {
+    const config: Record<string, { color: string; text: string }> = {
+      easy: { color: "green", text: "Dễ" },
+      medium: { color: "orange", text: "Trung bình" },
+      hard: { color: "red", text: "Khó" },
     };
-    return colors[type] || "default";
+    if (!difficulty) return null;
+    const diff = config[difficulty] || { color: "default", text: difficulty };
+    return <Tag color={diff.color}>{diff.text}</Tag>;
   };
 
-  // 🔥 Tạo bảng điểm với cột số bài đã nộp
-  const getScoreTableData = () => {
-    if (!selectedAssignment) return [];
-
-    return students.map((student) => {
-      const studentSubmissions = selectedAssignment.submissions?.filter(
-        (sub) => sub.studentId === student.id
-      ) || [];
-
-      const latestSubmission = studentSubmissions.length > 0
-        ? studentSubmissions.sort((a, b) =>
-          new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
-        )[0]
-        : null;
-
-      return {
-        key: student.id,
-        studentId: student.id,
-        studentCode: student.studentCode,
-        fullName: student.user.fullName,
-        email: student.user.email,
-        className: student.className,
-        submissionCount: studentSubmissions.length,
-        submittedAt: latestSubmission?.submittedAt,
-        score: latestSubmission?.score,
-        maxScore: selectedAssignment.maxScore,
-        status: latestSubmission
-          ? latestSubmission.score !== null && latestSubmission.score !== undefined
-            ? "graded"
-            : "submitted"
-          : "not_submitted",
-      };
-    });
+  const renderTypeTag = (type: string) => {
+    const config: Record<string, { color: string; text: string }> = {
+      multiple_choice: { color: "blue", text: "Trắc nghiệm" },
+      essay: { color: "purple", text: "Tự luận" },
+      coding: { color: "cyan", text: "Lập trình" },
+      true_false: { color: "geekblue", text: "Đúng/Sai" },
+    };
+    const t = config[type] || { color: "default", text: type };
+    return <Tag color={t.color}>{t.text}</Tag>;
   };
-
-  const scoreColumns = [
-    {
-      title: "MSSV",
-      dataIndex: "studentCode",
-      key: "studentCode",
-      width: 120,
-      fixed: "left" as const,
-    },
-    {
-      title: "Họ và tên",
-      dataIndex: "fullName",
-      key: "fullName",
-      width: 200,
-      fixed: "left" as const,
-      render: (text: string) => <strong>{text}</strong>,
-    },
-    {
-      title: "Lớp",
-      dataIndex: "className",
-      key: "className",
-      width: 100,
-    },
-    {
-      title: "Email",
-      dataIndex: "email",
-      key: "email",
-      width: 200,
-    },
-    // 🔥 Cột số bài đã nộp
-    {
-      title: "Số bài nộp",
-      dataIndex: "submissionCount",
-      key: "submissionCount",
-      width: 120,
-      align: "center" as const,
-      render: (count: number) => (
-        <Badge
-          count={count}
-          showZero
-          style={{ backgroundColor: count > 0 ? '#52c41a' : '#d9d9d9' }}
-        />
-      ),
-    },
-    {
-      title: "Trạng thái",
-      dataIndex: "status",
-      key: "status",
-      width: 120,
-      align: "center" as const,
-      render: (status: string) => {
-        if (status === "graded") {
-          return <Tag color="success">Đã chấm</Tag>;
-        } else if (status === "submitted") {
-          return <Tag color="warning">Chưa chấm</Tag>;
-        } else {
-          return <Tag color="default">Chưa nộp</Tag>;
-        }
-      },
-    },
-    {
-      title: "Thời gian nộp",
-      dataIndex: "submittedAt",
-      key: "submittedAt",
-      width: 150,
-      render: (date: string) =>
-        date ? dayjs(date).format("DD/MM/YYYY HH:mm") : "-",
-    },
-    {
-      title: "Điểm",
-      key: "score",
-      width: 120,
-      align: "center" as const,
-      render: (_: any, record: any) => {
-        if (record.score !== null && record.score !== undefined) {
-          console.log(record)
-          const percent = (record.score / record.maxScore) * 100;
-          let color = "default";
-          if (percent >= 8) color = "success";
-          else if (percent >= 5) color = "warning";
-          else color = "error";
-
-          return (
-            <Tag color={color}>
-              {record.score}/{record.maxScore}
-            </Tag>
-          );
-        }
-        return "-";
-      },
-    },
-    // 🔥 Cột hành động - xem lịch sử
-    {
-      title: "Hành động",
-      key: "actions",
-      width: 120,
-      align: "center" as const,
-      render: (_: any, record: any) => (
-        <Space>
-          {record.submissionCount > 0 && (
-            <Tooltip title="Xem lịch sử nộp bài">
-              <Button
-                type="link"
-                size="small"
-                icon={<HistoryOutlined />}
-                onClick={() => fetchStudentSubmissions(record.studentId, selectedAssignment!.id)}
-              />
-            </Tooltip>
-          )}
-        </Space>
-      ),
-    },
-  ];
-
-  // 🔥 Cột cho bảng lịch sử nộp bài
-  const submissionHistoryColumns = [
-    {
-      title: "Lần",
-      key: "index",
-      width: 60,
-      align: "center" as const,
-      render: (_: any, __: any, index: number) => (
-        <strong>{selectedStudentSubmissions.length - index}</strong>
-      ),
-    },
-    {
-      title: "Thời gian nộp",
-      dataIndex: "submittedAt",
-      key: "submittedAt",
-      width: 150,
-      render: (date: string) => dayjs(date).format("DD/MM/YYYY HH:mm:ss"),
-    },
-    {
-      title: "Thời gian làm",
-      key: "duration",
-      width: 120,
-      render: (_: any, record: Submission) => {
-        const duration = dayjs(record.completedAt).diff(dayjs(record.startedAt), 'minute');
-        return `${duration} phút`;
-      },
-    },
-    {
-      title: "Điểm",
-      key: "score",
-      width: 150,
-      align: "center" as const,
-      render: (_: any, record: Submission) => {
-        if (editingScore?.submissionId === record.id) {
-          return (
-            <Space>
-              <InputNumber
-                min={0}
-                max={record.maxScore}
-                value={editingScore.score}
-                onChange={(val) => setEditingScore({ ...editingScore, score: val || 0 })}
-                style={{ width: 80 }}
-              />
-              <Button
-                type="primary"
-                size="small"
-                icon={<SaveOutlined />}
-                onClick={() => handleUpdateScore(record.id, editingScore.score)}
-              >
-                Lưu
-              </Button>
-              <Button
-                size="small"
-                onClick={() => setEditingScore(null)}
-              >
-                Hủy
-              </Button>
-            </Space>
-          );
-        }
-
-        if (record.score !== null && record.score !== undefined) {
-          const percent = (record.score / record.maxScore!) * 100;
-          let color = "default";
-          if (percent >= 80) color = "success";
-          else if (percent >= 50) color = "warning";
-          else color = "error";
-
-          return (
-            <Space>
-              <Tag color={color}>
-                {record.score}/{record.maxScore}
-              </Tag>
-              <Button
-                type="link"
-                size="small"
-                icon={<EditOutlined />}
-                onClick={() => setEditingScore({ submissionId: record.id, score: record.score! })}
-              >
-                Sửa
-              </Button>
-            </Space>
-          );
-        }
-        return <Tag color="default">Chưa chấm</Tag>;
-      },
-    },
-    {
-      title: "Trạng thái",
-      key: "autoGraded",
-      width: 120,
-      align: "center" as const,
-      render: (_: any, record: Submission) => (
-        <Tag color={record.autoGraded ? "blue" : "orange"}>
-          {record.autoGraded ? "Tự động" : "Thủ công"}
-        </Tag>
-      ),
-    },
-    {
-      title: "Hành động",
-      key: "actions",
-      width: 200,
-      align: "center" as const,
-      render: (_: any, record: Submission) => (
-        <Space>
-          <Tooltip title="Xem chi tiết bài làm">
-            <Button
-              size="small"
-              icon={<EyeOutlined />}
-              onClick={() => fetchSubmissionDetail(record.id)}
-            >
-              Chi tiết
-            </Button>
-          </Tooltip>
-        </Space>
-      ),
-    },
-  ];
 
   const columns = [
     {
       title: "Tiêu đề",
       dataIndex: "title",
       key: "title",
-      sorter: (a: Assignment, b: Assignment) => a.title.localeCompare(b.title),
-      render: (text: string) => (
-        <div style={{ fontWeight: 600, color: "#1890ff" }}>
-          <FileTextOutlined style={{ marginRight: 8 }} />
-          {text}
-        </div>
-      ),
-    },
-    {
-      title: "Mô tả",
-      dataIndex: "description",
-      key: "description",
-      ellipsis: { showTitle: false },
-      render: (text: string) => (
-        <Tooltip title={text} placement="topLeft">
-          {text || <Tag color="default">Không có mô tả</Tag>}
-        </Tooltip>
-      ),
-    },
-    {
-      title: "Loại",
-      dataIndex: "type",
-      key: "type",
-      align: "center" as const,
-      filters: [
-        { text: "Exercise", value: "exercise" },
-        { text: "Quiz", value: "quiz" },
-        { text: "Project", value: "project" },
-        { text: "Exam", value: "exam" },
-      ],
-      onFilter: (value: any, record: Assignment) => record.type === value,
-      render: (type: string) => (
-        <Tag color={getTypeColor(type)}>{type.toUpperCase()}</Tag>
-      ),
-    },
-    {
-      title: "Điểm",
-      key: "scores",
-      align: "center" as const,
-      render: (_: any, record: Assignment) => (
+      width: 250,
+      render: (text: string, record: Assignment) => (
         <div>
-          <div>
-            <Tag color="green">Tối đa: {record.maxScore}</Tag>
+          <div style={{ fontWeight: 600, color: "#1890ff", fontSize: 14 }}>
+            {text}
           </div>
-          {record.passingScore && (
-            <div style={{ marginTop: 4 }}>
-              <Tag color="orange">Đạt: {record.passingScore}</Tag>
+          {record.description && (
+            <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+              {record.description.length > 50
+                ? record.description.substring(0, 50) + "..."
+                : record.description}
             </div>
           )}
         </div>
       ),
     },
     {
+      title: "Loại",
+      dataIndex: "type",
+      key: "type",
+      width: 100,
+      render: (type: string) => {
+        const colors: any = {
+          exercise: "blue",
+          quiz: "purple",
+          project: "orange",
+          exam: "red",
+        };
+        return <Tag color={colors[type]}>{type.toUpperCase()}</Tag>;
+      },
+    },
+    {
+      title: "Điểm",
+      dataIndex: "maxScore",
+      key: "maxScore",
+      width: 80,
+      align: "center" as const,
+    },
+    {
       title: "Hạn nộp",
       dataIndex: "dueDate",
       key: "dueDate",
-      sorter: (a: Assignment, b: Assignment) => {
-        if (!a.dueDate) return 1;
-        if (!b.dueDate) return -1;
-        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-      },
-      render: (date: string) =>
-        date ? (
-          <div>
-            <div>{dayjs(date).format("DD/MM/YYYY")}</div>
-            <div style={{ fontSize: 12, color: "#999" }}>
-              {dayjs(date).format("HH:mm")}
-            </div>
-          </div>
-        ) : (
-          <Tag color="default">Không giới hạn</Tag>
-        ),
+      width: 140,
+      render: (v: string) =>
+        v ? <span style={{ fontSize: 12 }}>{dayjs(v).format("DD/MM/YYYY")}</span> : <Tag>Không</Tag>,
     },
     {
-      title: "Trạng thái",
-      key: "visibility",
-      align: "center" as const,
-      render: (_: any, record: Assignment) => (
-        <Switch
-          checkedChildren="Hiển thị"
-          unCheckedChildren="Ẩn"
-          checked={visibility[record.id] || false}
-          onChange={(checked) => handleToggleVisibility(record.id, checked)}
-        />
-      ),
+      title: "Ngày tạo",
+      dataIndex: "createdAt",
+      key: "createdAt",
+      width: 110,
+      render: (v: string) => (v ? <span style={{ fontSize: 12 }}>{dayjs(v).format("DD/MM/YYYY")}</span> : "—"),
     },
     {
       title: "Hành động",
       key: "actions",
+      width: 180,
       align: "center" as const,
-      width: 220,
       render: (_: any, record: Assignment) => (
-        <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
-          <Tooltip title="Xem điểm">
-            <Button
-              size="small"
-              icon={<EyeOutlined />}
-              onClick={() => fetchAssignmentWithSubmissions(record.id)}
-            />
-          </Tooltip>
-
-          {/* 🔥 NÚT CÔNG BỐ ĐIỂM */}
-          <Tooltip
-            title={
-              record.showAnswersAfterSubmit
-                ? "Đã công bố điểm - Click để tắt"
-                : "Chưa công bố điểm - Click để bật"
-            }
-          >
-            <Button
-              size="small"
-              icon={<CheckCircleOutlined />}
-              onClick={() => handleToggleShowAnswers(record.id)}
-              style={{
-                backgroundColor: record.showAnswersAfterSubmit ? '#52c41a' : '#d9d9d9',
-                color: record.showAnswersAfterSubmit ? '#fff' : '#666',
-                borderColor: record.showAnswersAfterSubmit ? '#52c41a' : '#d9d9d9',
-                fontWeight: record.showAnswersAfterSubmit ? 'bold' : 'normal',
-              }}
-            >
-              {record.showAnswersAfterSubmit ? '✓' : ''}
-            </Button>
-          </Tooltip>
-
+        <div style={{ display: "flex", gap: 4, justifyContent: "center", flexWrap: "wrap" }}>
           <Tooltip title="Sửa">
             <Button
-              size="small"
               icon={<EditOutlined />}
+              size="small"
               onClick={() => openCreateEditModal(record)}
             />
           </Tooltip>
-
+          <Tooltip title="Tự động tạo câu hỏi">
+            <Button
+              icon={<ThunderboltOutlined />}
+              size="small"
+              type="primary"
+              ghost
+              onClick={() => openAutoGenModal(record)}
+            />
+          </Tooltip>
           <Tooltip title="Xóa">
             <Popconfirm
               title="Xóa bài tập"
-              description="Bạn có chắc muốn xóa bài tập này?"
+              description="Bạn có chắc muốn xóa?"
               okText="Xóa"
               cancelText="Hủy"
               okButtonProps={{ danger: true }}
@@ -1016,19 +822,28 @@ export default function AssignmentTeacher() {
               <Button danger size="small" icon={<DeleteOutlined />} />
             </Popconfirm>
           </Tooltip>
+          <Tooltip title="Gán vào lớp">
+            <Button
+              icon={<ApartmentOutlined />}
+              size="small"
+              onClick={() => openAssignModal(record)}
+            />
+          </Tooltip>
         </div>
       ),
     },
   ];
 
   const filteredAssignments = assignments.filter((a) => {
-    if (!keyword) return true;
-    const kw = keyword.toLowerCase();
-    return (
-      a.title.toLowerCase().includes(kw) ||
-      a.description?.toLowerCase().includes(kw) ||
-      a.type.toLowerCase().includes(kw)
-    );
+    const matchKeyword =
+      !keyword ||
+      a.title.toLowerCase().includes(keyword.toLowerCase()) ||
+      a.description?.toLowerCase().includes(keyword.toLowerCase());
+
+    const matchPublic = filterPublic === null || a.isPublic === filterPublic;
+    const matchType = !filterType || a.type === filterType;
+
+    return matchKeyword && matchPublic && matchType;
   });
 
   const filteredQuestions = questions.filter((q) => {
@@ -1041,48 +856,124 @@ export default function AssignmentTeacher() {
     );
   });
 
-  const getStatistics = () => {
-    const totalAssignments = assignments.length;
-    const visibleAssignments = Object.values(visibility).filter((v) => v === true).length;
-    const hiddenAssignments = totalAssignments - visibleAssignments;
-
-    const byType = assignments.reduce((acc, a) => {
-      acc[a.type] = (acc[a.type] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    return {
-      totalAssignments,
-      visibleAssignments,
-      hiddenAssignments,
-      byType,
-    };
-  };
-
-  const stats = getStatistics();
-
-  if (loading) {
-    return (
-      <div style={{ textAlign: "center", padding: 60 }}>
-        <Spin size="large" tip="Đang tải..." />
-      </div>
-    );
-  }
-
   return (
-    <div style={{ padding: 16 }}>
+    <div className="assignments-container" style={{ padding: "8px 12px" }}>
+      <style>
+        {`
+          /* Mobile styles */
+          @media (max-width: 768px) {
+            .assignments-title {
+              font-size: 18px !important;
+              margin-bottom: 0 !important;
+            }
+
+            .stats-container {
+              display: none !important;
+            }
+
+            .header-actions {
+              flex-direction: column !important;
+              gap: 8px !important;
+              width: 100%;
+              padding-top: 8px !important;
+            }
+
+            .header-actions > div {
+              width: 100% !important;
+            }
+
+            .header-actions . ant-input,
+            .header-actions .ant-select,
+            .header-actions .ant-btn {
+              width: 100% !important;
+            }
+
+            .ant-modal {
+              max-width: calc(100vw - 16px) !important;
+              margin: 8px !important;
+            }
+            
+            .ant-table-wrapper::after {
+              content: "← Vuốt để xem thêm →";
+              display: block;
+              text-align: center;
+              font-size: 11px;
+              color: #999;
+              padding: 8px 0 4px;
+              font-style: italic;
+            }
+          }
+
+          /* Tablet styles */
+          @media (min-width: 769px) and (max-width: 1024px) {
+            .stats-container > div:nth-child(n+4) {
+              display: none ! important;
+            }
+
+            .header-actions . ant-input {
+              width: 300px !important;
+            }
+
+            .header-actions .ant-select {
+              width: 140px !important;
+            }
+          }
+
+          /* Desktop optimizations */
+          @media (min-width: 1025px) {
+            .assignments-container {
+              padding: 16px !important;
+            }
+          }
+          
+          . ant-table-body::-webkit-scrollbar {
+            height: 8px;
+          }
+          
+          . ant-table-body::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+          }
+          
+          . ant-table-body::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+          }
+          
+          .ant-table-body::-webkit-scrollbar-thumb:hover {
+            background: #555;
+          }
+        `}
+      </style>
+
+      {/* Header */}
+      <Title level={3} className="assignments-title" style={{ margin: 0, marginBottom: 16 }}>
+        <div className="flex items-center gap-2">
+          <FileQuestion size={20} /> Quản lý Bài tập
+        </div>
+      </Title>
+
+      {/* Header Wrapper */}
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
+          alignItems: "flex-start",
           marginBottom: 16,
-          marginTop: -16,
           flexWrap: "wrap",
           gap: 12,
         }}
       >
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        {/* Statistics Badges */}
+        <div
+          className="stats-container"
+          style={{
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            flex: "1 1 auto",
+          }}
+        >
           <div
             style={{
               display: "flex",
@@ -1094,81 +985,103 @@ export default function AssignmentTeacher() {
               borderRadius: 6,
               padding: "6px 10px",
               background: "#fff",
+              whiteSpace: "nowrap",
             }}
           >
-            <FileTextOutlined style={{ fontSize: 14, color: "#1890ff" }} />
+            <FolderOpenOutlined style={{ fontSize: 14, color: "#1890ff" }} />
             <span>Tổng bài tập:</span>
             <strong>{stats.totalAssignments}</strong>
           </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 12,
-              color: "#000",
-              border: "1px solid #ddd",
-              borderRadius: 6,
-              padding: "6px 10px",
-              background: "#fff",
-            }}
-          >
-            <EyeOutlined style={{ fontSize: 14, color: "#52c41a" }} />
-            <span>Đang hiển thị:</span>
-            <strong style={{ color: "#52c41a" }}>{stats.visibleAssignments}</strong>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 12,
-              color: "#000",
-              border: "1px solid #ddd",
-              borderRadius: 6,
-              padding: "6px 10px",
-              background: "#fff",
-            }}
-          >
-            <UserOutlined style={{ fontSize: 14, color: "#722ed1" }} />
-            <span>Học sinh:</span>
-            <strong style={{ color: "#722ed1" }}>{students.length}</strong>
-          </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <Input
-            allowClear
-            prefix={<SearchOutlined />}
-            placeholder="Tìm theo tiêu đề, mô tả, loại..."
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            style={{ width: 200 }}
-          />
-          <Button icon={<ReloadOutlined />} onClick={fetchData}>
-            Làm mới
-          </Button>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => openCreateEditModal()}
-          >
-            Thêm bài tập
-          </Button>
+
+        {/* Filters + Actions */}
+        <div
+          className="header-actions"
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Input
+              allowClear
+              prefix={<SearchOutlined />}
+              placeholder="Tìm bài tập..."
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              style={{ width: 200 }}
+            />
+
+            <Select
+              allowClear
+              placeholder="Trạng thái"
+              style={{ width: 120 }}
+              value={filterPublic}
+              onChange={setFilterPublic}
+            >
+              <Option value={true}>Công khai</Option>
+              <Option value={false}>Riêng tư</Option>
+            </Select>
+
+            <Select
+              allowClear
+              placeholder="Loại"
+              style={{ width: 120 }}
+              value={filterType}
+              onChange={setFilterType}
+            >
+              <Option value="exercise">Exercise</Option>
+              <Option value="quiz">Quiz</Option>
+              <Option value="project">Project</Option>
+              <Option value="exam">Exam</Option>
+            </Select>
+          </div>
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <Button icon={<ReloadOutlined />} onClick={fetchAssignments}>
+              <span className="btn-text">Làm mới</span>
+            </Button>
+
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => openCreateEditModal()}
+            >
+              <span className="btn-text">Thêm</span>
+            </Button>
+          </div>
         </div>
       </div>
 
-      <Table<Assignment>
-        dataSource={filteredAssignments}
-        columns={columns}
-        rowKey="id"
-        bordered
-        pagination={{ pageSize: 10, showSizeChanger: true }}
-        scroll={{ x: "max-content" }}
-        locale={{ emptyText: "Không có bài tập nào trong lớp này" }}
-      />
+      {/* Table with horizontal scroll */}
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 60 }}>
+          <Spin size="large" tip="Đang tải danh sách bài tập..." />
+        </div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <Table<Assignment>
+            dataSource={filteredAssignments}
+            columns={columns}
+            rowKey="id"
+            bordered
+            pagination={{
+              pageSize: 10,
+              showSizeChanger: true,
+              showTotal: (total) => `Tổng ${total} bài tập`,
+              responsive: true,
+            }}
+            scroll={{ x: 860 }}
+            size="middle"
+            locale={{ emptyText: "Không có bài tập nào" }}
+          />
+        </div>
+      )}
 
+
+      {/* Modal thêm/sửa - Tiếp theo ở phần 2 */}
       {/* Modal thêm/sửa */}
       <Modal
         title={editing ? "Sửa thông tin bài tập" : "Thêm bài tập mới"}
@@ -1178,43 +1091,88 @@ export default function AssignmentTeacher() {
           setEditing(null);
           setTempSelectedQuestionIds([]);
           setAssignedQuestionIds([]);
-          setQuestionKeyword("");
+          resetFilters();
         }}
         onOk={handleSubmit}
         okText={editing ? "Lưu" : "Tạo mới"}
+        okButtonProps={{
+          disabled: !isPointsValid()
+        }}
         cancelText="Hủy"
-        width={1200}
+        width={1400}
         centered
-        bodyStyle={{ maxHeight: "70vh", overflowY: "auto", overflowX: "hidden" }}
+        bodyStyle={{
+          maxHeight: "75vh",
+          overflowY: "auto",
+          overflowX: "hidden",
+        }}
       >
         <Row gutter={24}>
-          <Col span={12}>
-            <Title level={5} style={{ marginBottom: 12 }}>
-              Thông tin bài tập
-            </Title>
-            <Form form={form} layout="vertical" style={{ marginBottom: 0 }}>
+          <Col span={10}>
+            <Title level={5} style={{ marginBottom: 12 }}>Thông tin bài tập</Title>
+
+            <Form
+              form={form}
+              layout="vertical"
+              className="[&_.ant-form-item]:mb-3"
+            >
               <Form.Item
                 label="Tiêu đề"
                 name="title"
-                rules={[{ required: true, message: "Vui lòng nhập tiêu đề" }]}
-                style={{ marginBottom: 12 }}
+                rules={[{ required: true }]}
+                className="mb-3"
               >
-                <Input placeholder="VD: Bài tập OOP" />
+                <Input placeholder="VD: Bài tập OOP" className="!py-1.5 !px-2" />
+              </Form.Item>
+
+              <Form.Item label="Mô tả" name="description" className="mb-3">
+                <Input.TextArea rows={3} placeholder="Mô tả chi tiết bài tập" className="!p-2" />
               </Form.Item>
 
               <Form.Item
-                label="Mô tả"
-                name="description"
-                style={{ marginBottom: 12 }}
+                label="Môn học"
+                name="subjectId"
+                rules={[{ required: true, message: "Vui lòng chọn môn học" }]}
+                className="mb-3"
               >
-                <Input.TextArea rows={3} placeholder="Mô tả chi tiết bài tập" />
+                <Select
+                  placeholder="Chọn môn học"
+                  onChange={(value) => {
+                    setSelectedSubjectId(value);
+                    form.setFieldsValue({ chapterId: undefined });
+                    fetchChaptersBySubject(value);
+                  }}
+                >
+                  {questionSubjects.map((s) => (
+                    <Option key={s.id} value={s.id}>
+                      {s.subjectCode} - {s.subjectName}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+
+              <Form.Item
+                label="Chương"
+                name="chapterId"
+                className="mb-3"
+                rules={[{ required: true, message: "Vui lòng chọn chương" }]}
+              >
+                <Select
+                  placeholder="Chọn chương"
+                  disabled={!selectedSubjectId}
+                >
+                  {chapters.map((c) => (
+                    <Option key={c.id} value={c.id}>
+                      {c.chapterCode} - {c.chapterName}
+                    </Option>
+                  ))}
+                </Select>
               </Form.Item>
 
               <Form.Item
                 label="Loại bài tập"
                 name="type"
-                rules={[{ required: true, message: "Vui lòng chọn loại" }]}
-                style={{ marginBottom: 12 }}
+                className="mb-3"
               >
                 <Select placeholder="Chọn loại bài tập">
                   <Option value="exercise">Exercise</Option>
@@ -1224,92 +1182,162 @@ export default function AssignmentTeacher() {
                 </Select>
               </Form.Item>
 
-              <Form.Item label="Hạn nộp" name="dueDate" style={{ marginBottom: 12 }}>
+              <Form.Item label="Hạn nộp" name="dueDate" className="mb-3">
                 <DatePicker
                   showTime
                   format="YYYY-MM-DD HH:mm"
-                  style={{ width: "100%" }}
+                  className="w-full"
                 />
               </Form.Item>
 
-              <Divider style={{ margin: "12px 0" }}>Cấu hình</Divider>
+              <Divider className="!my-3">Cấu hình</Divider>
 
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    label="Điểm tối đa"
-                    name="maxScore"
-                    style={{ marginBottom: 12 }}
-                  >
-                    <Input type="number" />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    label="Điểm đạt"
-                    name="passingScore"
-                    style={{ marginBottom: 12 }}
-                  >
-                    <Input type="number" />
-                  </Form.Item>
-                </Col>
-              </Row>
+              <div className="grid grid-cols-2 gap-4">
+                <Form.Item label="Điểm tối đa" name="maxScore" className="mb-3">
+                  <Input type="number" className="!py-1.5 !px-2" />
+                </Form.Item>
+                <Form.Item label="Điểm đạt" name="passingScore" className="mb-3">
+                  <Input type="number" className="!py-1.5 !px-2" />
+                </Form.Item>
+              </div>
 
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    label="Thời gian (phút)"
-                    name="timeLimit"
-                    style={{ marginBottom: 12 }}
-                  >
-                    <Input type="number" />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    label="Số lần nộp"
-                    name="maxAttempts"
-                    style={{ marginBottom: 12 }}
-                  >
-                    <Input type="number" />
-                  </Form.Item>
-                </Col>
-              </Row>
+              <div className="grid grid-cols-2 gap-4">
+                <Form.Item label="Thời gian (phút)" name="timeLimit" className="mb-3">
+                  <Input type="number" className="!py-1.5 !px-2" />
+                </Form.Item>
+                <Form.Item label="Số lần nộp" name="maxAttempts" className="mb-3">
+                  <Input type="number" className="!py-1.5 !px-2" />
+                </Form.Item>
+              </div>
 
-              <Form.Item
-                name="shuffleQuestions"
-                valuePropName="checked"
-                style={{ marginBottom: 8 }}
-              >
+              <Form.Item name="shuffleQuestions" valuePropName="checked" className="mb-2">
                 <Checkbox>Xáo trộn câu hỏi</Checkbox>
               </Form.Item>
-              <Form.Item
-                name="showAnswersAfterSubmit"
-                valuePropName="checked"
-                style={{ marginBottom: 8 }}
-              >
+              <Form.Item name="showAnswersAfterSubmit" valuePropName="checked" className="mb-2">
                 <Checkbox>Hiện đáp án sau khi nộp</Checkbox>
               </Form.Item>
-              <Form.Item
-                name="allowLateSubmission"
-                valuePropName="checked"
-                style={{ marginBottom: 0 }}
-              >
+              <Form.Item name="allowLateSubmission" valuePropName="checked" className="mb-0">
                 <Checkbox>Cho phép nộp muộn</Checkbox>
+              </Form.Item>
+              <Form.Item
+                name="isPublic"
+                label="Chia sẻ bài tập"
+                valuePropName="checked"
+                initialValue={false}
+                tooltip="Khi bật, giảng viên khác có thể xem và sao chép bài tập này"
+                className="mb-0"
+              >
+                <Switch
+                  checkedChildren={<><ShareAltOutlined /> Công khai</>}
+                  unCheckedChildren={<><LockOutlined /> Riêng tư</>}
+                />
               </Form.Item>
             </Form>
           </Col>
 
-          <Col span={12}>
-            <Title level={5}>Câu hỏi</Title>
+          <Col span={14}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <Title level={5} style={{ margin: 0 }}>Câu hỏi (Của bạn + Public)</Title>
+              <Space>
+                {/* 🔥 Quick Add Button */}
+                <Button
+                  icon={<ThunderboltOutlined />}
+                  size="small"
+                  type="primary"
+                  ghost
+                  onClick={openQuickAddModal}
+                >
+                  Thêm câu hỏi nhanh
+                </Button>
+                <Button
+                  icon={<ClearOutlined />}
+                  size="small"
+                  onClick={resetFilters}
+                >
+                  Xóa bộ lọc
+                </Button>
+              </Space>
+            </div>
+
+            <Card size="small" style={{ marginBottom: 12, backgroundColor: "#fafafa" }}>
+              <Space direction="vertical" style={{ width: "100%" }} size="small">
+                <Row gutter={8}>
+                  <Col span={12}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>Độ khó:</Text>
+                    <Select
+                      allowClear
+                      placeholder="Chọn độ khó"
+                      value={selectedDifficulty}
+                      onChange={setSelectedDifficulty}
+                      style={{ width: "100%" }}
+                      size="small"
+                    >
+                      <Option value="easy">Dễ</Option>
+                      <Option value="medium">Trung bình</Option>
+                      <Option value="hard">Khó</Option>
+                    </Select>
+                  </Col>
+                  <Col span={12}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>Loại câu hỏi:</Text>
+                    <Select
+                      allowClear
+                      placeholder="Chọn loại"
+                      value={selectedType}
+                      onChange={setSelectedType}
+                      style={{ width: "100%" }}
+                      size="small"
+                    >
+                      <Option value="multiple_choice">Trắc nghiệm</Option>
+                      <Option value="essay">Tự luận</Option>
+                      <Option value="coding">Lập trình</Option>
+                      <Option value="true_false">Đúng/Sai</Option>
+                    </Select>
+                  </Col>
+                </Row>
+              </Space>
+            </Card>
+
             <Input
               allowClear
               prefix={<SearchOutlined />}
-              placeholder="Tìm câu hỏi..."
+              placeholder="Tìm theo nội dung câu hỏi..."
               value={questionKeyword}
               onChange={(e) => setQuestionKeyword(e.target.value)}
               style={{ marginBottom: 12 }}
+              size="small"
             />
+
+            <Card size="small" style={{ marginBottom: 12 }}>
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Statistic
+                    title="Tổng số câu"
+                    value={questions.length}
+                    valueStyle={{ fontSize: 20 }}
+                  />
+                </Col>
+                <Col span={8}>
+                  <Statistic
+                    title="Đã chọn"
+                    value={tempSelectedQuestionIds.length}
+                    valueStyle={{ fontSize: 20, color: "#1890ff" }}
+                  />
+                </Col>
+                <Col span={8}>
+                  <Statistic
+                    title="Tổng điểm"
+                    value={calculateTotalPoints()}
+                    valueStyle={{
+                      fontSize: 20,
+                      color: calculateTotalPoints() === Number(form.getFieldValue('maxScore') || 10)
+                        ? "#52c41a"
+                        : "#ff4d4f"
+                    }}
+                    suffix={`/ ${form.getFieldValue('maxScore') || 10}`}
+                  />
+                </Col>
+              </Row>
+            </Card>
             <div
               style={{
                 maxHeight: 400,
@@ -1324,12 +1352,16 @@ export default function AssignmentTeacher() {
                   <Spin tip="Đang tải câu hỏi..." />
                 </div>
               ) : filteredQuestions.length === 0 ? (
-                <p style={{ textAlign: "center", color: "#999" }}>
-                  Không có câu hỏi nào
-                </p>
+                <div style={{ textAlign: "center", padding: 20, color: "#999" }}>
+                  <FilterOutlined style={{ fontSize: 32, marginBottom: 8 }} />
+                  <p>Không tìm thấy câu hỏi phù hợp</p>
+                  <Button size="small" onClick={resetFilters}>Xóa bộ lọc</Button>
+                </div>
               ) : (
                 filteredQuestions.map((q) => {
                   const checked = tempSelectedQuestionIds.includes(q.id);
+                  const isPublicQuestion = q.isPublic && q.createdByUser?.id !== userId;
+
                   return (
                     <label
                       key={q.id}
@@ -1347,27 +1379,42 @@ export default function AssignmentTeacher() {
                         if (!checked) e.currentTarget.style.backgroundColor = "#f5f5f5";
                       }}
                       onMouseLeave={(e) => {
-                        if (!checked)
-                          e.currentTarget.style.backgroundColor = "transparent";
+                        if (!checked) e.currentTarget.style.backgroundColor = "transparent";
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
                         <input
                           type="checkbox"
                           checked={checked}
-                          onChange={(e) =>
-                            toggleTempQuestionSelection(q.id, e.target.checked)
-                          }
+                          onChange={(e) => toggleTempQuestionSelection(q.id, e.target.checked)}
                           style={{ marginTop: 4, cursor: "pointer" }}
                         />
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 500, marginBottom: 4 }}>
-                            {q.content}
-                          </div>
-                          <div style={{ fontSize: 12, color: "#666" }}>
-                            {q.type && <Tag color="blue">{q.type}</Tag>}
-                            {q.difficulty && <Tag color="orange">{q.difficulty}</Tag>}
+                          <div
+                            style={{ fontWeight: 500, marginBottom: 4 }}
+                            dangerouslySetInnerHTML={{
+                              __html: q.content.substring(0, 100) + (q.content.length > 100 ? "..." : "")
+                            }}
+                          />
+                          <div style={{ fontSize: 12 }}>
+                            {renderTypeTag(q.type)}
+                            {renderDifficultyTag(q.difficulty)}
                             {q.points && <Tag color="green">{q.points} điểm</Tag>}
+                            {q.subject && (
+                              <Tag color="blue" icon={<BookOutlined />}>
+                                {q.subject.subjectCode}
+                              </Tag>
+                            )}
+                            {q.chapter && (
+                              <Tag color="purple">
+                                {q.chapter.chapterCode}
+                              </Tag>
+                            )}
+                            {isPublicQuestion && (
+                              <Tag color="green" icon={<GlobalOutlined />}>
+                                Public - {q.createdByUser?.fullName}
+                              </Tag>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1376,563 +1423,328 @@ export default function AssignmentTeacher() {
                 })
               )}
             </div>
-            <div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
-              Đã chọn: {tempSelectedQuestionIds.length} câu hỏi
-            </div>
           </Col>
         </Row>
       </Modal>
 
-      {/* Modal xem điểm */}
+      {/* 🔥 Modal thêm câu hỏi nhanh (Quick Add) */}
       <Modal
         title={
-          <div>
-            <FileTextOutlined style={{ marginRight: 8 }} />
-            {selectedAssignment?.title} - Bảng điểm
-          </div>
+          <Space>
+            <ThunderboltOutlined />
+            Thêm câu hỏi nhanh
+          </Space>
         }
-        open={scoreModalOpen}
+        open={quickAddModalOpen}
         onCancel={() => {
-          setScoreModalOpen(false);
-          setSelectedAssignment(null);
+          setQuickAddModalOpen(false);
+          quickAddForm.resetFields();
+          setQuickAddChapters([]);
         }}
-        footer={[
-          <Button key="close" onClick={() => setScoreModalOpen(false)}>
-            Đóng
-          </Button>,
-        ]}
-        width={1400}
+        onOk={handleQuickAddQuestions}
+        okText="Thêm câu hỏi"
+        cancelText="Hủy"
+        confirmLoading={addingQuestions}
+        width={800}
         centered
       >
-        <Table
-          dataSource={getScoreTableData()}
-          columns={scoreColumns}
-          rowKey="key"
-          bordered
-          pagination={{ pageSize: 10 }}
-          scroll={{ x: 1200 }}
-          locale={{ emptyText: "Không có dữ liệu" }}
+        <Alert
+          message="Hướng dẫn"
+          description="Chọn môn học và cấu hình số lượng câu hỏi theo chương, độ khó và điểm. Hệ thống sẽ tự động chọn ngẫu nhiên các câu hỏi phù hợp từ câu hỏi của bạn và câu hỏi công khai."
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
         />
+
+        <Form form={quickAddForm} layout="vertical">
+          <Form.Item
+            label="Môn học"
+            name="subjectId"
+            rules={[{ required: true, message: "Vui lòng chọn môn học" }]}
+          >
+            <Select
+              placeholder="Chọn môn học"
+              onChange={async (value) => {
+                const chaps = await fetchChaptersBySubject(value);
+                setQuickAddChapters(chaps);
+                quickAddForm.setFieldValue("chapterRules", []);
+              }}
+            >
+              {questionSubjects.map((s) => (
+                <Option key={s.id} value={s.id}>
+                  {s.subjectCode} - {s.subjectName}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Divider>Cấu hình câu hỏi theo chương</Divider>
+
+          <Form.List name="chapterRules">
+            {(fields, { add, remove }) => (
+              <>
+                {fields.map(({ key, name, ...restField }) => (
+                  <Card key={key} size="small" style={{ marginBottom: 12 }}>
+                    <Row gutter={16}>
+                      <Col span={24}>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "chapterId"]}
+                          label="Chương"
+                          rules={[{ required: true }]}
+                        >
+                          <Select placeholder="Chọn chương">
+                            {quickAddChapters.map((c) => (
+                              <Option key={c.id} value={c.id}>
+                                {c.chapterCode} - {c.chapterName}
+                              </Option>
+                            ))}
+                          </Select>
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Row gutter={8}>
+                      <Col span={8}>
+                        <Text strong>Dễ:</Text>
+                        <Form.Item {...restField} name={[name, "easy", "count"]} label="Số câu">
+                          <InputNumber min={0} style={{ width: "100%" }} placeholder="0" />
+                        </Form.Item>
+                        <Form.Item {...restField} name={[name, "easy", "pointPerQuestion"]} label="Điểm/câu">
+                          <InputNumber min={0} step={0.5} style={{ width: "100%" }} placeholder="1" />
+                        </Form.Item>
+                      </Col>
+
+                      <Col span={8}>
+                        <Text strong>Trung bình:</Text>
+                        <Form.Item {...restField} name={[name, "medium", "count"]} label="Số câu">
+                          <InputNumber min={0} style={{ width: "100%" }} placeholder="0" />
+                        </Form.Item>
+                        <Form.Item {...restField} name={[name, "medium", "pointPerQuestion"]} label="Điểm/câu">
+                          <InputNumber min={0} step={0.5} style={{ width: "100%" }} placeholder="1" />
+                        </Form.Item>
+                      </Col>
+
+                      <Col span={8}>
+                        <Text strong>Khó:</Text>
+                        <Form.Item {...restField} name={[name, "hard", "count"]} label="Số câu">
+                          <InputNumber min={0} style={{ width: "100%" }} placeholder="0" />
+                        </Form.Item>
+                        <Form.Item {...restField} name={[name, "hard", "pointPerQuestion"]} label="Điểm/câu">
+                          <InputNumber min={0} step={0.5} style={{ width: "100%" }} placeholder="1" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Button danger size="small" onClick={() => remove(name)}>
+                      Xóa chương
+                    </Button>
+                  </Card>
+                ))}
+
+                <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+                  Thêm chương
+                </Button>
+              </>
+            )}
+          </Form.List>
+        </Form>
       </Modal>
 
-      {/* 🔥 Modal xem lịch sử nộp bài của học sinh */}
+      {/* Modal tự động tạo câu hỏi */}
       <Modal
         title={
-          <div>
-            <HistoryOutlined style={{ marginRight: 8 }} />
-            Lịch sử nộp bài - {selectedStudent?.user.fullName} ({selectedStudent?.studentCode})
-          </div>
+          <Space>
+            <ThunderboltOutlined />
+            Tự động tạo câu hỏi
+          </Space>
         }
-        open={submissionHistoryModalOpen}
+        open={autoGenModalOpen}
         onCancel={() => {
-          setSubmissionHistoryModalOpen(false);
-          setSelectedStudent(null);
-          setSelectedStudentSubmissions([]);
-          setEditingScore(null);
+          setAutoGenModalOpen(false);
+          autoGenForm.resetFields();
         }}
-        footer={[
-          <Button key="close" onClick={() => {
-            setSubmissionHistoryModalOpen(false);
-            setSelectedStudent(null);
-            setSelectedStudentSubmissions([]);
-            setEditingScore(null);
-          }}>
-            Đóng
-          </Button>,
-        ]}
-        width={1200}
+        onOk={handleAutoGenerate}
+        okText="Tạo câu hỏi"
+        cancelText="Hủy"
+        confirmLoading={generatingQuestions}
+        width={800}
         centered
       >
-        {loadingSubmissions ? (
-          <div style={{ textAlign: "center", padding: 40 }}>
-            <Spin size="large" tip="Đang tải lịch sử nộp bài..." />
-          </div>
-        ) : (
-          <>
-            <div style={{ marginBottom: 16, padding: 12, background: '#f5f5f5', borderRadius: 6 }}>
-              <Row gutter={16}>
-                <Col span={8}>
-                  <Text strong>Bài tập: </Text>
-                  <Text>{selectedAssignment?.title}</Text>
-                </Col>
-                <Col span={8}>
-                  <Text strong>Tổng số lần nộp: </Text>
-                  <Badge count={selectedStudentSubmissions.length} showZero />
-                </Col>
-                <Col span={8}>
-                  <Text strong>Điểm tối đa: </Text>
-                  <Text>{selectedAssignment?.maxScore}</Text>
-                </Col>
-              </Row>
-            </div>
+        <Form form={autoGenForm} layout="vertical">
+          <Form.Item
+            label="Môn học"
+            name="subjectId"
+            rules={[{ required: true, message: "Vui lòng chọn môn học" }]}
+          >
+            <Select placeholder="Chọn môn học" onChange={(value) => {
+              fetchChaptersBySubject(value);
+              autoGenForm.setFieldValue("chapterRules", []);
+            }}>
+              {questionSubjects.map((s) => (
+                <Option key={s.id} value={s.id}>
+                  {s.subjectCode} - {s.subjectName}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
 
-            <Table
-              dataSource={selectedStudentSubmissions}
-              columns={submissionHistoryColumns}
-              rowKey="id"
-              bordered
-              pagination={false}
-              scroll={{ x: 900 }}
-              locale={{ emptyText: "Không có lịch sử nộp bài" }}
-            />
-          </>
+          <Divider>Cấu hình câu hỏi theo chương</Divider>
+
+          <Form.List name="chapterRules">
+            {(fields, { add, remove }) => (
+              <>
+                {fields.map(({ key, name, ...restField }) => (
+                  <Card key={key} size="small" style={{ marginBottom: 12 }}>
+                    <Row gutter={16}>
+                      <Col span={24}>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "chapterId"]}
+                          label="Chương"
+                          rules={[{ required: true }]}
+                        >
+                          <Select placeholder="Chọn chương">
+                            {chapters.map((c) => (
+                              <Option key={c.id} value={c.id}>
+                                {c.chapterCode} - {c.chapterName}
+                              </Option>
+                            ))}
+                          </Select>
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Row gutter={8}>
+                      <Col span={8}>
+                        <Text strong>Dễ:</Text>
+                        <Form.Item {...restField} name={[name, "easy", "count"]} label="Số câu">
+                          <InputNumber min={0} style={{ width: "100%" }} />
+                        </Form.Item>
+                        <Form.Item {...restField} name={[name, "easy", "pointPerQuestion"]} label="Điểm/câu">
+                          <InputNumber min={0} step={0.5} style={{ width: "100%" }} />
+                        </Form.Item>
+                      </Col>
+
+                      <Col span={8}>
+                        <Text strong>Trung bình:</Text>
+                        <Form.Item {...restField} name={[name, "medium", "count"]} label="Số câu">
+                          <InputNumber min={0} style={{ width: "100%" }} />
+                        </Form.Item>
+                        <Form.Item {...restField} name={[name, "medium", "pointPerQuestion"]} label="Điểm/câu">
+                          <InputNumber min={0} step={0.5} style={{ width: "100%" }} />
+                        </Form.Item>
+                      </Col>
+
+                      <Col span={8}>
+                        <Text strong>Khó:</Text>
+                        <Form.Item {...restField} name={[name, "hard", "count"]} label="Số câu">
+                          <InputNumber min={0} style={{ width: "100%" }} />
+                        </Form.Item>
+                        <Form.Item {...restField} name={[name, "hard", "pointPerQuestion"]} label="Điểm/câu">
+                          <InputNumber min={0} step={0.5} style={{ width: "100%" }} />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Button danger size="small" onClick={() => remove(name)}>
+                      Xóa chương
+                    </Button>
+                  </Card>
+                ))}
+
+                <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+                  Thêm chương
+                </Button>
+              </>
+            )}
+          </Form.List>
+
+          <Card size="small" style={{ marginTop: 16, backgroundColor: "#fff7e6" }}>
+            <Text type="warning">
+              ⚠️ Tổng điểm phải bằng 10. Hệ thống sẽ tự động kiểm tra khi tạo.
+            </Text>
+          </Card>
+        </Form>
+      </Modal>
+
+      {/* Modal gán lớp */}
+      <Modal
+        title={`Giao bài tập "${selectedAssignment?.title}" cho lớp`}
+        open={assignModalOpen}
+        onCancel={() => {
+          setAssignModalOpen(false);
+          setSelectedAssignment(null);
+          setTempSelectedSectionIds([]);
+        }}
+        onOk={handleSaveAssignment}
+        okText="Giao bài"
+        cancelText="Hủy"
+        confirmLoading={savingAssignment}
+        width={600}
+        centered
+        bodyStyle={{
+          maxHeight: "75vh",
+          overflowY: "auto",
+          overflowX: "hidden",
+        }}
+      >
+        {selectedAssignment && (
+          <div style={{ marginBottom: 16, padding: 12, backgroundColor: "#f5f5f5", borderRadius: 6 }}>
+            <div><Text strong>Bài tập:</Text> {selectedAssignment.title}</div>
+            {selectedAssignment.description && (
+              <div style={{ marginTop: 4, fontSize: 12, color: "#666" }}>
+                {selectedAssignment.description}
+              </div>
+            )}
+          </div>
         )}
-      </Modal>
-      {/* 🔥 Modal xem chi tiết bài làm */}
-      <Modal
-        title={
-          <div>
-            <FileTextOutlined style={{ marginRight: 8 }} />
-            Chi tiết bài làm - {selectedStudent?.user.fullName}
-          </div>
-        }
-        open={submissionDetailModalOpen}
-        onCancel={() => {
-          setSubmissionDetailModalOpen(false);
-          setSelectedSubmissionDetail(null);
-        }}
-        footer={[
-          <Button key="close" onClick={() => {
-            setSubmissionDetailModalOpen(false);
-            setSelectedSubmissionDetail(null);
-          }}>
-            Đóng
-          </Button>,
-        ]}
-        width={1400}
-        centered
-        bodyStyle={{ maxHeight: '70vh', overflowY: 'auto' }}
-      >
-        {loadingSubmissionDetail ? (
-          <div style={{ textAlign: "center", padding: 40 }}>
-            <Spin size="large" tip="Đang tải chi tiết bài làm..." />
-          </div>
-        ) : selectedSubmissionDetail ? (
-          <>
-            {/* Header thông tin submission */}
-            <div style={{ marginBottom: 20, padding: 16, background: '#f5f5f5', borderRadius: 8 }}>
-              <Row gutter={16}>
-                <Col span={6}>
-                  <Text strong>Bài tập: </Text>
-                  <Text>{selectedAssignment?.title}</Text>
-                </Col>
-                <Col span={6}>
-                  <Text strong>Thời gian nộp: </Text>
-                  <Text>{dayjs(selectedSubmissionDetail.submission.submittedAt).format("DD/MM/YYYY HH:mm")}</Text>
-                </Col>
-                <Col span={6}>
-                  <Text strong>Điểm: </Text>
-                  <Tag color={
-                    selectedSubmissionDetail.submission.score >= (selectedAssignment?.passingScore || 0)
-                      ? "success"
-                      : "error"
-                  }>
-                    {selectedSubmissionDetail.submission.score || 0}/{selectedSubmissionDetail.submission.maxScore}
-                  </Tag>
-                </Col>
-                <Col span={6}>
-                  <Text strong>Trạng thái: </Text>
-                  <Tag color={selectedSubmissionDetail.submission.autoGraded ? "blue" : "orange"}>
-                    {selectedSubmissionDetail.submission.autoGraded ? "Tự động chấm" : "Thủ công"}
-                  </Tag>
-                </Col>
-              </Row>
-            </div>
-
-            {/* Danh sách câu trả lời */}
-            <Title level={5} style={{ marginBottom: 16 }}>Danh sách câu trả lời</Title>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {selectedSubmissionDetail.answers.map((answer: any, index: number) => {
-                const question = answer.question;
-                const codeResult = selectedSubmissionDetail.codeResults.find(
-                  (cr: any) => cr.questionId === answer.questionId
-                );
-
-                return (
-                  <div
-                    key={answer.id}
-                    style={{
-                      border: '1px solid #d9d9d9',
-                      borderRadius: 8,
-                      padding: 16,
-                      backgroundColor: answer.isCorrect || (answer.score === answer.maxScore)
-                        ? '#f6ffed'
-                        : '#fff1f0',
-                    }}
-                  >
-                    {/* Question Header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                      <div style={{ flex: 1 }}>
-                        <Space>
-                          <Tag color={answer.isCorrect || (answer.score === answer.maxScore) ? "success" : "error"}>
-                            Câu {index + 1}
-                          </Tag>
-                          {question?.type && <Tag color="blue">{question.type.toUpperCase()}</Tag>}
-                          <Text strong>Điểm: {answer.score}/{answer.maxScore}</Text>
-                          {answer.isCorrect || (answer.score === answer.maxScore) ? (
-                            <Tag icon={<CheckCircleOutlined />} color="success">Đúng</Tag>
-                          ) : (
-                            <Tag color="error">Sai</Tag>
-                          )}
-                        </Space>
-                        <div style={{ marginTop: 8 }}>
-                          <Text strong>{question?.content}</Text>
-                        </div>
-                      </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {sections.length === 0 ? (
+            <p style={{ textAlign: "center", color: "#999" }}>Bạn chưa có lớp nào</p>
+          ) : (
+            sections.map((s) => {
+              const checked = tempSelectedSectionIds.includes(s.id);
+              return (
+                <label
+                  key={s.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    cursor: "pointer",
+                    padding: "12px",
+                    borderRadius: 4,
+                    border: "1px solid #d9d9d9",
+                    transition: "all 0.3s",
+                    backgroundColor: checked ? "#e6f7ff" : "transparent",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!checked) e.currentTarget.style.backgroundColor = "#f5f5f5";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!checked) e.currentTarget.style.backgroundColor = "transparent";
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => toggleTempSelection(s.id, e.target.checked)}
+                    style={{ cursor: "pointer" }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 500 }}>
+                      {s.sectionCode} - {s.sectionName}
                     </div>
-
-                    <Divider style={{ margin: '12px 0' }} />
-
-                    {/* Multiple Choice Answer */}
-                    {question?.type === "multiple_choice" && question.choices && (
-                      <div>
-                        <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                          Lựa chọn của học sinh:
-                        </Text>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          {question.choices
-                            .sort((a: any, b: any) => a.order - b.order)
-                            .map((choice: any) => {
-                              const isSelected = answer.selectedChoices?.includes(choice.id);
-                              const isCorrect = choice.isCorrect;
-
-                              let bgColor = "#fff";
-                              let borderColor = "#d9d9d9";
-                              let icon = null;
-
-                              if (isCorrect) {
-                                bgColor = "#f6ffed";
-                                borderColor = "#52c41a";
-                                icon = <CheckCircleOutlined style={{ color: '#52c41a' }} />;
-                              }
-                              if (isSelected && !isCorrect) {
-                                bgColor = "#fff1f0";
-                                borderColor = "#ff4d4f";
-                                icon = <span style={{ color: '#ff4d4f' }}>✗</span>;
-                              }
-
-                              return (
-                                <div
-                                  key={choice.id}
-                                  style={{
-                                    padding: '10px 12px',
-                                    border: `1px solid ${borderColor}`,
-                                    borderRadius: 6,
-                                    backgroundColor: bgColor,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 8,
-                                  }}
-                                >
-                                  {icon && <span style={{ fontSize: 16 }}>{icon}</span>}
-                                  <span style={{ flex: 1 }}>{choice.content}</span>
-                                  {isCorrect && (
-                                    <Tag color="success" style={{ margin: 0 }}>Đáp án đúng</Tag>
-                                  )}
-                                  {isSelected && (
-                                    <Tag color="blue" style={{ margin: 0 }}>Đã chọn</Tag>
-                                  )}
-                                </div>
-                              );
-                            })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* True/False Answer */}
-                    {question?.type === "true_false" && (
-                      <div>
-                        <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                          Lựa chọn của học sinh:
-                        </Text>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          {[
-                            { id: 1, content: "Đúng", value: true },
-                            { id: 2, content: "Sai", value: false },
-                          ].map((option) => {
-                            const isSelected = answer.selectedChoices?.includes(option.id);
-                            const isCorrect = question.choices?.find((c: any) => c.id === option.id)?.isCorrect;
-
-                            let bgColor = "#fff";
-                            let borderColor = "#d9d9d9";
-
-                            if (isCorrect) {
-                              bgColor = "#f6ffed";
-                              borderColor = "#52c41a";
-                            }
-                            if (isSelected && !isCorrect) {
-                              bgColor = "#fff1f0";
-                              borderColor = "#ff4d4f";
-                            }
-
-                            return (
-                              <div
-                                key={option.id}
-                                style={{
-                                  padding: '10px 12px',
-                                  border: `1px solid ${borderColor}`,
-                                  borderRadius: 6,
-                                  backgroundColor: bgColor,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 8,
-                                }}
-                              >
-                                <span style={{ flex: 1 }}>{option.content}</span>
-                                {isCorrect && (
-                                  <Tag color="success" style={{ margin: 0 }}>Đáp án đúng</Tag>
-                                )}
-                                {isSelected && (
-                                  <Tag color="blue" style={{ margin: 0 }}>Đã chọn</Tag>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Essay Answer */}
-                    {question?.type === "essay" && (
-                      <div>
-                        <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                          Câu trả lời của học sinh:
-                        </Text>
-                        <div
-                          style={{
-                            padding: 12,
-                            border: '1px solid #d9d9d9',
-                            borderRadius: 6,
-                            backgroundColor: '#fff',
-                            whiteSpace: 'pre-wrap',
-                            minHeight: 60,
-                          }}
-                        >
-                          {answer.essayAnswer || <Text type="secondary">Không có câu trả lời</Text>}
-                        </div>
-                        {answer.feedback && (
-                          <div
-                            style={{
-                              marginTop: 8,
-                              padding: 12,
-                              backgroundColor: '#e6f7ff',
-                              border: '1px solid #91d5ff',
-                              borderRadius: 6,
-                            }}
-                          >
-                            <Text strong>Nhận xét: </Text>
-                            <Text>{answer.feedback}</Text>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Coding Answer */}
-                    {question?.type === "coding" && codeResult && (
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                          <Text strong>Code của học sinh:</Text>
-                          <Tag color="purple">{codeResult.language}</Tag>
-                        </div>
-                        <pre
-                          style={{
-                            padding: 12,
-                            backgroundColor: '#1e1e1e',
-                            color: '#4ec9b0',
-                            borderRadius: 6,
-                            overflowX: 'auto',
-                            fontSize: 13,
-                            fontFamily: "'Fira Code', 'Courier New', monospace",
-                            margin: 0,
-                            maxHeight: 300,
-                          }}
-                        >
-                          {codeResult.codeAnswer}
-                        </pre>
-
-                        {/* Code Results */}
-                        <div style={{ marginTop: 12, padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                            <Text strong>Kết quả test:</Text>
-                            <Space>
-                              <Tag color={
-                                codeResult.score === codeResult.maxScore ? "success" : "warning"
-                              }>
-                                {codeResult.score}/{codeResult.maxScore} điểm
-                              </Tag>
-                              <Tag color={
-                                codeResult.judgeStatus === "accepted" ? "success" : "error"
-                              }>
-                                {codeResult.judgeStatus}
-                              </Tag>
-                            </Space>
-                          </div>
-
-                          {codeResult.compileLog && (
-                            <div
-                              style={{
-                                marginTop: 8,
-                                padding: 10,
-                                backgroundColor: '#fff1f0',
-                                border: '1px solid #ffa39e',
-                                borderRadius: 6,
-                              }}
-                            >
-                              <Text strong style={{ color: '#cf1322' }}>Compile Error:</Text>
-                              <pre style={{
-                                margin: '8px 0 0 0',
-                                fontSize: 12,
-                                whiteSpace: 'pre-wrap',
-                                color: '#cf1322'
-                              }}>
-                                {codeResult.compileLog}
-                              </pre>
-                            </div>
-                          )}
-
-                          {codeResult.stderrLog && (
-                            <div
-                              style={{
-                                marginTop: 8,
-                                padding: 10,
-                                backgroundColor: '#fff1f0',
-                                border: '1px solid #ffa39e',
-                                borderRadius: 6,
-                              }}
-                            >
-                              <Text strong style={{ color: '#cf1322' }}>Runtime Error:</Text>
-                              <pre style={{
-                                margin: '8px 0 0 0',
-                                fontSize: 12,
-                                whiteSpace: 'pre-wrap',
-                                color: '#cf1322'
-                              }}>
-                                {codeResult.stderrLog}
-                              </pre>
-                            </div>
-                          )}
-
-                          {codeResult.testResults && codeResult.testResults.length > 0 && (
-                            <div style={{ marginTop: 12 }}>
-                              <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                                Test Cases:
-                              </Text>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                {codeResult.testResults.map((test: any, idx: number) => (
-                                  <div
-                                    key={test.id}
-                                    style={{
-                                      padding: 10,
-                                      backgroundColor: test.status === "ok" ? "#f6ffed" : "#fff1f0",
-                                      border: `1px solid ${test.status === "ok" ? "#b7eb8f" : "#ffa39e"}`,
-                                      borderRadius: 6,
-                                    }}
-                                  >
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                      <Text strong>Test Case {idx + 1}</Text>
-                                      <Tag color={test.status === "ok" ? "success" : "error"}>
-                                        {test.status === "ok" ? "✓ Passed" : "✗ Failed"}
-                                      </Tag>
-                                    </div>
-                                    <Row gutter={8}>
-                                      <Col span={8}>
-                                        <Text type="secondary" style={{ fontSize: 12 }}>Input:</Text>
-                                        <pre style={{
-                                          margin: '4px 0 0 0',
-                                          padding: 8,
-                                          backgroundColor: '#fff',
-                                          border: '1px solid #d9d9d9',
-                                          borderRadius: 4,
-                                          fontSize: 12,
-                                        }}>
-                                          {test.input}
-                                        </pre>
-                                      </Col>
-                                      <Col span={8}>
-                                        <Text type="secondary" style={{ fontSize: 12 }}>Expected:</Text>
-                                        <pre style={{
-                                          margin: '4px 0 0 0',
-                                          padding: 8,
-                                          backgroundColor: '#fff',
-                                          border: '1px solid #d9d9d9',
-                                          borderRadius: 4,
-                                          fontSize: 12,
-                                        }}>
-                                          {test.expect}
-                                        </pre>
-                                      </Col>
-                                      <Col span={8}>
-                                        <Text type="secondary" style={{ fontSize: 12 }}>Got:</Text>
-                                        <pre style={{
-                                          margin: '4px 0 0 0',
-                                          padding: 8,
-                                          backgroundColor: '#fff',
-                                          border: '1px solid #d9d9d9',
-                                          borderRadius: 4,
-                                          fontSize: 12,
-                                          color: test.status === "ok" ? "#52c41a" : "#ff4d4f",
-                                        }}>
-                                          {test.got}
-                                        </pre>
-                                      </Col>
-                                    </Row>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {codeResult.stdoutLog && (
-                            <div
-                              style={{
-                                marginTop: 8,
-                                padding: 10,
-                                backgroundColor: '#f5f5f5',
-                                border: '1px solid #d9d9d9',
-                                borderRadius: 6,
-                              }}
-                            >
-                              <Text strong>Output:</Text>
-                              <pre style={{
-                                margin: '8px 0 0 0',
-                                fontSize: 12,
-                                whiteSpace: 'pre-wrap'
-                              }}>
-                                {codeResult.stdoutLog}
-                              </pre>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Explanation */}
-                    {question?.explanation && (
-                      <div
-                        style={{
-                          marginTop: 12,
-                          padding: 12,
-                          backgroundColor: '#e6f7ff',
-                          border: '1px solid #91d5ff',
-                          borderRadius: 6,
-                        }}
-                      >
-                        <Text strong>💡 Giải thích: </Text>
-                        <div style={{ marginTop: 4, whiteSpace: 'pre-wrap' }}>
-                          {question.explanation}
-                        </div>
-                      </div>
-                    )}
+                    <div style={{ fontSize: 12, color: "#666" }}>
+                      {s.subject.subjectCode} - {s.subject.subjectName} ({s.term.name})
+                    </div>
                   </div>
-                );
-              })}
-            </div>
-          </>
-        ) : (
-          <div style={{ textAlign: "center", padding: 40 }}>
-            <Text type="secondary">Không có dữ liệu</Text>
-          </div>
-        )}
+                </label>
+              );
+            })
+          )}
+        </div>
       </Modal>
     </div>
   );

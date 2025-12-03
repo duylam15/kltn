@@ -5,6 +5,15 @@ import validate from "../../../middlewares/validate";
 
 const router = Router();
 
+// GET /choices/:id
+router.get(
+    "/choices/:id",
+    validate(validation.getChoiceSchema),
+    controller.getById
+);
+
+
+
 // POST /questions/:questionId/choices
 router.post(
     "/:questionId/choices",

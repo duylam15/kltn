@@ -20,13 +20,12 @@ import {
   DeleteOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import { Users } from "lucide-react";
+import instance from "../../utils/axiosInstance";
 
 const { Title } = Typography;
-const API_BASE = "http://localhost:4000/api/v1";
 
 type User = {
   id: number;
@@ -48,7 +47,7 @@ type Student = {
   user?: User;
 };
 
-export default function Students() {
+export default function StudentsAdmin() {
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState<Student[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -67,8 +66,8 @@ export default function Students() {
   async function fetchStudents() {
     try {
       setLoading(true);
-      const res = await axios.get<{ success: boolean; data: Student[] }>(
-        `${API_BASE}/students`
+      const res = await instance.get<{ success: boolean; data: Student[] }>(
+        `/students`
       );
       console.log(res);
       if (res.data.success) {
@@ -83,8 +82,8 @@ export default function Students() {
 
   async function fetchUsers() {
     try {
-      const res = await axios.get<{ success: boolean; data: User[] }>(
-        `${API_BASE}/users?role=student`
+      const res = await instance.get<{ success: boolean; data: User[] }>(
+        `/users?role=student`
       );
       if (res.data.success) {
         setUsers(res.data.data || []);
@@ -96,7 +95,7 @@ export default function Students() {
 
   const handleDelete = async (id: number) => {
     try {
-      await axios.delete(`${API_BASE}/students/${id}`);
+      await instance.delete(`/students/${id}`);
       toast.success("Đã xóa sinh viên");
       setStudents((prev) => prev.filter((s) => s.id !== id));
     } catch (err) {
@@ -119,10 +118,10 @@ export default function Students() {
       };
 
       if (editing) {
-        await axios.patch(`${API_BASE}/students/${editing.id}`, payload);
+        await instance.patch(`/students/${editing.id}`, payload);
         toast.success("Đã cập nhật sinh viên");
       } else {
-        await axios.post(`${API_BASE}/students`, payload);
+        await instance.post(`/students`, payload);
         toast.success("Đã thêm sinh viên mới");
       }
 
