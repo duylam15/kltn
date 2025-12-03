@@ -773,16 +773,9 @@ export default function Dashboard() {
                             {
                               key: "delete",
                               icon: <DeleteOutlined />,
+                              onClick: () => handleDelete(section.id),
                               label: (
-                                <Popconfirm
-                                  title="Xác nhận xóa"
-                                  description="Bạn có chắc chắn muốn xóa học phần này?"
-                                  onConfirm={() => handleDelete(section.id)}
-                                  okText="Xóa"
-                                  cancelText="Hủy"
-                                >
-                                  <span>Xóa</span>
-                                </Popconfirm>
+                                <span>Xóa</span>
                               ),
                               danger: true,
                             },

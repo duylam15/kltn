@@ -186,6 +186,8 @@ model Subject {
   subjectInstructors SubjectInstructor[] // Thêm relation này
   chapters           Chapter[]
   questions          Question[]
+  materials Material[]
+    assignments Assignment[] // <--- thêm dòng này
 
   @@index([subjectCode])
 }
@@ -334,6 +336,12 @@ model Material {
   uploadedAt         DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   link               String?
+  subjectId Int?
+  chapterId Int?
+
+  subject Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  chapter Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+
   uploader    User             @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
   courseLinks CourseMaterial[] @relation("MaterialToCourse")
 }
@@ -383,6 +391,13 @@ enum ProgrammingLanguage {
   css
 }
 
+enum DifficultyLevelAssignment {
+  REMEDIAL
+  NORMAL
+  ADVANCED
+}
+
+
 model Assignment {
   id          Int            @id @default(autoincrement())
   title       String         @db.VarChar(200)
@@ -399,12 +414,20 @@ model Assignment {
   showAnswersAfterSubmit Boolean   @default(false)
   allowLateSubmission    Boolean   @default(false)
   createdBy              Int
+  chapterId    Int?
+  subjectId    Int?
     createdByUser     User    @relation("AssignmentCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  difficulty  DifficultyLevelAssignment @default(NORMAL)
 
   originalAssignmentId   String    @db.VarChar(100)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+    subject       Subject?  @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  chapter       Chapter?   @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+
+ 
 
   questions     AssignmentQuestion[]
   submissions   Submission[]
@@ -506,6 +529,8 @@ model Chapter {
 
   subject   Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   questions Question[]
+  materials   Material[]
+  assignments Assignment[] // <--- thêm dòng này
 
   @@unique([subjectId, chapterCode])
   @@index([subjectId])

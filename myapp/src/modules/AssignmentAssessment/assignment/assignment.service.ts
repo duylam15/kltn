@@ -49,7 +49,6 @@ export async function submitCodeAnswer(data: {
     return { submission, answer };
 }
 
-
 // Folder (project) submission
 export async function submitProjectAnswer(data: {
     studentId: number;
@@ -91,7 +90,6 @@ export async function submitProjectAnswer(data: {
     return { submission, answer };
 }
 
-
 export async function getAnswerStatus(answerId: number) {
     return prisma.submissionAnswer.findUnique({
         where: { id: answerId },
@@ -120,40 +118,6 @@ export async function getAssignmentsBySection(sectionId: number) {
             },
             questions: true,
             submissions: true,
-        },
-    });
-}
-
-export async function createAssignment(data: {
-    title: string;
-    description?: string;
-    type: AssignmentType;
-    dueDate?: string | Date | null;
-    maxScore?: number;
-    passingScore?: number;
-    timeLimit?: number;
-    maxAttempts?: number;
-    shuffleQuestions?: boolean;
-    showAnswersAfterSubmit?: boolean;
-    allowLateSubmission?: boolean;
-    createdBy: number;
-    originalAssignmentId?: string | null;
-}) {
-    return prisma.assignment.create({
-        data: {
-            title: data.title,
-            description: data.description,
-            type: data.type,
-            dueDate: data.dueDate ? new Date(data.dueDate) : null,
-            maxScore: data.maxScore ?? 10,
-            passingScore: data.passingScore ?? null,
-            timeLimit: data.timeLimit ?? null,
-            maxAttempts: data.maxAttempts ?? 1,
-            shuffleQuestions: data.shuffleQuestions ?? false,
-            showAnswersAfterSubmit: data.showAnswersAfterSubmit ?? false,
-            allowLateSubmission: data.allowLateSubmission ?? false,
-            createdBy: data.createdBy,
-            originalAssignmentId: data.originalAssignmentId ?? uuidv4(), // 👈 luôn đảm bảo có string
         },
     });
 }
@@ -326,10 +290,204 @@ export async function getAssignmentsBySectionForStudent(
     return result;
 }
 
-export async function updateAssignment(id: number, data: any) {
+export async function createAssignment(data: {
+    title: string;
+    description?: string;
+    type: AssignmentType;
+    dueDate?: string | Date | null;
+    maxScore?: number;
+    passingScore?: number;
+    timeLimit?: number;
+    maxAttempts?: number;
+    shuffleQuestions?: boolean;
+    showAnswersAfterSubmit?: boolean;
+    allowLateSubmission?: boolean;
+    difficulty: "REMEDIAL" | "NORMAL" | "ADVANCED";
+    createdBy: number;
+    subjectId: number | null;
+    chapterId: number | null;
+    originalAssignmentId?: string | null;
+    isPublic?: boolean; // 🔥 THÊM nếu chưa có
+}) {
+    console.log("📥 Data received in createAssignment:");
+    console.log("allowLateSubmission:", data.allowLateSubmission);
+    console.log(
+        "Type of allowLateSubmission:",
+        typeof data.allowLateSubmission
+    );
+    console.log("Will save as:", data);
+    // 🔥 THÊM: Validate subject nếu có
+    if (data.subjectId !== undefined && data.subjectId !== null) {
+        const subject = await prisma.subject.findUnique({
+            where: { id: data.subjectId },
+        });
+        if (!subject) {
+            throw new Error(`Subject với id ${data.subjectId} không tồn tại`);
+        }
+    }
+
+    // 🔥 THÊM: Validate chapter nếu có
+    if (data.chapterId !== undefined && data.chapterId !== null) {
+        const chapter = await prisma.chapter.findUnique({
+            where: { id: data.chapterId },
+            include: { subject: true },
+        });
+        if (!chapter) {
+            throw new Error(`Chapter với id ${data.chapterId} không tồn tại`);
+        }
+
+        // Kiểm tra chapter có thuộc subject không
+        if (data.subjectId && chapter.subjectId !== data.subjectId) {
+            throw new Error(
+                `Chapter ${data.chapterId} không thuộc về Subject ${data.subjectId}`
+            );
+        }
+    }
+
+    return prisma.assignment.create({
+        data: {
+            title: data.title,
+            description: data.description,
+            type: data.type,
+            dueDate: data.dueDate ? new Date(data.dueDate) : null,
+            maxScore: data.maxScore ?? 10,
+            passingScore: data.passingScore ?? null,
+            timeLimit: data.timeLimit ?? null,
+            maxAttempts: data.maxAttempts ?? 1,
+
+            // 🔥 SỬA: Xử lý đúng cho boolean
+            shuffleQuestions: data.shuffleQuestions === true, // chỉ true nếu explicitly true
+            showAnswersAfterSubmit: data.showAnswersAfterSubmit === true,
+            allowLateSubmission: data.allowLateSubmission === true, // 🔥 ĐÂY
+            isPublic: data.isPublic === true,
+            difficulty: data.difficulty,
+            createdBy: data.createdBy,
+            subjectId: data.subjectId ?? null,
+            chapterId: data.chapterId ?? null,
+            originalAssignmentId: data.originalAssignmentId ?? uuidv4(),
+        },
+        include: {
+            // 🔥 THÊM include để trả về đầy đủ thông tin
+            subject: {
+                select: {
+                    id: true,
+                    subjectCode: true,
+                    subjectName: true,
+                },
+            },
+            chapter: {
+                select: {
+                    id: true,
+                    chapterCode: true,
+                    chapterName: true,
+                },
+            },
+        },
+    });
+}
+
+export async function updateAssignment(
+    id: number,
+    data: {
+        title?: string;
+        description?: string;
+        type?: AssignmentType;
+        dueDate?: string | Date | null;
+        maxScore?: number;
+        passingScore?: number;
+        timeLimit?: number;
+        maxAttempts?: number;
+        shuffleQuestions?: boolean;
+        showAnswersAfterSubmit?: boolean;
+        allowLateSubmission?: boolean;
+        isPublic?: boolean;
+        subjectId?: number | null; // 🔥 THÊM
+        chapterId?: number | null; // 🔥 THÊM
+        difficulty: "REMEDIAL" | "NORMAL" | "ADVANCED";
+        createdBy: number;
+    }
+) {
+    // 🔥 THÊM: Validate subject nếu có
+    if (data.subjectId !== undefined && data.subjectId !== null) {
+        const subject = await prisma.subject.findUnique({
+            where: { id: data.subjectId },
+        });
+        if (!subject) {
+            throw new Error(`Subject với id ${data.subjectId} không tồn tại`);
+        }
+    }
+
+    // 🔥 THÊM: Validate chapter nếu có
+    if (data.chapterId !== undefined && data.chapterId !== null) {
+        const chapter = await prisma.chapter.findUnique({
+            where: { id: data.chapterId },
+            include: { subject: true },
+        });
+        if (!chapter) {
+            throw new Error(`Chapter với id ${data.chapterId} không tồn tại`);
+        }
+
+        // Nếu đang set cả subjectId và chapterId, check tương thích
+        if (data.subjectId && chapter.subjectId !== data.subjectId) {
+            throw new Error(
+                `Chapter ${data.chapterId} không thuộc về Subject ${data.subjectId}`
+            );
+        }
+
+        // Nếu chỉ set chapterId mà không set subjectId, check với subject hiện tại
+        if (data.subjectId === undefined) {
+            const currentAssignment = await prisma.assignment.findUnique({
+                where: { id },
+                select: { subjectId: true },
+            });
+            if (
+                currentAssignment?.subjectId &&
+                chapter.subjectId !== currentAssignment.subjectId
+            ) {
+                throw new Error(
+                    `Chapter ${data.chapterId} không thuộc về Subject hiện tại`
+                );
+            }
+        }
+    }
+
+    // 🔥 THÊM: Chuẩn bị updateData
+    const updateData: any = {};
+
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.description !== undefined)
+        updateData.description = data.description;
+    if (data.type !== undefined) updateData.type = data.type;
+    if (data.dueDate !== undefined) {
+        updateData.dueDate = data.dueDate ? new Date(data.dueDate) : null;
+    }
+    if (data.maxScore !== undefined) updateData.maxScore = data.maxScore;
+    if (data.passingScore !== undefined)
+        updateData.passingScore = data.passingScore;
+    if (data.timeLimit !== undefined) updateData.timeLimit = data.timeLimit;
+    if (data.maxAttempts !== undefined)
+        updateData.maxAttempts = data.maxAttempts;
+    if (data.shuffleQuestions !== undefined)
+        updateData.shuffleQuestions = data.shuffleQuestions;
+    if (data.showAnswersAfterSubmit !== undefined)
+        updateData.showAnswersAfterSubmit = data.showAnswersAfterSubmit;
+    if (data.allowLateSubmission !== undefined)
+        updateData.allowLateSubmission = data.allowLateSubmission;
+
+    if (data.difficulty !== undefined)
+        updateData.difficulty = data.difficulty;
+
+    // 🔥 THÊM: Xử lý subjectId và chapterId
+    if (data.subjectId !== undefined) {
+        updateData.subjectId = data.subjectId;
+    }
+    if (data.chapterId !== undefined) {
+        updateData.chapterId = data.chapterId;
+    }
+
     return prisma.assignment.update({
         where: { id },
-        data,
+        data: updateData,
     });
 }
 
@@ -399,14 +557,13 @@ export async function startAssignment(studentId: number, assignmentId: number) {
         }
 
         // Kiểm tra đã có submission chưa
-       const existingSubmission = await prisma.submission.findFirst({
-           where: {
-               assignmentId,
-               studentId,
-           },
-           orderBy: { attempt: "desc" }, // lấy lần nộp mới nhất
-       });
-
+        const existingSubmission = await prisma.submission.findFirst({
+            where: {
+                assignmentId,
+                studentId,
+            },
+            orderBy: { attempt: "desc" }, // lấy lần nộp mới nhất
+        });
 
         if (existingSubmission) {
             // Nếu đã có, trả về submission hiện tại
@@ -798,7 +955,6 @@ export async function getSubmissionsByStudentAndAssignment(
         },
     });
 }
-
 
 export async function getPublicAssignments() {
     return prisma.assignment.findMany({

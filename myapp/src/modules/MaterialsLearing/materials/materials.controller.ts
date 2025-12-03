@@ -475,3 +475,105 @@ export const listOpenBySection = catchAsync(
         sendResponse(res, { success: true, data: jsonSafe(validMaterials) });
     }
 );
+
+
+// 🆕 Tạo tài liệu từ link (không cần upload file)
+export async function createMaterialFromLink(req: Request, res: Response) {
+    try {
+        const {
+            title,
+            description,
+            link,
+            category,
+            isPublic,
+            uploadedBy,
+            subjectId,
+            chapterId,
+        } = req.body;
+
+        // Validate required fields
+        if (!title || ! link || !uploadedBy) {
+            return res.status(400).json({
+                success: false,
+                message: "Thiếu thông tin: title, link, uploadedBy là bắt buộc",
+            });
+        }
+
+        const material = await materialService.createMaterialFromLink({
+            title,
+            description,
+            link, // Chỉ là string, không validate
+            category: category || "other",
+            isPublic: isPublic === true || isPublic === "true",
+            uploadedBy: Number(uploadedBy),
+            subjectId: subjectId ?  Number(subjectId) : undefined,
+            chapterId: chapterId ? Number(chapterId) : undefined,
+        });
+
+        res.status(201).json({
+            success: true,
+            data: jsonSafe(material),
+            message: "Tạo tài liệu từ link thành công",
+        });
+    } catch (error: any) {
+        console.error("❌ Error creating material from link:", error);
+        res. status(500).json({
+            success: false,
+            message: error.message || "Lỗi khi tạo tài liệu từ link",
+        });
+    }
+}
+
+// 🆕 Lấy tài liệu theo môn học
+export async function getMaterialsBySubject(req: Request, res: Response) {
+    try {
+        const subjectId = parseInt(req.params.subjectId);
+        
+        if (isNaN(subjectId)) {
+            return res.status(400).json({
+                success: false,
+                message: "subjectId không hợp lệ",
+            });
+        }
+
+        const materials = await materialService.getMaterialsBySubject(subjectId);
+        
+        res.json({
+            success: true,
+            data: jsonSafe(materials),
+            total: materials.length,
+        });
+    } catch (error: any) {
+        res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+}
+
+// 🆕 Lấy tài liệu theo chương
+export async function getMaterialsByChapter(req: Request, res: Response) {
+    try {
+        const chapterId = parseInt(req.params.chapterId);
+        
+        if (isNaN(chapterId)) {
+            return res.status(400).json({
+                success: false,
+                message: "chapterId không hợp lệ",
+            });
+        }
+
+        const materials = await materialService.getMaterialsByChapter(chapterId);
+        
+        res.json({
+            success: true,
+            data: jsonSafe(materials),
+            total: materials.length,
+        });
+    } catch (error: any) {
+        res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+}

@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { useAuth } from "../../context/authContext";
-import { Users, Check, Clock, AlertCircle, UserCircle } from "lucide-react";
+import { Users, Check, Clock, AlertCircle, UserCircle, LogOut, Calendar } from "lucide-react";
 import dayjs from "dayjs";
+import instance from "../../utils/axiosInstance";
 
 type Group = {
   id: number;
@@ -57,14 +58,13 @@ export default function Group() {
     if (!studentId) return;
 
     setLoading(true);
-    fetch(
-      `http://localhost:4000/api/v1/sections-groups/${sectionId}/groups/available?studentId=${studentId}`
+    instance.get(
+      `/sections-groups/${sectionId}/groups/available?studentId=${studentId}`
     )
-      .then((res) => res.json())
+      .then((res) => res.data)
       .then((data) => {
         if (data.success) {
           setGroupData(data.data);
-          // Nếu đã join nhóm, fetch danh sách thành viên
           if (data.data.joined && data.data.currentGroup) {
             fetchGroupMembers(data.data.currentGroup.id);
           }
@@ -77,10 +77,10 @@ export default function Group() {
   // Fetch danh sách thành viên trong nhóm
   const fetchGroupMembers = (groupId: number) => {
     setLoadingMembers(true);
-    fetch(
-      `http://localhost:4000/api/v1/sections-groups/${sectionId}/groups/${groupId}/students`
+    instance.get(
+      `/sections-groups/${sectionId}/groups/${groupId}/students`
     )
-      .then((res) => res.json())
+      .then((res) => res.data)
       .then((data) => {
         if (data.success) {
           setMembers(data.data);
@@ -107,7 +107,6 @@ export default function Group() {
       newSocket.emit("joinSection", sectionId);
     });
 
-    // Handler: groupJoined
     newSocket.on("groupJoined", (data: any) => {
       if (data.sectionId === sectionId) {
         if (data.student.id === studentId) {
@@ -120,10 +119,8 @@ export default function Group() {
               maxMembers: data.maxMembers,
             },
           });
-          // Fetch danh sách thành viên ngay sau khi join
           fetchGroupMembers(data.groupId);
         } else {
-          // Cập nhật danh sách nhóm
           setGroupData((prev) => {
             if (!prev || !prev.availableGroups) return prev;
 
@@ -141,7 +138,6 @@ export default function Group() {
             };
           });
 
-          // Nếu đang xem nhóm này, refresh danh sách thành viên
           if (groupData?.currentGroup?.id === data.groupId) {
             fetchGroupMembers(data.groupId);
           }
@@ -149,7 +145,6 @@ export default function Group() {
       }
     });
 
-    // Handler: groupLeft
     newSocket.on("groupLeft", (data: any) => {
       if (data.sectionId === sectionId) {
         if (data.studentId === studentId) {
@@ -173,7 +168,6 @@ export default function Group() {
             };
           });
 
-          // Nếu đang xem nhóm này, refresh danh sách thành viên
           if (groupData?.currentGroup?.id === data.groupId) {
             fetchGroupMembers(data.groupId);
           }
@@ -195,8 +189,8 @@ export default function Group() {
     setError("");
 
     try {
-      const res = await fetch(
-        `http://localhost:4000/api/v1/sections-groups/${sectionId}/groups/${groupId}/join`,
+      const res = await instance.post(
+        `/sections-groups/${sectionId}/groups/${groupId}/join`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -204,7 +198,7 @@ export default function Group() {
         }
       );
 
-      const data = await res.json();
+      const data = await res.data;
 
       if (data.success) {
         setGroupData({
@@ -216,7 +210,6 @@ export default function Group() {
             maxMembers: data.data.group?.maxMembers || 0,
           },
         });
-        // Fetch danh sách thành viên
         fetchGroupMembers(data.data.group?.id || groupId);
       } else {
         setError(data.message || "Không thể tham gia nhóm");
@@ -236,8 +229,8 @@ export default function Group() {
     setError("");
 
     try {
-      const res = await fetch(
-        `http://localhost:4000/api/v1/sections-groups/${sectionId}/groups/leave`,
+      const res = await instance.post(
+        `/sections-groups/${sectionId}/groups/leave`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -245,7 +238,7 @@ export default function Group() {
         }
       );
 
-      const data = await res.json();
+      const data = await res.data;
 
       if (data.success) {
         fetchGroups();
@@ -262,8 +255,11 @@ export default function Group() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-150px)]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-10 w-10 border-3 border-blue-600 border-t-transparent"></div>
+          <p className="text-sm text-gray-500">Đang tải...</p>
+        </div>
       </div>
     );
   }
@@ -271,224 +267,306 @@ export default function Group() {
   // Đã join nhóm - Hiển thị thông tin nhóm và danh sách thành viên
   if (groupData?.joined && groupData.currentGroup) {
     const { currentGroup } = groupData;
+    const progressPercentage = (members.length / currentGroup.maxMembers) * 100;
+
     return (
-      <div className="px-6 py-6">
-        {/* Card thông tin nhóm */}
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center">
-              <Check className="w-7 h-7 text-green-600" />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        {/* Error Alert */}
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg flex items-start gap-3 animate-in slide-in-from-top-2">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-800">{error}</p>
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800">Nhóm học tập của bạn</h2>
-              <p className="text-sm text-gray-500">Thông tin nhóm hiện tại</p>
-            </div>
+            <button
+              onClick={() => setError("")}
+              className="text-red-400 hover:text-red-600"
+            >
+              ×
+            </button>
           </div>
+        )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4">
-            <div>
-              <p className="text-sm text-gray-600">Mã nhóm:</p>
-              <p className="text-lg font-bold text-blue-600">
-                {currentGroup.groupCode || "N/A"}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Tên nhóm:</p>
-              <p className="text-base font-semibold text-gray-800">
-                {currentGroup.groupName || "Chưa đặt tên"}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Số lượng thành viên:</p>
-              <p className="text-base font-semibold text-gray-800">
-                {members.length}/{currentGroup.maxMembers}
-              </p>
-            </div>
-          </div>
+        <div className="grid lg:grid-cols-3 gap-6">
+         
 
-          {/* Thanh trạng thái số lượng */}
-          <div className="mt-4 w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-blue-500 h-2 rounded-full"
-              style={{ width: `${(members.length / currentGroup.maxMembers) * 100}%` }}
-            ></div>
-          </div>
-
-          <button
-            onClick={handleLeaveGroup}
-            disabled={joining}
-            className="mt-6 w-full py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 font-medium transition"
-          >
-            {joining ? "Đang xử lý..." : "Rời nhóm"}
-          </button>
-
-          {error && (
-            <div className="mt-3 flex items-center gap-2 text-red-600 text-sm">
-              <AlertCircle className="w-4 h-4" />
-              <span>{error}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Card danh sách thành viên */}
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-gray-800">Thành viên nhóm</h3>
-            <span className="px-3 py-1 bg-blue-100 text-blue-600 rounded-full text-sm font-medium">
-              {members.length}/{currentGroup.maxMembers}
-            </span>
-          </div>
-
-          {loadingMembers ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            </div>
-          ) : members.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto">
-              {members.map((member) => (
-                <div
-                  key={member.enrollmentId}
-                  className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition"
-                >
-                  {member.avatarUrl ? (
-                    <img
-                      src={member.avatarUrl}
-                      alt={member.fullName}
-                      className="w-10 h-10 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center">
-                      <UserCircle className="w-6 h-6 text-white" />
-                    </div>
-                  )}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-gray-800">{member.fullName}</p>
-                      {member.studentId === studentId && (
-                        <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
-                          Bạn
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500">{member.studentCode}</p>
-                  </div>
-                  <span className="text-xs text-gray-400">
-                    {dayjs(member.enrolledAt).format("DD/MM/YYYY")}
+          {/* Danh sách thành viên - Main content */}
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <Users className="w-5 h-5 text-blue-600" />
+                    Thành viên nhóm
+                  </h3>
+                  <span className="px-3 py-1. 5 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold">
+                    {members.length} thành viên
                   </span>
                 </div>
-              ))}
+              </div>
+
+              <div className="p-6">
+                {loadingMembers ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-3 border-blue-600 border-t-transparent"></div>
+                  </div>
+                ) : members.length > 0 ? (
+                  <div className="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar">
+                    {members.map((member, index) => (
+                      <div
+                        key={member.enrollmentId}
+                        className="flex items-center gap-4 p-4 bg-gray-50 hover:bg-gray-100 rounded-xl transition-all group border border-transparent hover:border-gray-200"
+                        style={{ animationDelay: `${index * 50}ms` }}
+                      >
+                        <div className="relative">
+                          {member.avatarUrl ? (
+                            <img
+                              src={member.avatarUrl}
+                              alt={member.fullName}
+                              className="w-12 h-12 rounded-full object-cover ring-2 ring-gray-200 group-hover:ring-blue-400 transition-all"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center ring-2 ring-gray-200 group-hover:ring-blue-400 transition-all">
+                              <span className="text-white font-bold text-lg">
+                                {member.fullName.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                          )}
+                          {member.studentId === studentId && (
+                            <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white flex items-center justify-center">
+                              <Check className="w-3 h-3 text-white" />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <p className="font-semibold text-gray-900 truncate">
+                              {member.fullName}
+                            </p>
+                            {member.studentId === studentId && (
+                              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-md font-medium flex-shrink-0">
+                                Bạn
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-500">{member.studentCode}</p>
+                        </div>
+
+                        <div className="flex items-center gap-1. 5 text-gray-400 text-xs flex-shrink-0">
+                          <Calendar className="w-3. 5 h-3.5" />
+                          <span>{dayjs(member.enrolledAt).format("DD/MM/YY")}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-16">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Users className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <p className="text-gray-500 font-medium">Chưa có thành viên nào</p>
+                    <p className="text-gray-400 text-sm mt-1">
+                      Hãy mời bạn bè tham gia nhóm
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-          ) : (
-            <div className="text-center py-8">
-              <Users className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-              <p className="text-gray-500 text-sm">Chưa có thành viên nào</p>
+          </div>
+
+          {/* Thông tin nhóm - Sidebar */}
+          <div className="lg:col-span-1">
+            <div className="bg-[#47689c] rounded-2xl shadow-xl p-6 text-white sticky top-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                  <Check className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">Nhóm của bạn</h2>
+                  <p className="text-blue-100 text-sm">Đã tham gia</p>
+                </div>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+                  <p className="text-blue-100 text-xs uppercase tracking-wide mb-1">
+                    Mã nhóm
+                  </p>
+                  <p className="text-2xl font-bold">
+                    {currentGroup.groupCode || "N/A"}
+                  </p>
+                </div>
+
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+                  <p className="text-blue-100 text-xs uppercase tracking-wide mb-1">
+                    Tên nhóm
+                  </p>
+                  <p className="text-lg font-semibold">
+                    {currentGroup.groupName || "Chưa đặt tên"}
+                  </p>
+                </div>
+
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+                  <p className="text-blue-100 text-xs uppercase tracking-wide mb-2">
+                    Thành viên
+                  </p>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-2xl font-bold">{members.length}</span>
+                    <span className="text-blue-100">/ {currentGroup.maxMembers}</span>
+                  </div>
+                  <div className="w-full bg-white/20 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-white h-full rounded-full transition-all duration-500"
+                      style={{ width: `${progressPercentage}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleLeaveGroup}
+                disabled={joining}
+                className="w-full py-3 bg-white/20 backdrop-blur-sm hover:bg-white/30 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl font-medium transition-all flex items-center justify-center gap-2 group"
+              >
+                <LogOut className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                {joining ? "Đang xử lý..." : "Rời nhóm"}
+              </button>
             </div>
-          )}
+          </div>
         </div>
       </div>
-
     );
   }
 
   // Chưa join nhóm -> hiển thị danh sách
   return (
-    <div className="pl-6 pr-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">
+    <div className="max-w-7xl mx-auto sm:px-6 py-6">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
           Chọn nhóm học tập
         </h1>
         <p className="text-gray-600">
-          Chọn một nhóm để tham gia. Bạn chỉ có thể tham gia 1 nhóm duy nhất.
+          Tham gia một nhóm để cùng học tập và thảo luận.  Bạn chỉ có thể tham gia 1 nhóm.
         </p>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-          <AlertCircle className="w-5 h-5" />
-          <span>{error}</span>
+        <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0. 5" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-red-800">{error}</p>
+          </div>
+          <button
+            onClick={() => setError("")}
+            className="text-red-400 hover:text-red-600 text-xl"
+          >
+            ×
+          </button>
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {groupData?.availableGroups?.map((group) => {
-          const isFull = group.availableSlots === 0;
+      {groupData?.availableGroups && groupData.availableGroups.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {groupData.availableGroups.map((group) => {
+            const isFull = group.availableSlots === 0;
+            const fillPercentage = (group.currentMembers / group.maxMembers) * 100;
 
-          return (
-            <div
-              key={group.id}
-              className={`bg-white rounded-xl shadow border p-5 transition hover:shadow-xl ${isFull ? "border-gray-200 opacity-60" : "border-blue-200"
-                }`}
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-10 h-10 rounded-lg flex items-center justify-center ${isFull ? "bg-gray-100" : "bg-blue-100"
-                      }`}
-                  >
-                    <Users
-                      className={`w-5 h-5 ${isFull ? "text-gray-500" : "text-blue-600"
-                        }`}
-                    />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-gray-800">
-                      {group.groupName || "Chưa đặt tên"}
-                    </h3>
-                    <p className="text-xs text-gray-500">
-                      {group.groupCode || "N/A"}
-                    </p>
-                  </div>
-                </div>
-                {isFull && (
-                  <span className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded-full font-medium">
-                    Đầy
-                  </span>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 mb-4">
-                <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-blue-600 h-full transition-all"
-                    style={{
-                      width: `${(group.currentMembers / group.maxMembers) * 100
-                        }%`,
-                    }}
-                  />
-                </div>
-                <span className="text-xs font-medium text-gray-600">
-                  {group.currentMembers}/{group.maxMembers}
-                </span>
-              </div>
-
-              <button
-                onClick={() => handleJoinGroup(group.id)}
-                disabled={isFull || joining}
-                className={`w-full py-2 rounded-lg font-medium transition ${isFull
-                    ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                    : "bg-blue-600 text-white hover:bg-blue-700"
-                  } disabled:opacity-50`}
+            return (
+              <div
+                key={group.id}
+                className={`bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 border-2 overflow-hidden ${isFull
+                    ? "border-gray-200 opacity-70"
+                    : "border-blue-100 hover:border-blue-300 hover:-translate-y-1"
+                  }`}
               >
-                {joining ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Clock className="w-4 h-4 animate-spin" />
-                    Đang tham gia...
-                  </span>
-                ) : isFull ? (
-                  "Nhóm đã đầy"
-                ) : (
-                  "Tham gia nhóm"
-                )}
-              </button>
-            </div>
-          );
-        })}
-      </div>
+                <div className={`h-2 ${isFull ? "bg-gray-300" : "bg-gradient-to-r from-blue-500 to-indigo-600"}`} />
 
-      {groupData?.availableGroups?.length === 0 && (
-        <div className="text-center py-12">
-          <Users className="w-16 h-16 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">Không có nhóm nào khả dụng</p>
+                <div className="p-5">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <div
+                        className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${isFull
+                            ? "bg-gray-100"
+                            : "bg-gradient-to-br from-blue-500 to-indigo-600"
+                          }`}
+                      >
+                        <Users
+                          className={`w-5 h-5 ${isFull ? "text-gray-500" : "text-white"
+                            }`}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-gray-900 truncate mb-0.5">
+                          {group.groupName || "Chưa đặt tên"}
+                        </h3>
+                        <p className="text-xs text-gray-500 font-mono">
+                          {group.groupCode || "N/A"}
+                        </p>
+                      </div>
+                    </div>
+                    {isFull && (
+                      <span className="px-2. 5 py-1 bg-red-100 text-red-700 text-xs rounded-lg font-semibold flex-shrink-0">
+                        Đầy
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mb-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-gray-600">
+                        Thành viên
+                      </span>
+                      <span className="text-sm font-bold text-gray-900">
+                        {group.currentMembers}/{group.maxMembers}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-500 rounded-full ${isFull
+                            ? "bg-gray-400"
+                            : "bg-gradient-to-r from-blue-500 to-indigo-600"
+                          }`}
+                        style={{ width: `${fillPercentage}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleJoinGroup(group.id)}
+                    disabled={isFull || joining}
+                    className={`w-full py-2.5 rounded-xl font-semibold transition-all ${isFull
+                        ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                        : "bg-gradient-to-r from-blue-600 to-indigo-700 text-white hover:from-blue-700 hover:to-indigo-800 hover:shadow-lg active:scale-95"
+                      } disabled:opacity-50`}
+                  >
+                    {joining ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <Clock className="w-4 h-4 animate-spin" />
+                        Đang xử lý...
+                      </span>
+                    ) : isFull ? (
+                      "Nhóm đã đầy"
+                    ) : (
+                      "Tham gia ngay"
+                    )}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="text-center py-20">
+          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Users className="w-10 h-10 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-700 mb-2">
+            Không có nhóm nào
+          </h3>
+          <p className="text-gray-500">
+            Hiện tại chưa có nhóm nào khả dụng. Vui lòng quay lại sau.
+          </p>
         </div>
       )}
     </div>

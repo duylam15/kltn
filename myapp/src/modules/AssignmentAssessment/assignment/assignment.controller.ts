@@ -346,10 +346,11 @@ export async function start(req: Request, res: Response) {
     }
 }
 
+
 export async function recommendPath(req: Request, res: Response) {
     try {
         const assignmentId = Number(req.params.id);
-        const { studentId, score } = req.body;
+        const { studentId, score, sectionId } = req.body;
 
         if (!studentId || typeof score !== "number") {
             return res.status(400).json({
@@ -358,21 +359,41 @@ export async function recommendPath(req: Request, res: Response) {
             });
         }
 
-        // Lấy các field khác từ DB
+        // ✅ Kiểm tra sectionId
+        if (!sectionId) {
+            return res.status(400).json({
+                success: false,
+                message: "Thiếu sectionId",
+            });
+        }
+
+        // === 1. Lấy assignment hiện tại để biết môn + chương ===
+        const currentAssignment = await prisma.assignment.findUnique({
+            where: { id: assignmentId },
+            select: {
+                subjectId: true,
+                chapterId: true,
+            },
+        });
+
+        if (!currentAssignment) {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy bài tập",
+            });
+        }
+
+        // === 2. Lấy các field khác từ DB ===
         const [submissions, attendances, grades] = await Promise.all([
             prisma.submission.findMany({
                 where: { assignmentId, studentId },
                 orderBy: { submittedAt: "desc" },
             }),
-            prisma.attendance.findMany({
-                where: { studentId },
-            }),
-            prisma.studentGrade.findMany({
-                where: { studentId },
-            }),
+            prisma.attendance.findMany({ where: { studentId } }),
+            prisma.studentGrade.findMany({ where: { studentId } }),
         ]);
 
-        // Tính toán các giá trị
+        // === 3.  Tính toán ===
         const completionTime =
             submissions.length > 0
                 ? Math.floor(
@@ -380,8 +401,8 @@ export async function recommendPath(req: Request, res: Response) {
                           (submissions[0].startedAt?.getTime() ?? Date.now())
                   ) /
                   1000 /
-                  60 // phút
-                : null;
+                  60
+                : 0;
 
         const attemptCount = submissions.length;
 
@@ -389,31 +410,111 @@ export async function recommendPath(req: Request, res: Response) {
             submissions.length > 0
                 ? submissions.reduce((sum, s) => sum + (s.score ?? 0), 0) /
                   submissions.length
-                : null;
+                : 0;
 
         const attendanceRate =
             attendances.length > 0
                 ? attendances.filter((a) => a.status === "present").length /
                   attendances.length
-                : null;
+                : 0;
 
         const activityCount = grades.length;
 
-        // Gọi AI service với dữ liệu đầy đủ
-        const aiRes = await axios.post("http://localhost:8000/predict", {
-            score: score ?? 0,
-            completionTime: completionTime ?? 0,
-            attemptCount: attemptCount ?? 0,
-            avgScore: avgScore ?? 0,
-            attendanceRate: attendanceRate ?? 0,
-            activityCount: activityCount ?? 0,
+        const aiPayload = {
+            score,
+            completionTime,
+            attemptCount,
+            avgScore,
+            attendanceRate,
+            activityCount,
+        };
+
+        // === 4.  Gọi AI ===
+        const aiRes = await axios.post(
+            "http://localhost:8000/predict",
+            aiPayload
+        );
+        const label: string = aiRes.data?.label || "NORMAL";
+
+        // === 5. Lấy các bài tập có độ khó tương tự + cùng môn + cùng chương + ĐÃ MỞ CHO SECTION ===
+        const relatedAssignments = await prisma.assignment.findMany({
+            where: {
+                id: { not: assignmentId },
+                subjectId: currentAssignment.subjectId,
+                chapterId: currentAssignment.chapterId,
+                difficulty: label as any,
+
+                sectionLinks: {
+                    some: {
+                        sectionId: sectionId,
+                        isOpen: true,
+                    },
+                },
+            },
+            select: {
+                id: true,
+                title: true,
+                difficulty: true,
+                maxScore: true,
+                dueDate: true,
+                description: true,
+            },
         });
 
+        // === 6. Lấy tài liệu cùng môn + cùng chương + đã gán vào lớp + đang mở ===
+        const relatedMaterialsRaw = await prisma.material.findMany({
+            where: {
+                subjectId: currentAssignment.subjectId,
+                chapterId: currentAssignment.chapterId,
+
+                courseLinks: {
+                    some: {
+                        courseSectionId: sectionId,
+                        isOpen: true,
+                    },
+                },
+            },
+            select: {
+                id: true,
+                title: true,
+                description: true,
+                fileName: true,
+                filePath: true,
+                fileType: true,
+                fileSize: true, // ⚠️ BigInt - cần chuyển đổi
+                category: true,
+                link: true,
+                uploadedAt: true,
+                uploader: {
+                    select: {
+                        id: true,
+                        fullName: true,
+                    },
+                },
+            },
+            orderBy: {
+                uploadedAt: "desc",
+            },
+        });
+
+        // ✅ Convert BigInt sang Number hoặc String
+        const relatedMaterials = relatedMaterialsRaw.map((material) => ({
+            ...material,
+            fileSize: material.fileSize ? Number(material.fileSize) : null, // hoặc String(material.fileSize)
+        }));
+
+        // === 7.  Trả về ===
         return res.json({
             success: true,
             assignmentId,
             studentId,
-            ...aiRes.data, // label + suggestions
+            sectionId,
+            assignment: currentAssignment,
+            metrics: aiPayload,
+            label,
+            suggestions: aiRes.data?.suggestions ?? [],
+            relatedAssignments,
+            relatedMaterials,
         });
     } catch (error: any) {
         console.error(
@@ -423,6 +524,7 @@ export async function recommendPath(req: Request, res: Response) {
         return res.status(500).json({
             success: false,
             message: "Không thể gợi ý lộ trình học tập",
+            error: error.message, // ✅ Thêm detail để debug
         });
     }
 }

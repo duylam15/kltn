@@ -139,7 +139,7 @@ export default function LayoutTeacher() {
       </style>
 
       {/* Header - Responsive */}
-      <header className="h-14 md:h-16 bg-[#e7effc] flex-shrink-0 z-40 border-b border-gray-200">
+      <header className="h-14 md:h-16 bg-[#e7effc] flex-shrink-0 z-40 ">
         <div className="h-full flex items-center px-3 md:px-6">
           {/* Left Section */}
           <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
@@ -180,18 +180,6 @@ export default function LayoutTeacher() {
 
           {/* Right Section */}
           <div className="ml-2 md:ml-auto flex items-center gap-0.5 md:gap-1 flex-shrink-0">
-            {/* Google Apps - Hidden on small mobile */}
-            <button className="hidden sm:block p-1.5 md:p-2 rounded-full hover:bg-gray-100 transition-colors">
-              <div className="grid grid-cols-3 gap-0.5 w-5 h-5 md:w-6 md:h-6">
-                {[...Array(9)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="w-1 h-1 md:w-1.5 md:h-1.5 bg-gray-600 rounded-sm"
-                  />
-                ))}
-              </div>
-            </button>
-
             {/* User Profile */}
             <button
               className="ml-1 md:ml-2 p-0.5 md:p-1 rounded-full hover:bg-gray-100 transition-colors"
@@ -239,11 +227,10 @@ export default function LayoutTeacher() {
           bg-[#e7effc] flex-shrink-0
           transform transition-all duration-300 ease-in-out overflow-hidden
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-          top-14 md:top-16
-          border-r border-gray-200
+          md:top-16
         `}>
           {/* Mobile Header */}
-          <div className="lg:hidden flex items-center justify-between p-3 md:p-4 border-b border-gray-200">
+          <div className="lg:hidden flex items-center justify-between p-3 md:p-4 ">
             <div className="flex items-center gap-2 md:gap-3">
               <div className="h-7 w-7 md:h-8 md:w-8 rounded bg-green-600 flex items-center justify-center">
                 <BookOpen className="h-4 w-4 md:h-5 md:w-5 text-white" />

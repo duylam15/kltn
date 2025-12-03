@@ -23,6 +23,9 @@ export const createAssignmentSchema = z.object({
         passingScore: z.number().nullable().optional(),
         timeLimit: z.number().nullable().optional(),
         maxAttempts: z.number().default(1),
+        subjectId: z.coerce.number().int().nullable().optional(),
+        chapterId: z.coerce.number().int().nullable().optional(),
+        difficulty: z.enum(["REMEDIAL", "NORMAL", "ADVANCED"]).default("NORMAL"),
         createdBy: z.coerce.number().int(),
         isPublic: z.boolean().optional(), 
         originalAssignmentId: z.string().uuid().optional(), // 👈 đổi sang string

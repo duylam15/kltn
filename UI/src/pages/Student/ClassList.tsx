@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { Typography, Divider, List, Avatar, Spin } from "antd";
 import { UserOutlined } from "@ant-design/icons";
-import axios from "axios";
+import instance from "../../utils/axiosInstance";
 
 const { Title, Text } = Typography;
-const API_BASE = "http://localhost:4000/api/v1";
 
 type User = { id: number; fullName: string; email: string; avatar?: string };
 type Student = { id: number; studentCode: string; className?: string; user: User };
@@ -32,18 +31,16 @@ export default function ClassList({ sectionId: propId }: { sectionId?: number })
         setLoading(true);
 
         // 1) Gọi API lấy danh sách sinh viên
-        const stuRes = await axios.get<{ success: boolean; data: Enrollment[] }>(
-          `${API_BASE}/sections-enrollments/section/${sectionId}/students`,
-          { withCredentials: true } // nếu BE dùng cookie/token
+        const stuRes = await instance.get<{ success: boolean; data: Enrollment[] }>(
+          `/sections-enrollments/section/${sectionId}/students`,
         );
         if (stuRes.data?.success) {
           setStudents(stuRes.data.data ?? []);
         }
 
         // 2) Gọi API lấy giáo viên chính (owner)
-        const teacherRes = await axios.get<{ success: boolean; data: SectionInstructor }>(
-          `${API_BASE}/sections-instructors/section/${sectionId}/teacher`,
-          { withCredentials: true }
+        const teacherRes = await instance.get<{ success: boolean; data: SectionInstructor }>(
+          `/sections-instructors/section/${sectionId}/teacher`
         );
         if (teacherRes.data?.success) {
           setTeacher(teacherRes.data.data ?? null);

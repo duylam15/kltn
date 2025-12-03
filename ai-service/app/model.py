@@ -1,5 +1,5 @@
 import pandas as pd
-from tabpfn import TabPFNClassifier
+from sklearn.ensemble import RandomForestClassifier
 
 # Load dữ liệu đã có label
 df = pd.read_csv("training_data_labeled.csv")
@@ -10,8 +10,7 @@ X_train = df[feature_cols]
 y_train = df["label"]
 
 # Khởi tạo và train model
-clf = TabPFNClassifier()
-
+clf = RandomForestClassifier(n_estimators=200, random_state=42)
 clf.fit(X_train, y_train)
 
 def predict_label(input_data: dict):
@@ -19,7 +18,6 @@ def predict_label(input_data: dict):
                           columns=feature_cols)
     pred = clf.predict(X_test)[0]
     return pred
-
 
 def learning_path(label: str):
     if label == "REMEDIAL":

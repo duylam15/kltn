@@ -349,7 +349,7 @@ export default function AssignmentsTeacherOut() {
         ...(values.sectionId ? { sectionId: Number(values.sectionId) } : {}),
         title: values.title.trim(),
         description: values.description?.trim(),
-        type: values.type,
+        difficulty: values.difficulty,
         dueDate: values.dueDate ? values.dueDate.toISOString() : null,
         maxScore: Number(values.maxScore || 10),
         passingScore: values.passingScore ? Number(values.passingScore) : null,
@@ -364,6 +364,8 @@ export default function AssignmentsTeacherOut() {
         subjectId: values.subjectId,
         chapterId: values.chapterId,
       };
+
+      console.log("Submitting assignment with payload:", payload);
 
       let assignmentId: number;
 
@@ -801,15 +803,6 @@ export default function AssignmentsTeacherOut() {
               onClick={() => openCreateEditModal(record)}
             />
           </Tooltip>
-          <Tooltip title="Tự động tạo câu hỏi">
-            <Button
-              icon={<ThunderboltOutlined />}
-              size="small"
-              type="primary"
-              ghost
-              onClick={() => openAutoGenModal(record)}
-            />
-          </Tooltip>
           <Tooltip title="Xóa">
             <Popconfirm
               title="Xóa bài tập"
@@ -1170,15 +1163,17 @@ export default function AssignmentsTeacherOut() {
               </Form.Item>
 
               <Form.Item
-                label="Loại bài tập"
-                name="type"
+                label="Độ khó"
+                name="difficulty"
                 className="mb-3"
+                rules={[
+                  { required: true, message: "Vui lòng chọn độ khó" }
+                ]}
               >
-                <Select placeholder="Chọn loại bài tập">
-                  <Option value="exercise">Exercise</Option>
-                  <Option value="quiz">Quiz</Option>
-                  <Option value="project">Project</Option>
-                  <Option value="exam">Exam</Option>
+                <Select placeholder="Chọn độ khó">
+                  <Option value="REMEDIAL">Dễ </Option>
+                  <Option value="NORMAL">Trung bình </Option>
+                  <Option value="ADVANCED">Khó </Option>
                 </Select>
               </Form.Item>
 

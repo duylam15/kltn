@@ -47,8 +47,6 @@ import MaterialsAdmin from "../pages/Admin/MaterialsAdmin";
 import Group from "../pages/Student/Group";
 import RollCallStudent from "../pages/Student/RollCallStudent";
 import AssignmentsStudent from "../pages/Student/AssignmentsStudent";
-import GradesStudent from "../pages/Student/GradesStudent";
-import OverviewStudent from "../pages/Student/OverviewStudent";
 import DashboardStudent from "../pages/Student/DashboardStudent";
 import AssignmentsDetailsStudent from "../pages/Student/AssignmentsDetailsStudent";
 import AssignmentsTeacherOut from "../pages/Teacher/AssignmentsTeacherOut";
@@ -139,8 +137,7 @@ export const router = createBrowserRouter([
         path: "courses/:courseId",
         element: <CourseLayoutStudent />,
         children: [
-          { index: true, loader: () => redirect("overview") },
-          { path: "overview", element: <OverviewStudent /> },
+          { index: true, loader: () => redirect("groups") },
           { path: "groups", element: <Group /> },
           { path: "materials", element: <MaterialsStudent /> },
           { path: "roll-call", element: <RollCallStudent /> },
@@ -149,7 +146,6 @@ export const router = createBrowserRouter([
           { path: "assignments/:assignmentId/history", element: <AssignmentSubmissionHistory /> },
           { path: "assignments/:assignmentId/score", element: <AssignmentsScore /> },
           { path: "chat", element: <Chat /> },
-          { path: "grades", element: <GradesStudent /> },
         ],
       },
       {path: "profile", element: <ProfilePage />},

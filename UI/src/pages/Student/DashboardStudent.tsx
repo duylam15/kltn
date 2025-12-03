@@ -16,8 +16,8 @@ import {
   SearchOutlined,
   BookOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import { useAuth } from "../../context/authContext";
+import instance from "../../utils/axiosInstance";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -76,8 +76,8 @@ export default function Dashboard() {
         setLoading(false);
         return;
       }
-      const res = await axios.get(
-        `http://localhost:4000/api/v1/sections-enrollments/student/${user.student.id}/courses`
+      const res = await instance.get(
+        `/sections-enrollments/student/${user.student.id}/courses`
       );
       if (res.data.success) {
         setData(res.data.data);
@@ -202,12 +202,12 @@ export default function Dashboard() {
             .join(", ");
 
           return (
-            <Col xs={24} sm={12} md={8} lg={6} key={section.id}>
+            <Col xs={24} sm={12} md={10} lg={8} key={section.id}>
               <Card
                 hoverable
                 style={{
                   borderRadius: 8,
-                  border: "1px solid #dadce0",
+                  border: "1px solid #dbeafe",
                   boxShadow: "none",
                   transition: "box-shadow 0.3s",
                   cursor: "pointer",
@@ -225,16 +225,11 @@ export default function Dashboard() {
                 {/* Header với màu nền */}
                 <div style={{
                   height: 80,
-                  background: `linear-gradient(135deg, ${section.status === "ongoing" ? "#1e88e5, #1565c0" :
-                      section.status === "planned" ? "#43a047, #2e7d32" :
-                        section.status === "finished" ? "#e53935, #c62828" :
-                          "#757575, #616161"
-                    })`,
                   position: "relative",
                   display: "flex",
                   alignItems: "flex-end",
                   padding: "16px",
-                }}>
+                }} className="bg-[#47689c]">
                   <div>
                     <Title level={5} style={{
                       margin: 0,

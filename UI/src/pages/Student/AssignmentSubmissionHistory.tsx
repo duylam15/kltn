@@ -5,6 +5,7 @@ import dayjs from "dayjs";
 import "dayjs/locale/vi";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { ArrowLeft, Clock, Calendar, FileText, AlertCircle } from "lucide-react";
+import instance from "../../utils/axiosInstance";
 
 dayjs.extend(relativeTime);
 dayjs.locale("vi");
@@ -119,12 +120,10 @@ export default function AssignmentSubmissionHistory() {
 			setLoading(true);
 
 			// Fetch assignment info
-			const assignmentRes = await fetch(
-				`http://localhost:4000/api/v1/assignments/${assignmentId}`,
-				{ credentials: "include" }
+			const assignmentRes = await instance.get(
+				`/assignments/${assignmentId}`
 			);
-			const assignmentData = await assignmentRes.json();
-
+			const assignmentData = await assignmentRes.data;
 			if (assignmentData.success) {
 				setAssignment(assignmentData.data);
 
@@ -136,12 +135,10 @@ export default function AssignmentSubmissionHistory() {
 			}
 
 			// Fetch submissions
-			const submissionsRes = await fetch(
-				`http://localhost:4000/api/v1/submissions/assignment/${assignmentId}/student/${studentId}`,
-				{ credentials: "include" }
+			const submissionsRes = await instance.get(
+				`/submissions/assignment/${assignmentId}/student/${studentId}`
 			);
-			const submissionsData = await submissionsRes.json();
-
+			const submissionsData = await submissionsRes.data;
 			if (submissionsData.success) {
 				const sortedSubmissions = (submissionsData.data || []).sort(
 					(a: Submission, b: Submission) =>
@@ -163,27 +160,22 @@ export default function AssignmentSubmissionHistory() {
 
 	const fetchSubmissionDetails = async (submissionId: number) => {
 		try {
-			const answersRes = await fetch(
-				`http://localhost:4000/api/v1/submission-answers/submission/${submissionId}`,
-				{ credentials: "include" }
+			const answersRes = await instance.get(
+				`/submission-answers/submission/${submissionId}`
 			);
-			const answersData = await answersRes.json();
-
-			const codeResultsRes = await fetch(
-				`http://localhost:4000/api/v1/code-submission-results/submission/${submissionId}`,
-				{ credentials: "include" }
+			const answersData = await answersRes.data;
+			const codeResultsRes = await instance.get(
+				`/code-submission-results/submission/${submissionId}`
 			);
-			const codeResultsData = await codeResultsRes.json();
+			const codeResultsData = await codeResultsRes.data;
 
 			const answersWithQuestions = await Promise.all(
 				(answersData.data || []).map(async (answer: SubmissionAnswer) => {
 					try {
-						const questionRes = await fetch(
-							`http://localhost:4000/api/v1/questions/${answer.questionId}`,
-							{ credentials: "include" }
+						const questionRes = await instance.get(
+							`/questions/${answer.questionId}`
 						);
-						const questionData = await questionRes.json();
-
+						const questionData = await questionRes.data;
 						if (questionData.success) {
 							return { ...answer, question: questionData.data };
 						}
@@ -430,7 +422,7 @@ export default function AssignmentSubmissionHistory() {
 	if (error) {
 		return (
 			<div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-				<div className="bg-white rounded-lg shadow p-6 max-w-md w-full text-center">
+				<div className="bg-white rounded-lg shadow max-w-md w-full text-center">
 					<AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
 					<p className="text-red-600 mb-4">{error}</p>
 					<button
@@ -470,7 +462,7 @@ export default function AssignmentSubmissionHistory() {
 		<div className="min-h-screen bg-gray-50">
 			{/* Header */}
 			<div className="bg-white border-b shadow-sm">
-				<div className="max-w-6xl mx-auto px-4 py-4">
+				<div className="max-w-6xl mx-auto px-4 ">
 					<button
 						onClick={() => navigate(`/student/courses/${sectionId}/assignments`)}
 						className="flex items-center gap-2 text-indigo-600 hover:underline text-sm mb-2"

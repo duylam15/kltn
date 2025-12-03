@@ -33,6 +33,7 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/vi";
 import { useNavigate } from "react-router-dom";
 import { Clock, Timer, TimerIcon } from "lucide-react";
+import instance from "../../utils/axiosInstance";
 
 dayjs.extend(relativeTime);
 dayjs.locale("vi");
@@ -124,13 +125,10 @@ export default function AssignmentsStudent() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(
-        `http://localhost:4000/api/v1/assignments/section/${sectionId}/student/${studentId}`,
-        {
-          credentials: "include",
-        }
+      const res = await instance.get(
+        `/assignments/section/${sectionId}/student/${studentId}`,
       );
-      const data: ApiResponse = await res.json();
+      const data: ApiResponse = await res.data;
 
       if (data.success) {
         setAssignments(data.data);
@@ -364,24 +362,6 @@ export default function AssignmentsStudent() {
             </span>
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 12,
-              color: "#000",
-              border: "1px solid #ddd",
-              borderRadius: 6,
-              padding: "6px 10px",
-              background: "#fff",
-            }}
-          >
-            <ClockCircleOutlined style={{ fontSize: 14, color: "#1890ff" }} />
-            <span>Đang làm:</span>
-            <strong style={{ color: "#1890ff" }}>{stats.inProgress}</strong>
-          </div>
-
           {stats.overdue > 0 && (
             <div
               style={{
@@ -456,11 +436,6 @@ export default function AssignmentsStudent() {
           {error}
         </div>
       )}
-
-      {/* Count */}
-      <div style={{ marginBottom: 16, fontSize: 13, color: "#666" }}>
-        Hiển thị {filteredAssignments.length} / {assignments.length} bài tập
-      </div>
 
       {/* Assignments Grid */}
       {filteredAssignments.length === 0 ? (
@@ -638,28 +613,6 @@ export default function AssignmentsStudent() {
                           />
                         </div>
                       ) : null}
-
-                      {/* Score Display */}
-                      {assignment.submission?.completedAt && (
-                        <div
-                          style={{
-                            marginBottom: 12,
-                            padding: "10px 12px",
-                            background: "linear-gradient(135deg, #667eea20 0%, #764ba220 100%)",
-                            borderRadius: 8,
-                            border: "1px solid #667eea40",
-                            textAlign: "center",
-                          }}
-                        >
-                          <div style={{ fontSize: 11, color: "#7F8C8D", marginBottom: 2 }}>
-                            Điểm đạt được
-                          </div>
-                          <div style={{ fontSize: 20, fontWeight: 700, color: "#667eea" }}>
-                            {assignment.submission.score ?? "?"} /{" "}
-                            <span style={{ fontSize: 14 }}>{assignment.submission.maxScore}</span>
-                          </div>
-                        </div>
-                      )}
 
                       {/* 🔥 Action Button - Đã update logic */}
                       <Button

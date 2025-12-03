@@ -21,6 +21,7 @@ router.get("/public", controller.listPublicMaterialsGrouped);
 router.post("/copy", controller.copyMaterial);
 // chỉ lấy tài liệu mở cho SV theo section
 router.get("/class/:sectionId/open", controller.listOpenBySection);
+router.post("/create-from-link", controller.createMaterialFromLink);
 
 // CRUD tài liệu
 router.get("/", controller.getMaterials);

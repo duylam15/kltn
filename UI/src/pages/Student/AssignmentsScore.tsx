@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { CheckCircle, XCircle, ArrowLeft, Sparkles, AlertTriangle } from "lucide-react";
+import { CheckCircle, XCircle, ArrowLeft, Sparkles, AlertTriangle, BookOpen, FileText, Calendar, Award } from "lucide-react";
 import dayjs from "dayjs";
+import instance from "../../utils/axiosInstance";
 
 interface Choice {
 	id: number;
@@ -49,11 +50,11 @@ export default function AssignmentsScore() {
 				const choicesData = await Promise.all(
 					[...allChoiceIds].map(async (choiceId) => {
 						try {
-							const res = await fetch(
-								`http://localhost:4000/api/v1/questions-choices/choices/${choiceId}`,
-								{ credentials: "include" }
+							const res = await instance.get(
+								`/questions-choices/choices/${choiceId}`,
+								{ withCredentials: true }
 							);
-							const data = await res.json();
+							const data = await res.data;
 							return data.success ? data.data : null;
 						} catch {
 							return null;
@@ -74,7 +75,6 @@ export default function AssignmentsScore() {
 
 		fetchAllChoices();
 	}, [answers]);
-
 
 	if (!state || !state.submission) {
 		return (
@@ -97,7 +97,6 @@ export default function AssignmentsScore() {
 			</div>
 		);
 	}
-
 
 	// 🔥 Nếu showAnswersAfterSubmit = false → chỉ hiển thị điểm tổng
 	if (showAnswersAfterSubmit === false) {
@@ -139,7 +138,7 @@ export default function AssignmentsScore() {
 
 					<button
 						onClick={() => navigate(`/student/courses/${sectionId}/assignments`)}
-						className="w-full py-2. 5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded transition"
+						className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded transition"
 					>
 						← Quay lại danh sách
 					</button>
@@ -152,8 +151,8 @@ export default function AssignmentsScore() {
 	const handleRecommendPath = async () => {
 		setLoadingRecommend(true);
 		try {
-			const res = await fetch(
-				`http://localhost:4000/api/v1/assignments/${assignmentId}/recommend-path`,
+			const res = await instance.post(
+				`/assignments/${assignmentId}/recommend-path`,
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -161,10 +160,12 @@ export default function AssignmentsScore() {
 					body: JSON.stringify({
 						studentId: submission.studentId,
 						score: submission.score,
+						sectionId: sectionId,
 					}),
 				}
 			);
-			const data = await res.json();
+			const data = await res.data;
+			console.log(data);
 			if (data.success) {
 				setRecommendation(data);
 			} else {
@@ -180,13 +181,12 @@ export default function AssignmentsScore() {
 
 	// 🔥 Lấy label (A, B, C, D) từ choiceId dựa trên order
 	const getChoiceLabel = (choiceId: number, questionId: number) => {
-		// Lấy tất cả choices của câu hỏi này
 		const questionChoices = Array.from(choicesMap.values())
 			.filter((c) => c.questionId === questionId)
 			.sort((a, b) => a.order - b.order);
 
 		const index = questionChoices.findIndex((c) => c.id === choiceId);
-		return index >= 0 ? String.fromCharCode(65 + index) : "? ";
+		return index >= 0 ? String.fromCharCode(65 + index) : "?";
 	};
 
 	// 🔥 Lấy nội dung choice
@@ -200,6 +200,58 @@ export default function AssignmentsScore() {
 	const totalCount = answers?.length || 0;
 	const wrongCount = totalCount - correctCount;
 	const percentage = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
+
+	// 🔥 Badge màu cho difficulty
+	const getDifficultyBadge = (difficulty: string) => {
+		const colors: any = {
+			REMEDIAL: "bg-yellow-100 text-yellow-700 border-yellow-300",
+			NORMAL: "bg-blue-100 text-blue-700 border-blue-300",
+			ADVANCED: "bg-purple-100 text-purple-700 border-purple-300",
+		};
+		const labels: any = {
+			REMEDIAL: "Cơ bản",
+			NORMAL: "Trung bình",
+			ADVANCED: "Nâng cao",
+		};
+		return (
+			<span className={`px-2 py-0.5 text-xs font-medium rounded border ${colors[difficulty] || colors.NORMAL}`}>
+				{labels[difficulty] || difficulty}
+			</span>
+		);
+	};
+
+	// 🔥 Badge màu cho category
+	const getCategoryBadge = (category: string) => {
+		const colors: any = {
+			lecture: "bg-green-100 text-green-700",
+			slide: "bg-blue-100 text-blue-700",
+			exercise: "bg-orange-100 text-orange-700",
+			reference: "bg-purple-100 text-purple-700",
+			syllabus: "bg-pink-100 text-pink-700",
+			other: "bg-gray-100 text-gray-700",
+		};
+		const labels: any = {
+			lecture: "Bài giảng",
+			slide: "Slide",
+			exercise: "Bài tập",
+			reference: "Tài liệu tham khảo",
+			syllabus: "Giáo trình",
+			other: "Khác",
+		};
+		return (
+			<span className={`px-2 py-0.5 text-xs font-medium rounded ${colors[category] || colors.other}`}>
+				{labels[category] || category}
+			</span>
+		);
+	};
+
+	// 🔥 Format file size
+	const formatFileSize = (bytes: number | null) => {
+		if (!bytes) return "N/A";
+		if (bytes < 1024) return bytes + " B";
+		if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+		return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+	};
 
 	// 🔥 showAnswersAfterSubmit = true → Hiển thị đầy đủ
 	return (
@@ -231,7 +283,7 @@ export default function AssignmentsScore() {
 						</p>
 					</div>
 
-					{/* 🔥 Thống kê 3 cột - Đã sửa */}
+					{/* 🔥 Thống kê 3 cột */}
 					<div className="grid grid-cols-3 gap-4 mb-6">
 						<div className="text-center">
 							<p className="text-2xl font-bold text-green-600">{correctCount}</p>
@@ -258,19 +310,95 @@ export default function AssignmentsScore() {
 							{loadingRecommend ? "Đang phân tích..." : "Gợi ý lộ trình học"}
 						</button>
 
+						{/* 🔥 Hiển thị recommendation */}
 						{recommendation && (
-							<div className="mt-3 p-4 bg-green-50 border border-green-200 rounded-lg">
-								<p className="font-semibold text-green-900 text-sm mb-2">
-									🎯 {recommendation.label}
-								</p>
-								<ul className="space-y-1 text-sm text-green-800">
-									{recommendation.suggestions?.map((s: string, i: number) => (
-										<li key={i} className="flex gap-2">
-											<span>•</span>
-											<span>{s}</span>
-										</li>
-									))}
-								</ul>
+							<div className="mt-4 space-y-4">
+								{/* Label + Metrics */}
+								<div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
+									<div className="flex items-center gap-2 mb-3">
+										<Award className="w-5 h-5 text-green-600" />
+										<p className="font-bold text-green-900">
+											Mức độ học tập: {getDifficultyBadge(recommendation.label)}
+										</p>
+									</div>
+									<div className="grid grid-cols-2 gap-2 text-xs text-green-800">
+										<div>📊 Điểm TB: <strong>{recommendation.metrics.avgScore.toFixed(1)}</strong></div>
+										<div>📝 Số lần nộp: <strong>{recommendation.metrics.attemptCount}</strong></div>
+										<div>⏱️ Thời gian: <strong>{recommendation.metrics.completionTime.toFixed(0)} phút</strong></div>
+										<div>📅 Điểm danh: <strong>{(recommendation.metrics.attendanceRate * 100).toFixed(0)}%</strong></div>
+									</div>
+								</div>
+
+								{/* Bài tập gợi ý */}
+								{recommendation.relatedAssignments && recommendation.relatedAssignments.length > 0 && (
+									<div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+										<div className="flex items-center gap-2 mb-3">
+											<BookOpen className="w-5 h-5 text-blue-600" />
+											<h3 className="font-bold text-blue-900">Bài tập gợi ý</h3>
+										</div>
+										<div className="space-y-2">
+											{recommendation.relatedAssignments.map((assignment: any) => (
+												<div
+													key={assignment.id}
+													className="bg-white p-3 rounded border hover:shadow-sm transition cursor-pointer"
+												>
+													<div className="flex items-start justify-between mb-1">
+														<p className="font-medium text-gray-900 text-sm flex-1">
+															{assignment.title}
+														</p>
+														{getDifficultyBadge(assignment.difficulty)}
+													</div>
+													{assignment.description && (
+														<p className="text-xs text-gray-600 mb-2 line-clamp-2">
+															{assignment.description}
+														</p>
+													)}
+												</div>
+											))}
+										</div>
+									</div>
+								)}
+
+								{/* Tài liệu gợi ý */}
+								{recommendation.relatedMaterials && recommendation.relatedMaterials.length > 0 && (
+									<div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+										<div className="flex items-center gap-2 mb-3">
+											<FileText className="w-5 h-5 text-purple-600" />
+											<h3 className="font-bold text-purple-900">Tài liệu liên quan</h3>
+										</div>
+										<div className="space-y-2">
+											{recommendation.relatedMaterials.map((material: any) => (
+												<div
+													key={material.id}
+													className="bg-white p-3 rounded border hover:shadow-sm transition"
+												>
+													<div className="flex items-start justify-between mb-1">
+														<p className="font-medium text-gray-900 text-sm flex-1">
+															{material.title}
+														</p>
+														{getCategoryBadge(material.category)}
+													</div>
+													{material.description && (
+														<p className="text-xs text-gray-600 mb-2 line-clamp-1">
+															{material.description}
+														</p>
+													)}
+													<div className="flex items-center justify-between text-xs text-gray-500">
+														<div className="flex items-center gap-2">
+															<span>📁 {material.fileName || "Link"}</span>
+															<span>• {formatFileSize(material.fileSize)}</span>
+														</div>
+														{material.uploader && (
+															<span className="text-gray-400">
+																👤 {material.uploader.fullName}
+															</span>
+														)}
+													</div>
+												</div>
+											))}
+										</div>
+									</div>
+								)}
 							</div>
 						)}
 					</div>
@@ -328,7 +456,7 @@ export default function AssignmentsScore() {
 										Câu trả lời của bạn:
 									</p>
 
-									{/* 🔥 Trắc nghiệm - Hiển thị A, B, C, D và nội dung */}
+									{/* 🔥 Trắc nghiệm */}
 									{ans.questionType === "multiple_choice" && ans.selectedChoices && (
 										<div className="space-y-1">
 											{ans.selectedChoices.map((choiceId: number) => {
@@ -336,7 +464,7 @@ export default function AssignmentsScore() {
 												const content = getChoiceContent(choiceId);
 												return (
 													<div key={choiceId} className="text-sm text-gray-900">
-														<span className="font-bold">{label}. </span> {content}
+														<span className="font-bold">{label}.  </span> {content}
 													</div>
 												);
 											})}
@@ -365,12 +493,12 @@ export default function AssignmentsScore() {
 										</div>
 									)}
 
-									{/* 🔥 Đúng/Sai - Hiển thị A.  Đúng hoặc B. Sai */}
+									{/* 🔥 Đúng/Sai */}
 									{ans.questionType === "true_false" && ans.selectedChoices && (
 										<p className="text-sm text-gray-900">
 											{ans.selectedChoices.includes(1) ? (
 												<span>
-													<span className="font-bold">A.</span> Đúng
+													<span className="font-bold">A. </span> Đúng
 												</span>
 											) : (
 												<span>

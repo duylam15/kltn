@@ -13,6 +13,8 @@ import {
 	Popconfirm,
 	Tooltip,
 	Select,
+	Radio,
+	Space,
 } from "antd";
 import {
 	UploadOutlined,
@@ -30,6 +32,8 @@ import {
 	FolderOpenOutlined,
 	CheckCircleOutlined,
 	DatabaseOutlined,
+	LinkOutlined,
+	BookOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
@@ -60,6 +64,11 @@ type Material = {
 	};
 	originalMaterialId?: string;
 	category?: string;
+	link?: string;
+	subjectId?: number; // 🆕
+	chapterId?: number; // 🆕
+	subject?: { id: number; name: string }; // 🆕
+	chapter?: { id: number; title: string }; // 🆕
 };
 
 type Section = {
@@ -75,6 +84,19 @@ type Section = {
 	};
 };
 
+// 🆕 Types cho Subject và Chapter
+type Subject = {
+	id: number;
+	subjectName: string;
+	subjectCode: string;
+};
+
+type Chapter = {
+	id: number;
+	chapterName: string;
+	subjectId: number;
+};
+
 export default function MaterialsTeacher() {
 	const { user } = useAuth();
 	const userId = user?.id;
@@ -86,6 +108,13 @@ export default function MaterialsTeacher() {
 	const [keyword, setKeyword] = useState("");
 	const [filterPublic, setFilterPublic] = useState<boolean | null>(null);
 
+	// 🆕 States cho Subjects và Chapters
+	const [subjects, setSubjects] = useState<Subject[]>([]);
+	const [chapters, setChapters] = useState<Chapter[]>([]);
+	const [loadingSubjects, setLoadingSubjects] = useState(false);
+	const [loadingChapters, setLoadingChapters] = useState(false);
+	const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null);
+
 	// Modal states
 	const [addModalOpen, setAddModalOpen] = useState(false);
 	const [editModalOpen, setEditModalOpen] = useState(false);
@@ -95,6 +124,8 @@ export default function MaterialsTeacher() {
 	const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
 	const [assigningMaterial, setAssigningMaterial] = useState<Material | null>(null);
 	const [file, setFile] = useState<any>(null);
+
+	const [materialType, setMaterialType] = useState<"file" | "link">("file");
 
 	const [form] = Form.useForm();
 	const [addForm] = Form.useForm();
@@ -111,8 +142,51 @@ export default function MaterialsTeacher() {
 		if (userId) {
 			fetchData();
 			fetchMySections();
+			fetchSubjects(); // 🆕 Load subjects khi component mount
 		}
 	}, [userId]);
+
+	// 🆕 Fetch danh sách môn học
+	const fetchSubjects = async () => {
+		try {
+			setLoadingSubjects(true);
+			const res = await instance.get(`/subjects`);
+			if (res.data.success) {
+				setSubjects(res.data.data || []);
+			}
+		} catch (err) {
+			console.error("Lỗi khi tải môn học:", err);
+		} finally {
+			setLoadingSubjects(false);
+		}
+	};
+
+	// 🆕 Fetch danh sách chương học theo môn
+	const fetchChaptersBySubject = async (subjectId: number) => {
+		try {
+			setLoadingChapters(true);
+			const res = await instance.get(`/chapters? subjectId=${subjectId}`);
+			if (res.data.success) {
+				setChapters(res.data.data || []);
+			}
+		} catch (err) {
+			console.error("Lỗi khi tải chương học:", err);
+			setChapters([]);
+		} finally {
+			setLoadingChapters(false);
+		}
+	};
+
+	// 🆕 Xử lý khi chọn môn học
+	const handleSubjectChange = (subjectId: number | null) => {
+		setSelectedSubjectId(subjectId);
+		addForm.setFieldsValue({ chapterId: undefined }); // Reset chapter
+		if (subjectId) {
+			fetchChaptersBySubject(subjectId);
+		} else {
+			setChapters([]);
+		}
+	};
 
 	const fetchData = async () => {
 		try {
@@ -226,31 +300,67 @@ export default function MaterialsTeacher() {
 		}
 	};
 
+	// 🆕 Hàm xử lý thêm tài liệu (đã cập nhật để gửi subjectId, chapterId)
 	const handleAdd = async () => {
 		try {
 			const values = await addForm.validateFields();
 
-			if (!file) {
-				toast.error("Vui lòng chọn file");
-				return;
+			// Kiểm tra loại tài liệu
+			if (materialType === "file") {
+				// Upload file
+				if (!file) {
+					toast.error("Vui lòng chọn file");
+					return;
+				}
+
+				const formData = new FormData();
+				formData.append("file", file);
+				formData.append("title", values.title);
+				formData.append("description", values.description || "");
+				formData.append("isPublic", values.isPublic ? "true" : "false");
+				formData.append("uploadedBy", String(userId));
+				formData.append("category", values.category || "other");
+				formData.append("originalMaterialId", uuidv4());
+
+				// 🆕 Thêm subjectId và chapterId
+				if (values.subjectId) {
+					formData.append("subjectId", String(values.subjectId));
+				}
+				if (values.chapterId) {
+					formData.append("chapterId", String(values.chapterId));
+				}
+
+				await instance.post(`/materials/upload`, formData, {
+					headers: { "Content-Type": "multipart/form-data" },
+				});
+
+				toast.success("Thêm tài liệu thành công");
+			} else {
+				// Thêm link
+				if (!values.link || values.link.trim() === "") {
+					toast.error("Vui lòng nhập link tài liệu");
+					return;
+				}
+
+				await instance.post(`/materials/create-from-link`, {
+					title: values.title,
+					description: values.description || "",
+					link: values.link.trim(),
+					category: values.category || "other",
+					isPublic: values.isPublic || false,
+					uploadedBy: userId,
+					subjectId: values.subjectId || undefined, // 🆕
+					chapterId: values.chapterId || undefined, // 🆕
+				});
+
+				toast.success("Thêm tài liệu từ link thành công");
 			}
 
-			const formData = new FormData();
-			formData.append("file", file);
-			formData.append("title", values.title);
-			formData.append("description", values.description || "");
-			formData.append("isPublic", values.isPublic ? "true" : "false");
-			formData.append("uploadedBy", String(userId));
-			formData.append("category", values.category || "other");
-			formData.append("originalMaterialId", uuidv4());
-
-			await instance.post(`/materials/upload`, formData, {
-				headers: { "Content-Type": "multipart/form-data" },
-			});
-
-			toast.success("Thêm tài liệu thành công");
 			setAddModalOpen(false);
 			setFile(null);
+			setMaterialType("file");
+			setSelectedSubjectId(null);
+			setChapters([]);
 			addForm.resetFields();
 			fetchData();
 		} catch (err: any) {
@@ -315,14 +425,20 @@ export default function MaterialsTeacher() {
 	};
 
 	const handleView = (material: Material) => {
-		if (material.filePath) {
+		if (material.link) {
+			window.open(material.link, "_blank");
+		} else if (material.filePath) {
 			window.open(`http://localhost:4000/${material.filePath}`, "_blank");
 		} else {
-			toast.error("Tài liệu này chưa có file để xem");
+			toast.error("Tài liệu này chưa có nội dung để xem");
 		}
 	};
 
-	const getFileTypeTag = (fileType: string) => {
+	const getFileTypeTag = (fileType: string, link?: string) => {
+		if (link) {
+			return <Tag icon={<LinkOutlined />} color="cyan">LINK</Tag>;
+		}
+
 		const type = fileType?.toLowerCase();
 		if (type?.includes("pdf")) return <Tag color="red">PDF</Tag>;
 		if (type?.includes("word") || type?.includes("doc"))
@@ -351,7 +467,7 @@ export default function MaterialsTeacher() {
 			render: (text: string, record: Material) => (
 				<div>
 					<div style={{ fontWeight: 600, color: "#1890ff", fontSize: 14 }}>
-						<FileOutlined style={{ marginRight: 8 }} />
+						{record.link ? <LinkOutlined style={{ marginRight: 8 }} /> : <FileOutlined style={{ marginRight: 8 }} />}
 						{text}
 					</div>
 					{record.description && (
@@ -361,30 +477,57 @@ export default function MaterialsTeacher() {
 								: record.description}
 						</div>
 					)}
+					{/* 🆕 Hiển thị môn học và chương */}
+					{(record.subject || record.chapter) && (
+						<div style={{ marginTop: 6, display: "flex", gap: 4, flexWrap: "wrap" }}>
+							{record.subject && (
+								<Tag icon={<BookOutlined />} color="blue" style={{ fontSize: 11 }}>
+									{record.subject.name}
+								</Tag>
+							)}
+							{record.chapter && (
+								<Tag color="purple" style={{ fontSize: 11 }}>
+									{record.chapter.title}
+								</Tag>
+							)}
+						</div>
+					)}
 				</div>
 			),
 		},
 		{
-			title: "File",
+			title: "File/Link",
 			key: "fileInfo",
 			width: 180,
 			render: (_: any, record: Material) => (
 				<div>
-					<div style={{ marginBottom: 4 }}>
-						{record.fileName ? (
-							<Tooltip title={record.fileName}>
-								<span style={{ fontSize: 12, color: "#666" }}>
-									{record.fileName.length > 25
-										? record.fileName.substring(0, 25) + "..."
-										: record.fileName}
+					{record.link ? (
+						<div style={{ marginBottom: 4 }}>
+							<Tooltip title={record.link}>
+								<span style={{ fontSize: 12, color: "#1890ff", cursor: "pointer" }}>
+									{record.link.length > 30
+										? record.link.substring(0, 30) + "..."
+										: record.link}
 								</span>
 							</Tooltip>
-						) : (
-							<Tag color="red">Chưa có file</Tag>
-						)}
-					</div>
+						</div>
+					) : (
+						<div style={{ marginBottom: 4 }}>
+							{record.fileName ? (
+								<Tooltip title={record.fileName}>
+									<span style={{ fontSize: 12, color: "#666" }}>
+										{record.fileName.length > 25
+											? record.fileName.substring(0, 25) + "..."
+											: record.fileName}
+									</span>
+								</Tooltip>
+							) : (
+								<Tag color="red">Chưa có file</Tag>
+							)}
+						</div>
+					)}
 					<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-						{getFileTypeTag(record.fileType || "")}
+						{getFileTypeTag(record.fileType || "", record.link)}
 						{record.fileSize && (
 							<Tag color="default" style={{ margin: 0, fontSize: 11 }}>
 								{formatFileSize(record.fileSize)}
@@ -432,7 +575,7 @@ export default function MaterialsTeacher() {
 							size="small"
 							icon={<EyeOutlined />}
 							onClick={() => handleView(record)}
-							disabled={!record.filePath}
+							disabled={!record.filePath && !record.link}
 						/>
 					</Tooltip>
 					<Tooltip title="Thêm vào lớp">
@@ -477,9 +620,10 @@ export default function MaterialsTeacher() {
 	const filteredMaterials = materials.filter((m) => {
 		const matchKeyword =
 			!keyword ||
-				m.title.toLowerCase().includes(keyword.toLowerCase()) ||
-				m.description?.toLowerCase().includes(keyword.toLowerCase()) ||
-			m.fileName?.toLowerCase().includes(keyword.toLowerCase());
+			m.title.toLowerCase().includes(keyword.toLowerCase()) ||
+			m.description?.toLowerCase().includes(keyword.toLowerCase()) ||
+			m.fileName?.toLowerCase().includes(keyword.toLowerCase()) ||
+			m.link?.toLowerCase().includes(keyword.toLowerCase());
 
 		const matchPublic = filterPublic === null || m.isPublic === filterPublic;
 
@@ -519,8 +663,8 @@ export default function MaterialsTeacher() {
 					/* Mobile styles */
 					@media (max-width: 768px) {
 						.materials-title {
-							font-size: 18px !  important;
-							margin-bottom: 0 ! important;
+							font-size: 18px !important;
+							margin-bottom: 0 !important;
 						}
 
 						.stats-container {
@@ -538,15 +682,15 @@ export default function MaterialsTeacher() {
 							width: 100% !important;
 						}
 
-						.header-actions .  ant-input,
-						.header-actions . ant-select,
+						.header-actions . ant-input,
+						.header-actions .ant-select,
 						.header-actions .ant-btn {
 							width: 100% !important;
 						}
 
 						.ant-modal {
 							max-width: calc(100vw - 16px) !important;
-							margin: 8px !  important;
+							margin: 8px !important;
 						}
 						
 						/* Table scroll hint */
@@ -564,14 +708,14 @@ export default function MaterialsTeacher() {
 					/* Tablet styles */
 					@media (min-width: 769px) and (max-width: 1024px) {
 						.stats-container > div:nth-child(n+4) {
-							display: none !  important;
+							display: none ! important;
 						}
 
-						.  header-actions .  ant-input {
+						. header-actions . ant-input {
 							width: 200px !important;
 						}
 
-						.header-actions . ant-select {
+						.header-actions .ant-select {
 							width: 130px !important;
 						}
 					}
@@ -579,7 +723,7 @@ export default function MaterialsTeacher() {
 					/* Desktop optimizations */
 					@media (min-width: 1025px) {
 						.materials-container {
-							padding: 16px ! important;
+							padding: 16px !important;
 						}
 					}
 					
@@ -588,7 +732,7 @@ export default function MaterialsTeacher() {
 						height: 8px;
 					}
 					
-					.ant-table-body::-webkit-scrollbar-track {
+					. ant-table-body::-webkit-scrollbar-track {
 						background: #f1f1f1;
 						border-radius: 4px;
 					}
@@ -727,6 +871,9 @@ export default function MaterialsTeacher() {
 							onClick={() => {
 								addForm.resetFields();
 								setFile(null);
+								setMaterialType("file");
+								setSelectedSubjectId(null);
+								setChapters([]);
 								setAddModalOpen(true);
 							}}
 						>
@@ -755,22 +902,50 @@ export default function MaterialsTeacher() {
 				/>
 			</div>
 
-			{/* Modals giữ nguyên */}
+			{/* 🆕 Modal Thêm tài liệu (đã cập nhật) */}
 			<Modal
 				title="Thêm tài liệu mới"
 				open={addModalOpen}
 				onCancel={() => {
 					setAddModalOpen(false);
 					setFile(null);
+					setMaterialType("file");
+					setSelectedSubjectId(null);
+					setChapters([]);
 					addForm.resetFields();
 				}}
 				onOk={handleAdd}
-				okText="Tải lên"
+				okText="Thêm tài liệu"
 				cancelText="Hủy"
 				width={600}
 				style={{ maxWidth: "calc(100vw - 16px)" }}
+				centered
+				bodyStyle={{
+					maxHeight: "70vh",
+					overflowY: "auto",
+					overflowX: "hidden",
+				}}
 			>
 				<Form form={addForm} layout="vertical" style={{ marginTop: 16 }}>
+					{/* Radio chọn loại tài liệu */}
+					<Form.Item label="Loại tài liệu">
+						<Radio.Group
+							value={materialType}
+							onChange={(e) => {
+								setMaterialType(e.target.value);
+								setFile(null);
+							}}
+							buttonStyle="solid"
+						>
+							<Radio.Button value="file">
+								<FileOutlined /> Upload File
+							</Radio.Button>
+							<Radio.Button value="link">
+								<LinkOutlined /> Thêm Link
+							</Radio.Button>
+						</Radio.Group>
+					</Form.Item>
+
 					<Form.Item
 						name="title"
 						label="Tiêu đề"
@@ -778,55 +953,110 @@ export default function MaterialsTeacher() {
 					>
 						<Input placeholder="Nhập tiêu đề tài liệu" />
 					</Form.Item>
+
 					<Form.Item name="description" label="Mô tả">
 						<Input.TextArea
 							rows={3}
 							placeholder="Nhập mô tả chi tiết về tài liệu"
 						/>
 					</Form.Item>
-					<Form.Item name="category" label="Loại tài liệu" initialValue="other">
-						<Select>
-							<Option value="lecture">Bài giảng</Option>
-							<Option value="slide">Slide</Option>
-							<Option value="exercise">Bài tập</Option>
-							<Option value="reference">Tài liệu tham khảo</Option>
-							<Option value="syllabus">Đề cương</Option>
-							<Option value="other">Khác</Option>
-						</Select>
-					</Form.Item>
-					<Form.Item
-						label="Chọn file"
-						rules={[{ required: true, message: "Vui lòng chọn file" }]}
-					>
-						<Upload
-							beforeUpload={(f) => {
-								setFile(f);
-								return false;
-							}}
-							maxCount={1}
-							onRemove={() => setFile(null)}
-							fileList={
-								file
-									? [
-										{
-											uid: "1",
-											name: file.name,
-											status: "done" as const,
-										},
-									]
-									: []
+
+					{/* 🆕 Chọn môn học */}
+					<Form.Item name="subjectId" label="Môn học (tùy chọn)">
+						<Select
+							allowClear
+							showSearch
+							placeholder="Chọn môn học"
+							loading={loadingSubjects}
+							onChange={handleSubjectChange}
+							filterOption={(input, option) =>
+								String(option?.children || "")
+									.toLowerCase()
+									.includes(input.toLowerCase())
 							}
 						>
-							<Button icon={<UploadOutlined />}>
-								{file ? "Đã chọn file" : "Chọn file"}
-							</Button>
-						</Upload>
-						{file && (
-							<div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
-								File đã chọn: {file.name} ({formatFileSize(file.size)})
-							</div>
-						)}
+							{subjects.map((subject) => (
+								<Option key={subject.id} value={subject.id}>
+									{subject.subjectCode} - {subject.subjectName}
+								</Option>
+							))}
+						</Select>
 					</Form.Item>
+
+					{/* 🆕 Chọn chương học (chỉ hiện khi đã chọn môn) */}
+					{selectedSubjectId && (
+						<Form.Item name="chapterId" label="Chương học (tùy chọn)">
+							<Select
+								allowClear
+								showSearch
+								placeholder="Chọn chương học"
+								loading={loadingChapters}
+								disabled={!selectedSubjectId}
+								filterOption={(input, option) =>
+									String(option?.children || "")
+										.toLowerCase()
+										.includes(input.toLowerCase())
+								}
+							>
+								{chapters.map((chapter) => (
+									<Option key={chapter.id} value={chapter.id}>
+										{chapter.chapterName}
+									</Option>
+								))}
+							</Select>
+						</Form.Item>
+					)}
+
+					{/* Hiển thị Upload hoặc Input Link tùy loại */}
+					{materialType === "file" ? (
+						<Form.Item
+							label="Chọn file"
+							rules={[{ required: true, message: "Vui lòng chọn file" }]}
+						>
+							<Upload
+								beforeUpload={(f) => {
+									setFile(f);
+									return false;
+								}}
+								maxCount={1}
+								onRemove={() => setFile(null)}
+								fileList={
+									file
+										? [
+											{
+												uid: "1",
+												name: file.name,
+												status: "done" as const,
+											},
+										]
+										: []
+								}
+							>
+								<Button icon={<UploadOutlined />}>
+									{file ? "Đã chọn file" : "Chọn file"}
+								</Button>
+							</Upload>
+							{file && (
+								<div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
+									File đã chọn: {file.name} ({formatFileSize(file.size)})
+								</div>
+							)}
+						</Form.Item>
+					) : (
+						<Form.Item
+							name="link"
+							label="Link tài liệu"
+							rules={[
+								{ required: true, message: "Vui lòng nhập link" },
+							]}
+						>
+							<Input
+								prefix={<LinkOutlined />}
+								placeholder="https://example.com/tai-lieu"
+							/>
+						</Form.Item>
+					)}
+
 					<Form.Item
 						name="isPublic"
 						label="Chia sẻ tài liệu"
@@ -850,6 +1080,7 @@ export default function MaterialsTeacher() {
 				</Form>
 			</Modal>
 
+			{/* Các modal khác giữ nguyên...  */}
 			<Modal
 				title="Chỉnh sửa tài liệu"
 				open={editModalOpen}
@@ -867,7 +1098,6 @@ export default function MaterialsTeacher() {
 					overflowY: "auto",
 					overflowX: "hidden",
 				}}
-				
 			>
 				<Form form={form} layout="vertical" style={{ marginTop: 16 }}>
 					<Form.Item
@@ -876,12 +1106,6 @@ export default function MaterialsTeacher() {
 						rules={[{ required: true, message: "Vui lòng nhập tiêu đề" }]}
 					>
 						<Input placeholder="Nhập tiêu đề tài liệu" />
-					</Form.Item>
-					<Form.Item name="description" label="Mô tả">
-						<Input.TextArea
-							rows={4}
-							placeholder="Nhập mô tả chi tiết về tài liệu"
-						/>
 					</Form.Item>
 					<Form.Item name="category" label="Loại tài liệu">
 						<Select>
@@ -893,6 +1117,16 @@ export default function MaterialsTeacher() {
 							<Option value="other">Khác</Option>
 						</Select>
 					</Form.Item>
+
+					{editingMaterial?.link && (
+						<Form.Item name="link" label="Link tài liệu">
+							<Input
+								prefix={<LinkOutlined />}
+								placeholder="https://example.com/tai-lieu"
+							/>
+						</Form.Item>
+					)}
+
 					<Form.Item
 						name="isPublic"
 						label="Chia sẻ tài liệu"
@@ -911,6 +1145,7 @@ export default function MaterialsTeacher() {
 							}
 						/>
 					</Form.Item>
+
 					{editingMaterial?.fileName && (
 						<Form.Item label="File hiện tại">
 							<div
@@ -966,7 +1201,7 @@ export default function MaterialsTeacher() {
 							filterOption={(input, option) =>
 								String(option?.children || "")
 									?.toLowerCase()
-										.includes(input.toLowerCase())
+									.includes(input.toLowerCase())
 							}
 						>
 							{mySections.map((section) => (
@@ -1012,7 +1247,7 @@ export default function MaterialsTeacher() {
 							filterOption={(input, option) =>
 								String(option?.children || "")
 									?.toLowerCase()
-										.includes(input.toLowerCase())
+									.includes(input.toLowerCase())
 							}
 						>
 							{mySections.map((section) => (
@@ -1053,7 +1288,10 @@ export default function MaterialsTeacher() {
 								key: "title",
 								render: (text: string, record: Material) => (
 									<div>
-										<div style={{ fontWeight: 500, fontSize: 13 }}>{text}</div>
+										<div style={{ fontWeight: 500, fontSize: 13 }}>
+											{record.link ? <LinkOutlined style={{ marginRight: 6 }} /> : null}
+											{text}
+										</div>
 										{record.description && (
 											<div style={{ fontSize: 11, color: "#666" }}>
 												{record.description}
@@ -1084,7 +1322,7 @@ export default function MaterialsTeacher() {
 								width: 120,
 								render: (_: any, record: Material) => (
 									<div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-										{getFileTypeTag(record.fileType || "")}
+										{getFileTypeTag(record.fileType || "", record.link)}
 										{record.fileSize && (
 											<Tag color="default" style={{ fontSize: 11 }}>
 												{formatFileSize(record.fileSize)}

@@ -1,14 +1,24 @@
 import React, { useEffect, useMemo, useState } from "react";
-import axios from "axios";
-import { Typography, List, Card, Space, Empty, Spin, Tag, Select, Alert } from "antd";
-import { FilePdfOutlined, FileTextOutlined, FileImageOutlined, WarningOutlined } from "@ant-design/icons";
+import { Spin, Tag, Select, Alert } from "antd";
+import {
+  FileText,
+  Download,
+  Calendar,
+  ExternalLink,
+  Link2,
+  Eye,
+  AlertCircle,
+  User,
+} from "lucide-react";
 import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
+import "dayjs/locale/vi";
+import instance from "../../utils/axiosInstance";
 
-const { Title, Text } = Typography;
+dayjs.extend(relativeTime);
+dayjs.locale("vi");
 
-const API_BASE = "http://localhost:4000/api/v1";
 const FILE_HOST = "http://localhost:4000";
-const PREVIEW_HOST = `${FILE_HOST}/uploads`;
 
 type Material = {
   id: number;
@@ -17,9 +27,19 @@ type Material = {
   fileName?: string | null;
   filePath?: string | null;
   fileType?: string | null;
+  fileSize?: number;
+  link?: string | null;
   uploadedAt: string;
-  isPublic?: boolean; // 👈 Thêm field này để hiển thị warning
+  isPublic?: boolean;
+  category?: string;
+  chapterId?: number;
+  downloadCount?: number;
   uploadedBy?: number;
+  uploader?: {
+    id: number;
+    fullName: string;
+    email?: string | null;
+  };
 };
 
 export default function MaterialsStudent({ sectionId: propId }: { sectionId?: number }) {
@@ -28,8 +48,7 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
 
   const [loading, setLoading] = useState(false);
   const [materials, setMaterials] = useState<Material[]>([]);
-  const [openId, setOpenId] = useState<number | null>(null);
-  const [selectedTopic, setSelectedTopic] = useState<string>("Tất cả");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [error, setError] = useState<string>("");
 
   useEffect(() => {
@@ -38,8 +57,8 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
       try {
         setLoading(true);
         setError("");
-        const res = await axios.get<{ success: boolean; data: Material[] }>(
-          `${API_BASE}/materials/class/${sectionId}/open`,
+        const res = await instance.get<{ success: boolean; data: Material[] }>(
+          `/materials/class/${sectionId}/open`,
           { withCredentials: true }
         );
         if (res.data?.success) {
@@ -57,21 +76,49 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
     })();
   }, [sectionId]);
 
-  // ==== Topics từ title (frontend) ====
-  const topics = useMemo(() => {
-    const set = new Set<string>();
-    materials.forEach((m) => set.add(m.title?.trim() || "Khác"));
-    return ["Tất cả", ...Array.from(set)];
+  const filteredMaterials = useMemo(() => {
+    if (selectedCategory === "all") return materials;
+    return materials.filter((m) => (m.category || "other") === selectedCategory);
+  }, [materials, selectedCategory]);
+
+  // Helper functions
+  const getCategoryLabel = (cat: string) => {
+    const labels: Record<string, string> = {
+      lecture: "Bài giảng",
+      exercise: "Bài tập",
+      reference: "Tài liệu tham khảo",
+      exam: "Đề thi",
+      other: "Khác",
+    };
+    return labels[cat] || cat;
+  };
+
+  const getCategoryColor = (cat: string) => {
+    const colors: Record<string, string> = {
+      lecture: "from-blue-500 to-indigo-600",
+      exercise: "from-green-500 to-emerald-600",
+      reference: "from-purple-500 to-pink-600",
+      exam: "from-red-500 to-orange-600",
+      other: "from-gray-500 to-slate-600",
+    };
+    return colors[cat] || colors.other;
+  };
+
+  // Categories
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    materials.forEach((m) => cats.add(m.category || "other"));
+    return [
+      { value: "all", label: "Tất cả tài liệu" },
+      ...Array.from(cats).map((c) => ({
+        value: c,
+        label: getCategoryLabel(c),
+      })),
+    ];
   }, [materials]);
 
-  // Lọc theo topic đang chọn
-  const filteredMaterials = useMemo(() => {
-    if (selectedTopic === "Tất cả") return materials;
-    return materials.filter((m) => (m.title?.trim() || "Khác") === selectedTopic);
-  }, [materials, selectedTopic]);
-
-  // === helpers ===
   const buildFileUrl = (m: Material) => {
+    if (m.link) return m.link;
     if (m.filePath) {
       if (/^https?:\/\//i.test(m.filePath)) return m.filePath;
       return `${FILE_HOST}/${m.filePath.replace(/^\/+/, "")}`;
@@ -80,214 +127,231 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
     return "";
   };
 
-  const iconFor = (m: Material) => {
-    const mt = (m.fileType || "").toLowerCase();
-    const fn = (m.fileName || "").toLowerCase();
-    if (mt.startsWith("image/")) return <FileImageOutlined style={{ marginRight: 10, fontSize: 22, color: "#1677ff" }} />;
-    if (mt.includes("pdf") || fn.endsWith(".pdf")) return <FilePdfOutlined style={{ marginRight: 10, fontSize: 22, color: "#1677ff" }} />;
-    return <FileTextOutlined style={{ marginRight: 10, fontSize: 22, color: "#1677ff" }} />;
+  const isExternalLink = (m: Material) => {
+    return !!m.link || (m.filePath && /^https?:\/\//i.test(m.filePath));
   };
 
-  const fileTypeLabel = (m: Material) => {
+  // Lấy icon từ /public dựa vào file type
+  const getFileIconPath = (m: Material) => {
+    if (isExternalLink(m)) return "/public/link.png";
+
+    const mt = (m.fileType || "").toLowerCase();
+    const fn = (m.fileName || "").toLowerCase();
+
+    if (mt.includes("pdf") || fn.endsWith(".pdf")) return "/public/pdf.png";
+    if (mt.includes("word") || /\.(doc|docx)$/i.test(fn)) return "/public/word.png";
+    if (mt.includes("powerpoint") || /\.(ppt|pptx)$/i.test(fn)) return "/public/powerpoint.png";
+    if (mt.includes("excel") || /\.(xls|xlsx)$/i.test(fn)) return "/public/excel.png";
+    if (mt.startsWith("image/") || /\.(png|jpg|jpeg|gif)$/i.test(fn)) return "/public/image.png";
+    if (mt.startsWith("video/") || /\.(mp4|mkv|avi)$/i.test(fn)) return "/public/video.png";
+    if (mt.startsWith("audio/") || /\.(mp3|wav)$/i.test(fn)) return "/public/audio.png";
+    return "/public/file.png";
+  };
+
+  const getFileTypeLabel = (m: Material) => {
+    if (isExternalLink(m)) return "LINK";
+
     const mt = (m.fileType || "").toUpperCase();
     if (mt.includes("PDF") || (m.fileName || "").toLowerCase().endsWith(".pdf")) return "PDF";
-    if (mt.startsWith("IMAGE/")) return "IMAGE";
+    if (mt.includes("WORD") || /\.(doc|docx)$/i.test(m.fileName || "")) return "WORD";
     if (mt.includes("POWERPOINT") || /\.(ppt|pptx)$/i.test(m.fileName || "")) return "PPT";
-    if (mt.includes("WORD") || /\.(doc|docx)$/i.test(m.fileName || "")) return "DOC";
     if (mt.includes("EXCEL") || /\.(xls|xlsx)$/i.test(m.fileName || "")) return "EXCEL";
-    if (mt.startsWith("AUDIO") || /\.(mp3|wav|m4a|ogg)$/i.test(m.fileName || "")) return "AUDIO";
-    if (mt.startsWith("VIDEO") || /\.(mp4|mkv|avi|mov|webm)$/i.test(m.fileName || "")) return "VIDEO";
-    return mt || "FILE";
+    if (mt.startsWith("IMAGE")) return "IMAGE";
+    if (mt.startsWith("VIDEO")) return "VIDEO";
+    if (mt.startsWith("AUDIO")) return "AUDIO";
+    return "FILE";
   };
 
-  const previewImageFor = (m: Material) => {
-    const fn = (m.fileName || "").toLowerCase();
-    const mt = (m.fileType || "").toLowerCase();
-
-    if (mt.includes("pdf") || fn.endsWith(".pdf")) return `${PREVIEW_HOST}/imagesPDF.png`;
-    if (mt.includes("powerpoint") || /\.(ppt|pptx)$/i.test(fn)) return `${PREVIEW_HOST}/imagePP.png`;
-    if (mt.includes("word") || /\.(doc|docx)$/i.test(fn)) return `${PREVIEW_HOST}/imageDOC.png`;
-    if (mt.includes("excel") || /\.(xls|xlsx)$/i.test(fn)) return `${PREVIEW_HOST}/imageExcel.png`;
-    if (mt.startsWith("audio/") || /\.(mp3|wav|m4a|ogg)$/i.test(fn)) return `${PREVIEW_HOST}/imageAudio.png`;
-    if (mt.startsWith("video/") || /\.(mp4|mkv|avi|mov|webm)$/i.test(fn)) return `${PREVIEW_HOST}/imageVideo.png`;
-    if (mt.startsWith("image/") || /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(fn)) {
-      const url = buildFileUrl(m);
-      return url || `${PREVIEW_HOST}/imageTemp.jpg`;
-    }
-    return `${PREVIEW_HOST}/imageTemp.jpg`;
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  // ==== Group theo title nhưng dùng filteredMaterials (đã lọc) ====
-  const groups = useMemo(() => {
+  // Group by category
+  const groupedMaterials = useMemo(() => {
     return filteredMaterials.reduce<Record<string, Material[]>>((acc, m) => {
-      const key = (m.title || "Khác").trim().toLowerCase();
-      (acc[key] ||= []).push(m);
+      const cat = m.category || "other";
+      (acc[cat] ||= []).push(m);
       return acc;
     }, {});
   }, [filteredMaterials]);
 
-  const titleLabel = useMemo(() => {
-    const map: Record<string, string> = {};
-    filteredMaterials.forEach((m) => {
-      const key = (m.title || "Khác").trim().toLowerCase();
-      if (!map[key]) map[key] = m.title || "Khác";
-    });
-    return map;
-  }, [filteredMaterials]);
+  const MaterialCard = ({ material }: { material: Material }) => {
+    const url = buildFileUrl(material);
+    const isLink = isExternalLink(material);
+    const iconPath = getFileIconPath(material);
 
-  const GroupBlock = ({ gkey, items }: { gkey: string; items: Material[] }) => (
-    <div style={{ marginBottom: 28 }}>
-      <Title level={2} style={{ margin: "8px 0 16px" }}>
-        {titleLabel[gkey] || "Khác"}
-      </Title>
+    return (
+      <div className="bg-white rounded-2xl border-2 border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all duration-300 overflow-hidden">
+        <div className="p-5">
+          <div className="flex items-start gap-4">
+            {/* File Icon - Fixed size */}
+            <div className="flex-shrink-0 w-16 h-16 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 flex items-center justify-center shadow-sm">
+              <img
+                src={iconPath}
+                alt={getFileTypeLabel(material)}
+                className="w-10 h-10 object-contain"
+                onError={(e) => {
+                  // Fallback to default icon if image not found
+                  e.currentTarget.src = "/public/file.png";
+                }}
+              />
+            </div>
 
-      <List
-        dataSource={items}
-        renderItem={(m) => {
-          const isOpen = openId === m.id;
-          const url = buildFileUrl(m);
-          const toggle = () => setOpenId(isOpen ? null : m.id);
-          const openNewTab = () => url && window.open(url, "_blank", "noopener");
-
-          return (
-            <List.Item key={m.id} style={{ display: "block" }}>
-              <Card
-                hoverable
-                onClick={toggle}
-                style={{ width: "100%", borderRadius: 12 }}
-                bodyStyle={{ padding: 14 }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 12,
-                  }}
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              {/* Title & Category Tag */}
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <h3 className="font-bold text-gray-900 text-base leading-tight">
+                  {material.title}
+                </h3>
+                <Tag
+                  bordered={false}
+                  className="! m-0 flex-shrink-0"
+                  color={isLink ? "blue" : "default"}
                 >
-                  <Space direction="vertical" size={4} style={{ flex: 1 }}>
-                    <Text strong style={{ whiteSpace: "pre-wrap", fontSize: 16 }}>
-                      {iconFor(m)}
-                      {m.description || m.fileName || "(Không có mô tả)"}
-                    </Text>
-                  </Space>
+                  {getFileTypeLabel(material)}
+                </Tag>
+              </div>
 
-                  <Text type="secondary">
-                    Đã đăng {dayjs(m.uploadedAt).format("DD/MM/YYYY")}
-                  </Text>
+              {/* File Name - Always visible */}
+              <p className="text-sm text-gray-700 font-medium mb-2 break-all">
+                {isLink ? (
+                  <span className="flex items-center gap-1.5">
+                    <Link2 className="w-4 h-4 flex-shrink-0" />
+                    {material.fileName || "Liên kết bên ngoài"}
+                  </span>
+                ) : (
+                  material.fileName || "Tệp không có tên"
+                )}
+              </p>
+
+              {/* Description */}
+              {material.description && (
+                <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                  {material.description}
+                </p>
+              )}
+
+              {/* Meta Info */}
+              <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mb-4">
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="w-3. 5 h-3.5" />
+                  <span>{dayjs(material.uploadedAt).format("DD/MM/YYYY")}</span>
                 </div>
 
-                {isOpen && (
-                  <div style={{ marginTop: 12 }}>
-                    <Card
-                      hoverable
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openNewTab();
-                      }}
-                      style={{ borderRadius: 10, background: "#fafafa" }}
-                      bodyStyle={{ padding: 12 }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <img
-                          src={previewImageFor(m)}
-                          alt="preview"
-                          style={{
-                            width: 136,
-                            height: 86,
-                            objectFit: "cover",
-                            borderRadius: 8,
-                            background: "#f0f0f0",
-                          }}
-                        />
-                        <Space direction="vertical" size={2}>
-                          <a
-                            href={url || "#"}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ fontWeight: 600 }}
-                          >
-                            {m.fileName || "(Không có tệp)"}
-                          </a>
-                          <Tag bordered={false}>{fileTypeLabel(m)}</Tag>
-                        </Space>
-                      </div>
-                    </Card>
-
-                    {url && (
-                      <div style={{ marginTop: 8 }}>
-                        <a
-                          href={url}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          Xem tài liệu
-                        </a>
-                      </div>
-                    )}
+                {material.uploader && (
+                  <div className="flex items-center gap-1.5">
+                    <User className="w-3.5 h-3. 5" />
+                    <span>{material.uploader.fullName}</span>
                   </div>
                 )}
-              </Card>
-            </List.Item>
-          );
-        }}
-      />
-    </div>
-  );
 
-  const orderedGroups = useMemo(
-    () =>
-      Object.entries(groups).sort(
-        (a, b) =>
-          +new Date(b[1][0]?.uploadedAt || 0) - +new Date(a[1][0]?.uploadedAt || 0)
-      ),
-    [groups]
-  );
+                {material.fileSize && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold">{formatFileSize(material.fileSize)}</span>
+                  </div>
+                )}
+
+                {material.downloadCount != null && material.downloadCount > 0 && (
+                  <div className="flex items-center gap-1. 5">
+                    <Download className="w-3.5 h-3.5" />
+                    <span>{material.downloadCount} lượt tải</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons - Always visible */}
+              <div className="flex gap-2">
+                {url && (
+                  <>
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white rounded-xl text-sm font-semibold transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2"
+                    >
+                      {isLink ? (
+                        <>
+                          <ExternalLink className="w-4 h-4" />
+                          Mở liên kết
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-4 h-4" />
+                          Xem tài liệu
+                        </>
+                      )}
+                    </a>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <Spin size="large" />
+          <p className="text-sm text-gray-500">Đang tải tài liệu...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <Spin spinning={loading}>
-      <div style={{ padding: 16 }}>
-        {error && (
-          <Alert
-            message="Lỗi"
-            description={error}
-            type="error"
-            closable
-            style={{ marginBottom: 16 }}
-          />
-        )}
-
-        {/* Thông báo quan trọng */}
-        <Alert
-          message="Lưu ý"
-          description="Bạn chỉ xem được các tài liệu đã được giáo viên mở cho lớp và vẫn đang công khai (hoặc do giáo viên của lớp upload)."
-          type="info"
-          icon={<WarningOutlined />}
-          showIcon
-          style={{ marginBottom: 16 }}
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 ">
+      {/* Filter */}
+      <div className="mb-6 flex items-center gap-3 bg-white  shadow-sm">
+        <span className="text-sm font-medium text-gray-700">Danh mục:</span>
+        <Select
+          style={{ minWidth: 200 }}
+          value={selectedCategory}
+          onChange={setSelectedCategory}
+          options={categories}
         />
-
-        {/* Bộ lọc chủ đề */}
-        <div style={{ marginBottom: 16, display: "flex", gap: 12, alignItems: "center" }}>
-          <Text strong>Chủ đề:</Text>
-          <Select
-            style={{ minWidth: 240 }}
-            value={selectedTopic}
-            onChange={setSelectedTopic}
-            options={topics.map((t) => ({ value: t, label: t }))}
-          />
-        </div>
-
-        {filteredMaterials.length === 0 ? (
-          <Empty description={loading ? "Đang tải..." : "Chưa có tài liệu khả dụng"} />
-        ) : (
-          orderedGroups.map(([gkey, items]) => (
-            <GroupBlock key={gkey} gkey={gkey} items={items} />
-          ))
-        )}
+        <span className="ml-auto text-sm text-gray-500">
+          {filteredMaterials.length} tài liệu
+        </span>
       </div>
-    </Spin>
+
+      {/* Materials List */}
+      {filteredMaterials.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <FileText className="w-8 h-8 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-700 mb-2">Chưa có tài liệu</h3>
+          <p className="text-gray-500 text-sm">
+            Giảng viên chưa đăng tải tài liệu nào cho danh mục này
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {Object.entries(groupedMaterials)
+            .sort((a, b) => {
+              const catOrder = ["lecture", "exercise", "reference", "exam", "other"];
+              return catOrder.indexOf(a[0]) - catOrder.indexOf(b[0]);
+            })
+            .map(([category, items]) => (
+              <div key={category}>
+                {/* Materials Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {items.map((material) => (
+                    <MaterialCard key={material.id} material={material} />
+                  ))}
+                </div>
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
   );
 }

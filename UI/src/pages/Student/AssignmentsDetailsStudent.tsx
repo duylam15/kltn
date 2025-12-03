@@ -3,15 +3,13 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
 import dayjs from "dayjs";
 import "dayjs/locale/vi";
-import { Link } from "react-router-dom";
 import {
 	Clock,
 	Power,
 	Send,
-	History,
 	AlertTriangle,
-	FileText,
 } from "lucide-react";
+import instance from "../../utils/axiosInstance";
 
 dayjs.locale("vi");
 
@@ -175,23 +173,20 @@ export default function AssignmentsDetailsStudent() {
 	const fetchAssignmentDetails = async () => {
 		setLoading(true);
 		try {
-			const assignmentRes = await fetch(
-				`http://localhost:4000/api/v1/assignments/${assignmentId}`,
-				{ credentials: "include" }
+			const assignmentRes = await instance.get(
+				`/assignments/${assignmentId}`,
 			);
-			const assignmentData = await assignmentRes.json();
-
+			const assignmentData = await assignmentRes.data;
 			if (!assignmentData.success) {
 				setError("Không thể tải thông tin bài tập");
 				setLoading(false);
 				return;
 			}
 
-			const questionsRes = await fetch(
-				`http://localhost:4000/api/v1/questions`,
-				{ credentials: "include" }
+			const questionsRes = await instance.get(
+				`/questions`,
 			);
-			const questionsData = await questionsRes.json();
+			const questionsData = await questionsRes.data;
 
 			if (!questionsData.success) {
 				setError("Không thể tải danh sách câu hỏi");
@@ -213,11 +208,11 @@ export default function AssignmentsDetailsStudent() {
 			for (const question of fullQuestions) {
 				if (question.type === "coding") {
 					try {
-						const testCasesRes = await fetch(
-							`http://localhost:4000/api/v1/test-cases/question/${question.id}`,
-							{ credentials: "include" }
+						const testCasesRes = await instance.get(
+							`/test-cases/question/${question.id}`,
+							{ withCredentials: true }
 						);
-						const testCasesData = await testCasesRes.json();
+						const testCasesData = await testCasesRes.data;
 
 						if (testCasesData.success) {
 							question.testCases = testCasesData.data || [];
@@ -262,23 +257,16 @@ export default function AssignmentsDetailsStudent() {
 
 			// 🔥 Gọi API start assignment ngầm
 			try {
-				await fetch(
-					`http://localhost:4000/api/v1/assignments/${assignmentId}/start`,
+				await instance.post(
+					`/assignments/${assignmentId}/start`,
 					{
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-						},
-						credentials: "include",
-						body: JSON.stringify({
-							studentId: studentId,
-						}),
-					}
+						studentId: studentId,
+					},
+					{ withCredentials: true }
 				);
 			} catch (err) {
 				console.error("Error auto-starting assignment:", err);
 			}
-
 		} catch (err) {
 			console.error("Fetch error:", err);
 			setError("Lỗi kết nối server");
@@ -340,22 +328,18 @@ export default function AssignmentsDetailsStudent() {
 		try {
 			console.log("📤 Submitting code...");
 
-			const submitRes = await fetch(
-				`http://localhost:4000/api/v1/assignments/${assignmentId}/submit-code`,
+			const submitRes = await instance.post(
+				`/assignments/${assignmentId}/submit-code`,
 				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					credentials: "include",
-					body: JSON.stringify({
-						studentId: studentId,
-						questionId: questionId,
-						language: answer.language,
-						codeAnswer: answer.codeAnswer,
-					}),
-				}
+					studentId: studentId,
+					questionId: questionId,
+					language: answer.language,
+					codeAnswer: answer.codeAnswer,
+				},
+				{ withCredentials: true }
 			);
 
-			const submitData = await submitRes.json();
+			const submitData = await submitRes.data;
 
 			if (!submitData.success) {
 				alert(`❌ Lỗi: ${submitData.message}`);
@@ -388,12 +372,12 @@ export default function AssignmentsDetailsStudent() {
 					throw new Error("⏰ Timeout: Quá thời gian chờ kết quả (60 giây)");
 				}
 
-				const resultRes = await fetch(
-					`http://localhost:4000/api/v1/assignments/answer/${answerId}/status`,
-					{ credentials: "include" }
+				const resultRes = await instance.get(
+					`/assignments/answer/${answerId}/status`,
+					{ withCredentials: true }
 				);
 
-				const resultData = await resultRes.json();
+				const resultData = await resultRes.data;
 
 				console.log(`🔄 Polling attempt ${attempts} Result:`, resultData); // 🔥 THÊM LOG
 
@@ -532,24 +516,21 @@ export default function AssignmentsDetailsStudent() {
 				answers: answersArray,
 			};
 
-			const res = await fetch(
-				`http://localhost:4000/api/v1/assignments/${assignmentId}/submit`,
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					credentials: "include",
-					body: JSON.stringify(payload),
-				}
+			const res = await instance.post(
+				`/assignments/${assignmentId}/submit`,
+				payload,
+				{ withCredentials: true }
 			);
+				
 
 			let data: any;
 			try {
-				data = await res.json();
+				data = await res.data;
 			} catch {
 				throw new Error("Không đọc được phản hồi từ server");
 			}
 
-			if (!res.ok) {
+			if (!res) {
 				throw new Error(data?.message || `Lỗi HTTP ${res.status}`);
 			}
 

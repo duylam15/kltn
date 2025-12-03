@@ -1,10 +1,21 @@
-// src/pages/Student/RollCallStudent.tsx
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../../context/authContext";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/vi";
 import toast from "react-hot-toast";
+import {
+  Clock,
+  MapPin,
+  Users,
+  CheckCircle2,
+  AlertCircle,
+  XCircle,
+  Fingerprint,
+  CalendarClock,
+  Timer,
+} from "lucide-react";
+import instance from "../../utils/axiosInstance";
 
 dayjs.extend(relativeTime);
 dayjs.locale("vi");
@@ -51,9 +62,8 @@ type AttendanceSession = {
  * ======================== */
 const API_BASE = "http://localhost:4000/api/v1";
 
-// Khuyến nghị & ngưỡng chặn accuracy (đồng bộ với backend)
-const RECOMMENDED_ACCURACY = 80;   // cảnh báo
-const MAX_ALLOWED_ACCURACY = 100;  // chặn
+const RECOMMENDED_ACCURACY = 80;
+const MAX_ALLOWED_ACCURACY = 100;
 
 /* ========================
  *  Fingerprint & DeviceId
@@ -70,7 +80,6 @@ async function sha256Hex(input: string) {
   return toHex(digest);
 }
 
-/** Thu thập các trường fingerprint “ổn định”, không lộ UA vào deviceId */
 function getDeviceFingerprintFields() {
   const ua = navigator.userAgent;
   const platform = navigator.platform;
@@ -96,7 +105,6 @@ function getDeviceFingerprintFields() {
   };
 }
 
-/** Tạo deviceId = SHA256(platform|screen|colorDepth|timezone|language|deviceMemory|HW|touch) */
 async function buildDeviceId() {
   const f = getDeviceFingerprintFields();
   const raw = [
@@ -117,22 +125,22 @@ async function buildDeviceId() {
  *  Nonce & HMAC helpers
  * ======================== */
 async function getNonce(sessionId: number) {
-  const res = await fetch(`${API_BASE}/attendance/session/${sessionId}/nonce`, {
-    credentials: "include",
+  const res = await instance.get(`${API_BASE}/attendance/session/${sessionId}/nonce`, {
+    withCredentials: true,
   });
-  const data = await res.json();
+  const data = res.data;
   if (!data.success) throw new Error(data.message || "Không xin được nonce");
   return data.nonce as string;
 }
 
 async function getSignature(base: string) {
-  const res = await fetch(`${API_BASE}/attendance/sign`, {
+  const res = await instance.post(`${API_BASE}/attendance/sign`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     body: JSON.stringify({ base }),
   });
-  const data = await res.json();
+  const data = res.data;
   if (!data.success) throw new Error(data.message || "Không ký được payload");
   return data.signature as string;
 }
@@ -140,10 +148,40 @@ async function getSignature(base: string) {
 /* ========================
  *  UI helpers
  * ======================== */
-const statusText = (s: AttendanceStatus) =>
-  ({ present: "Có mặt", late: "Muộn", warning: "Cảnh báo", absent: "Vắng" }[s]);
-const statusColor = (s: AttendanceStatus) =>
-  ({ present: "text-green-700", late: "text-yellow-700", warning: "text-orange-700", absent: "text-red-700" }[s]);
+const statusConfig = {
+  present: {
+    text: "Có mặt",
+    color: "text-emerald-700",
+    bg: "bg-emerald-50",
+    border: "border-emerald-200",
+    icon: CheckCircle2,
+    gradient: "from-emerald-500 to-green-600",
+  },
+  late: {
+    text: "Muộn",
+    color: "text-amber-700",
+    bg: "bg-amber-50",
+    border: "border-amber-200",
+    icon: Clock,
+    gradient: "from-amber-500 to-orange-600",
+  },
+  warning: {
+    text: "Cảnh báo",
+    color: "text-orange-700",
+    bg: "bg-orange-50",
+    border: "border-orange-200",
+    icon: AlertCircle,
+    gradient: "from-orange-500 to-red-600",
+  },
+  absent: {
+    text: "Vắng",
+    color: "text-red-700",
+    bg: "bg-red-50",
+    border: "border-red-200",
+    icon: XCircle,
+    gradient: "from-red-500 to-rose-600",
+  },
+};
 
 const fmtWhen = (s: string) => {
   const d = dayjs(s);
@@ -195,9 +233,6 @@ export default function RollCallStudent() {
     return () => clearInterval(t);
   }, [sectionId]);
 
-  /* =========================================================
-   * CHECK-IN: GPS → Nonce → HMAC → POST check-in
-   * ========================================================= */
   const handleCheckIn = async (sessionId: number) => {
     if (!studentCode) {
       setError("Không tìm thấy mã sinh viên");
@@ -211,45 +246,35 @@ export default function RollCallStudent() {
     setCheckingIn(sessionId);
     setError("");
 
-    // B1: Lấy GPS (ưu tiên độ chính xác)
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
           const { latitude, longitude, accuracy } = pos.coords;
 
-          // chặn nếu độ chính xác của GV quá kém
-      const MAX_ALLOWED_ACCURACY_FOR_TEACHER = 100; // mét
-      if (accuracy == null || accuracy > MAX_ALLOWED_ACCURACY_FOR_TEACHER) {
-        toast.error(
-          `Không thể lấy vị trí chính xác. Vui lòng tắt->bật lại Wi-Fi THỬ.`
-        );
-        return;
-      }
+          const MAX_ALLOWED_ACCURACY_FOR_TEACHER = 100;
+          if (accuracy == null || accuracy > MAX_ALLOWED_ACCURACY_FOR_TEACHER) {
+            toast.error(
+              `Không thể lấy vị trí chính xác.  Vui lòng tắt->bật lại Wi-Fi THỬ. `
+            );
+            return;
+          }
 
-          // B2: Device fingerprint → deviceId + UA
           const { deviceId, userAgent, fields } = await buildDeviceId();
-
-          // B3: Xin nonce theo session
           const nonce = await getNonce(sessionId);
 
-          // B4: Base string & xin chữ ký HMAC từ server
-          // ⚠️ PHẢI KHỚP verify() backend:
-          // `${sessionId}|${lat}|${lng}|${accuracy}|${nonce}`
           const base = [
             sessionId,
             latitude,
             longitude,
-            Math.round(accuracy), // rút gọn vẫn an toàn
+            Math.round(accuracy),
             nonce,
           ].join("|");
           const payloadSig = await getSignature(base);
 
-          // B5: Gửi check-in (body đầy đủ)
           const res = await fetch(`${API_BASE}/attendance/check-in`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              // truyền thêm thông tin mô tả device (optional, chỉ để log)
               "X-Device-Screen": fields.screen,
               "X-Device-TZ": fields.timezone,
             },
@@ -270,10 +295,10 @@ export default function RollCallStudent() {
           if (data.success) {
             toast.success(
               `${data.message}` +
-                (data.warning ? `\n⚠️ ${data.warning}` : "") +
-                (data.scoreInfo?.score != null
-                  ? `\nĐiểm: ${data.scoreInfo.score}/10`
-                  : "")
+              (data.warning ? `\n⚠️ ${data.warning}` : "") +
+              (data.scoreInfo?.score != null
+                ? `\nĐiểm: ${data.scoreInfo.score}/10`
+                : "")
             );
             fetchSessions();
           } else {
@@ -306,27 +331,49 @@ export default function RollCallStudent() {
 
   if (loading) {
     return (
-      <div className="w-full min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-600">Đang tải...</p>
+      <div className="w-full min-h-[60vh] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-10 w-10 border-3 border-blue-600 border-t-transparent"></div>
+          <p className="text-sm text-gray-500">Đang tải danh sách điểm danh...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full min-h-screen bg-gray-50">
-      <div className="px-4 py-6">
+    <div className="w-full min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 ">
+        {/* Error Alert */}
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
-            {error}
+          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-xl flex items-start gap-3 shadow-sm animate-in slide-in-from-top-2">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-800">{error}</p>
+            </div>
+            <button
+              onClick={() => setError("")}
+              className="text-red-400 hover:text-red-600 transition-colors"
+            >
+              <XCircle className="w-5 h-5" />
+            </button>
           </div>
         )}
 
+        {/* Sessions Grid */}
         {sessions.length === 0 ? (
-          <div className="bg-white rounded-lg border p-8 text-center">
-            <p className="text-gray-600">Không có buổi điểm danh nào</p>
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CalendarClock className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-700 mb-2">
+              Chưa có buổi điểm danh
+            </h3>
+            <p className="text-gray-500 text-sm">
+              Giảng viên chưa tạo buổi điểm danh nào cho lớp này
+            </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {sessions.map((session) => {
               const att = myAttendanceIn(session);
               const isExpired =
@@ -334,66 +381,111 @@ export default function RollCallStudent() {
                 new Date(session.expiresAt) <= new Date();
               const canCheckIn = !isExpired && !att;
 
+              const config = att ? statusConfig[att.status] : null;
+              const StatusIcon = config?.icon;
+
               return (
                 <div
                   key={session.id}
-                  className="bg-white rounded-lg border border-blue-200 hover:shadow-md transition-shadow"
+                  className={`bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border-2 w-[300px] ${att
+                      ? config?.border
+                      : canCheckIn
+                        ? "border-blue-200 hover:border-blue-400"
+                        : "border-gray-200"
+                    } ${canCheckIn ? "hover:-translate-y-1" : ""}`}
                 >
-                  <div className="p-4">
-                    {/* Header */}
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className="flex-shrink-0 w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white text-xl">
-                        📝
+                  {/* Header Gradient */}
+
+                  <div className="p-5 ">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div
+                        className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center ${att
+                            ? config?.bg
+                            : canCheckIn
+                              ? "bg-gradient-to-br from-blue-500 to-indigo-600"
+                              : "bg-gray-100"
+                          }`}
+                      >
+                        {att && StatusIcon ? (
+                          <StatusIcon className={`w-6 h-6 ${config?.color}`} />
+                        ) : canCheckIn ? (
+                          <Fingerprint className="w-6 h-6 text-white" />
+                        ) : (
+                          <Timer className="w-6 h-6 text-gray-400" />
+                        )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-gray-900 text-sm truncate">
+                      <div className="flex-1 min-w-0 items-center justify-center">
+                        <h3 className="font-bold text-gray-900 text-base truncate mb-1">
                           {session.name || "Điểm danh"}
                         </h3>
-                        <p className="text-xs text-gray-600 mt-0.5">
-                          {fmtWhen(session.createdAt)}
-                        </p>
                       </div>
                     </div>
 
-                    {/* Info */}
-                    <div className="space-y-1.5 mb-3 text-xs text-gray-600">
-                      <p className="truncate">Mã: {session.sessionCode}</p>
-                      <p>{session.attendances.length} sinh viên</p>
+                    {/* Info Grid */}
+                    <div className="space-y-2. 5 mb-4">
                       {session.expiresAt && (
-                        <p className="truncate">Hết: {fmtWhen(session.expiresAt)}</p>
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <div className="w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center">
+                            <Timer className="w-4 h-4" />
+                          </div>
+                          <span className="truncate">
+                            Hết hạn: {fmtWhen(session.expiresAt)}
+                          </span>
+                        </div>
                       )}
                     </div>
 
                     {/* Status / Action */}
                     {att ? (
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         <div
-                          className={`text-xs font-medium ${statusColor(
-                            att.status
-                          )} text-center py-2 bg-gray-50 rounded`}
+                          className={`flex items-center justify-center gap-2 ${config?.bg} ${config?.border} border-2 rounded-xl py-3`}
                         >
-                          ✓ {statusText(att.status)}
+                          {StatusIcon && (
+                            <StatusIcon className={`w-5 h-5 ${config?.color}`} />
+                          )}
+                          <span className={`text-sm font-bold ${config?.color}`}>
+                            {config?.text}
+                          </span>
                         </div>
-                        <p className="text-xs text-gray-600 text-center">
-                          {dayjs(att.checkedInAt).format("HH:mm:ss")}
-                        </p>
-                        {att.distance !== null && (
-                          <p className="text-xs text-gray-500 text-center">
-                            {att.distance.toFixed(0)}m
-                          </p>
-                        )}
+
+                        <div className="flex items-center justify-between text-xs text-gray-600 px-2">
+                          <div className="flex items-center gap-1. 5">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>
+                              {dayjs(att.checkedInAt).format("HH:mm:ss")}
+                            </span>
+                          </div>
+                          {att.distance !== null && (
+                            <div className="flex items-center gap-1.5">
+                              <MapPin className="w-3.5 h-3.5" />
+                              <span>{att.distance.toFixed(0)}m</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ) : canCheckIn ? (
                       <button
                         onClick={() => handleCheckIn(session.id)}
                         disabled={checkingIn === session.id}
-                        className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-medium disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                        className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white rounded-xl text-sm font-semibold disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2"
                       >
-                        {checkingIn === session.id ? "Đang xử lý..." : "Điểm danh"}
+                        {checkingIn === session.id ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                            <span>Đang xử lý...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Fingerprint className="w-4 h-4" />
+                            <span>Điểm danh ngay</span>
+                          </>
+                        )}
                       </button>
                     ) : (
-                      <div className="text-center text-xs text-red-600 py-2 bg-red-50 rounded">
-                        Đã hết hạn
+                      <div className="flex items-center justify-center gap-2 text-sm text-red-600 py-3 bg-red-50 border-2 border-red-200 rounded-xl font-medium">
+                        <XCircle className="w-4 h-4" />
+                        <span>Đã hết hạn</span>
                       </div>
                     )}
                   </div>
