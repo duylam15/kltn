@@ -6,6 +6,7 @@ import { log } from "node:console";
 import catchAsync from "../../../utils/catchAsync";
 import ApiError from "../../../utils/ApiError";
 import { sendResponse } from "../../../utils/response";
+import { io } from "../../../server";
 
 export async function getMaterials(req: Request, res: Response) {
     try {
@@ -113,9 +114,7 @@ export async function assignMaterialToClass(req: Request, res: Response) {
             });
         }
 
-        // ✅ Kiểm tra quyền: chỉ gán được nếu:
-        // - Là tài liệu của mình HOẶC
-        // - Là tài liệu public của người khác
+        // ✅ Kiểm tra quyền
         const isOwner = material.uploadedBy === Number(assignedBy);
         const isPublic = material.isPublic;
 
@@ -144,14 +143,54 @@ export async function assignMaterialToClass(req: Request, res: Response) {
             });
         }
 
-        // ✅ Tạo liên kết
-        const courseMaterial = await materialService.assignMaterialToClass(
-            Number(courseSectionId),
-            Number(materialId),
-            Number(assignedBy)
-        );
+        // ✅ Tạo liên kết và lấy danh sách sinh viên
+        const { courseMaterial, studentsNotified } =
+            await materialService.assignMaterialToClass(
+                Number(courseSectionId),
+                Number(materialId),
+                Number(assignedBy)
+            );
 
-        res.json({ success: true, data: courseMaterial });
+        // 🔥 Phát thông báo realtime cho toàn bộ lớp
+        io.to(`section_${courseSectionId}`).emit("newMaterial", {
+            material: {
+                id: courseMaterial.material.id,
+                title: courseMaterial.material.title,
+                description: courseMaterial.material.description,
+                category: courseMaterial.material.category,
+                filePath: courseMaterial.material.filePath,
+                fileType: courseMaterial.material.fileType,
+            },
+            section: {
+                id: courseMaterial.courseSection.id,
+                sectionCode: courseMaterial.courseSection.sectionCode,
+                sectionName: courseMaterial.courseSection.sectionName,
+                subject: courseMaterial.courseSection.subject,
+            },
+            assignedBy: {
+                id: courseMaterial.assigner.id,
+                fullName: courseMaterial.assigner.fullName,
+            },
+            message: `Tài liệu mới: ${courseMaterial.material.title}`,
+            timestamp: new Date(),
+        });
+
+        // 🔥 Phát notification riêng cho từng sinh viên
+        studentsNotified.forEach((student: any) => {
+            io.to(`user_${student.userId}`).emit("newNotification", {
+                type: "system",
+                title: `Tài liệu mới: ${courseMaterial.material.title}`,
+                message: `${courseMaterial.assigner.fullName} đã chia sẻ tài liệu mới`,
+                sectionId: courseSectionId,
+                createdAt: new Date(),
+            });
+        });
+
+        res.json({
+            success: true,
+            data: courseMaterial,
+            studentsNotified: studentsNotified.length,
+        });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }

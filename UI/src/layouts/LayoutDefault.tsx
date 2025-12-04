@@ -2,27 +2,20 @@ import { Outlet, NavLink, useNavigate, useParams, useLocation } from "react-rout
 import {
   BookOpen,
   Calendar,
-  GraduationCap,
-  Bell,
   ClipboardList,
-  LineChart,
   LogOut,
-  Search,
   Home,
-  User,
   Settings,
   ChevronDown,
   Menu,
   X,
-  Plus,
   Archive,
-  FolderOpen,
-  Tag
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Skeleton } from "antd";
 import { useAuth } from "../context/authContext";
 import instance from "../utils/axiosInstance";
+import NotificationBell from "../components/NotificationBell"; // 🔔 THÊM IMPORT
 
 export default function LayoutDefault() {
   const navigate = useNavigate();
@@ -30,7 +23,6 @@ export default function LayoutDefault() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // Menu cho thanh navigation dọc (sidebar) - giống Google Classroom
   const sidebarMenu = [
     { to: "/student", label: "Màn hình chính", icon: Home, end: true },
     { to: "/student/calendar", label: "Lịch", icon: Calendar },
@@ -57,7 +49,6 @@ export default function LayoutDefault() {
     let mounted = true;
 
     if (!courseId) {
-      // Không có courseId => reset state
       setSection(null);
       setLoading(false);
       return;
@@ -66,9 +57,7 @@ export default function LayoutDefault() {
     setLoading(true);
     (async () => {
       try {
-        const res = await instance.get(
-          `/course-sections/${courseId}`
-        );
+        const res = await instance.get(`/course-sections/${courseId}`);
         const json = await res.data;
         if (mounted) {
           setSection(json?.data ?? null);
@@ -84,7 +73,6 @@ export default function LayoutDefault() {
     };
   }, [courseId]);
 
-  // Đóng sidebar khi resize về desktop
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 1024) {
@@ -98,53 +86,11 @@ export default function LayoutDefault() {
 
   return (
     <div className="h-screen flex flex-col">
-      <style>
-        {`
-          /* Custom scrollbar */
-          ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-          }
-
-          ::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 4px;
-          }
-
-          ::-webkit-scrollbar-thumb {
-            background: #c1c1c1;
-            border-radius: 4px;
-          }
-
-          ::-webkit-scrollbar-thumb:hover {
-            background: #a8a8a8;
-          }
-
-          /* Mobile optimizations */
-          @media (max-width: 768px) {
-            . course-info-text {
-              font-size: 12px ! important;
-              max-width: 200px;
-              overflow: hidden;
-              text-overflow: ellipsis;
-              white-space: nowrap;
-            }
-          }
-
-          @media (max-width: 480px) {
-            .course-info-text {
-              max-width: 150px;
-            }
-          }
-        `}
-      </style>
-
-      {/* Header - Responsive */}
+      {/* Header */}
       <header className="h-14 md:h-16 bg-[#e7effc] flex-shrink-0 z-40">
         <div className="h-full flex items-center px-3 md:px-6">
           {/* Left Section */}
           <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
-            {/* Mobile Menu Button */}
             <button
               className="p-1. 5 md:p-2 rounded-full hover:bg-gray-100 transition-colors flex-shrink-0"
               onClick={() => {
@@ -158,14 +104,12 @@ export default function LayoutDefault() {
               <Menu className="h-5 w-5 md:h-6 md:w-6 text-gray-600" />
             </button>
 
-            {/* Logo */}
             <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
               <div className="h-8 w-8 md:h-10 md:w-10 rounded flex items-center justify-center overflow-hidden">
-                <img src="/public/logosgu.png" alt="SGU Logo" className="h-full w-full object-contain" />
+                <img src="/logosgu.png" alt="SGU Logo" className="h-full w-full object-contain" />
               </div>
             </div>
 
-            {/* Thông tin lớp học */}
             <div className="flex-1 min-w-0 flex justify-center md:justify-start md:ml-4 lg:ml-[120px]">
               {loading && courseId ? (
                 <Skeleton.Input active size="small" className="w-32 md:w-64 lg:w-80" />
@@ -180,10 +124,13 @@ export default function LayoutDefault() {
           </div>
 
           {/* Right Section */}
-          <div className="ml-2 md:ml-auto flex items-center gap-0.5 md:gap-1 flex-shrink-0">
+          <div className="ml-2 md:ml-auto flex items-center gap-0. 5 md:gap-1 flex-shrink-0">
+            {/* 🔔 Notification Bell - THÊM Ở ĐÂY */}
+            <NotificationBell />
+
             {/* User Profile */}
             <button
-              className="ml-1 md:ml-2 p-0. 5 md:p-1 rounded-full hover:bg-gray-100 transition-colors"
+              className="ml-1 md:ml-2 p-0.5 md:p-1 rounded-full hover:bg-gray-100 transition-colors"
               onClick={() => navigate("/student/profile")}
               title="Hồ sơ cá nhân"
             >
@@ -200,7 +147,7 @@ export default function LayoutDefault() {
               )}
             </button>
 
-            {/* Logout Button */}
+            {/* Logout */}
             <button
               onClick={handleLogout}
               className="ml-1 md:ml-2 p-1. 5 md:p-2 rounded-full hover:bg-red-100 transition-colors text-red-600"
@@ -213,7 +160,7 @@ export default function LayoutDefault() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Mobile Sidebar Overlay */}
+        {/* Sidebar - giữ nguyên code cũ của bạn */}
         {sidebarOpen && (
           <div
             className="fixed inset-0 bg-black/50 z-40 lg:hidden"
@@ -221,7 +168,6 @@ export default function LayoutDefault() {
           />
         )}
 
-        {/* Sidebar - Responsive */}
         <aside className={`
           fixed lg:static inset-y-0 left-0 z-50 
           ${sidebarCollapsed ? 'w-16 lg:w-20' : 'w-64 md:w-60'}
@@ -230,7 +176,6 @@ export default function LayoutDefault() {
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
           md:top-16
         `}>
-          {/* Mobile Header */}
           <div className="lg:hidden flex items-center justify-between p-3 md:p-4">
             <div className="flex items-center gap-2 md:gap-3">
               <div className="h-7 w-7 md:h-8 md:w-8 rounded bg-green-600 flex items-center justify-center">
@@ -246,7 +191,6 @@ export default function LayoutDefault() {
             </button>
           </div>
 
-          {/* Navigation */}
           <nav className="px-2 md:px-3 py-3 md:py-4 overflow-y-auto flex-1">
             {sidebarMenu.map((item) => (
               <NavLink
@@ -255,18 +199,15 @@ export default function LayoutDefault() {
                 end={item.end}
                 onClick={() => setSidebarOpen(false)}
                 className={({ isActive }) => {
-                  // Tab Màn hình chính: chỉ sáng khi URL chính xác "/student"
                   if (item.to === "/student") {
                     const active = location.pathname === "/student";
                     return `
                       flex items-center ${sidebarCollapsed ? "justify-center px-1 md:px-2" : "justify-start gap-3 md:gap-4 px-3 md:px-4"} 
-                      py-2.5 md:py-3 mb-1 md:mb-2 rounded-lg text-xs md:text-sm font-medium 
+                      py-2. 5 md:py-3 mb-1 md:mb-2 rounded-lg text-xs md:text-sm font-medium 
                       transition-all duration-300 group overflow-hidden
                       ${active ? "bg-blue-200 text-blue-700" : "text-gray-700 hover:bg-blue-100"}
                     `;
                   }
-
-                  // Các tab khác dùng isActive tiêu chuẩn
                   return `
                     flex items-center ${sidebarCollapsed ? "justify-center px-1 md:px-2" : "justify-start gap-3 md:gap-4 px-3 md:px-4"} 
                     py-2.5 md:py-3 mb-1 md:mb-2 rounded-lg text-xs md:text-sm font-medium 

@@ -18,7 +18,7 @@ import instance from "../../utils/axiosInstance";
 dayjs.extend(relativeTime);
 dayjs.locale("vi");
 
-const FILE_HOST = "http://localhost:4000";
+const FILE_HOST = import.meta.env.VITE_API_URL;
 
 type Material = {
   id: number;

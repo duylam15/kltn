@@ -195,7 +195,7 @@ export default function Materials() {
 	const handleView = (record: CourseMaterial) => {
 		if (record.material.filePath) {
 			window.open(
-				`http://localhost:4000/${record.material.filePath}`,
+				`${import.meta.env.VITE_API_URL}/${record.material.filePath}`,
 				"_blank"
 			);
 		} else {

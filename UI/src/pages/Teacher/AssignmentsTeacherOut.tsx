@@ -48,7 +48,6 @@ import instance from "../../utils/axiosInstance";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
-const API_BASE = "http://localhost:4000/api/v1";
 
 type Assignment = {
   id: number;

@@ -14,6 +14,9 @@ export const createSectionEnrollment = async (data: {
 
     const student = await prisma.student.findUnique({
         where: { id: data.studentId },
+        include: {
+            user: true, // Cần lấy userId để thêm vào chat
+        },
     });
     if (!student) throw new ApiError(400, "Student not found");
 
@@ -33,8 +36,9 @@ export const createSectionEnrollment = async (data: {
         throw new ApiError(400, "Section is full");
     }
 
-    // Create enrollment and update current students count
+    // Create enrollment, update current students count, and add to chat room
     const enrollment = await prisma.$transaction(async (tx) => {
+        // 1.  Tạo enrollment
         const newEnrollment = await tx.sectionEnrollment.create({
             data: {
                 sectionId: data.sectionId,
@@ -58,17 +62,57 @@ export const createSectionEnrollment = async (data: {
             },
         });
 
+        // 2. Cập nhật số lượng sinh viên
         await tx.courseSection.update({
             where: { id: data.sectionId },
             data: { currentStudents: { increment: 1 } },
         });
+
+        // 3.  Tìm hoặc tạo ChatRoom cho section
+        let chatRoom = await tx.chatRoom.findFirst({
+            where: {
+                sectionId: data.sectionId,
+                type: "section",
+            },
+        });
+
+        // Nếu chưa có chat room, tạo mới
+        if (!chatRoom) {
+            chatRoom = await tx.chatRoom.create({
+                data: {
+                    title: `Chat - ${
+                        section.sectionName || section.sectionCode
+                    }`,
+                    type: "section",
+                    sectionId: data.sectionId,
+                },
+            });
+        }
+
+        // 4. Thêm sinh viên vào chat room (nếu chưa có)
+        const existingParticipant = await tx.chatParticipant.findUnique({
+            where: {
+                roomId_userId: {
+                    roomId: chatRoom.id,
+                    userId: student.userId,
+                },
+            },
+        });
+        
+        if (!existingParticipant) {
+            await tx.chatParticipant.create({
+                data: {
+                    roomId: chatRoom.id,
+                    userId: student.userId,
+                },
+            });
+        }
 
         return newEnrollment;
     });
 
     return enrollment;
 };
-
 export const listSectionEnrollments = async (params: {
     page: number;
     limit: number;

@@ -96,10 +96,11 @@ export default function Group() {
 
   // Socket realtime
   useEffect(() => {
-    const newSocket = io("http://localhost:4000", {
+    const newSocket = io(import.meta.env.VITE_API_URL, {
       withCredentials: true,
       transports: ["websocket", "polling"],
     });
+
 
     setSocket(newSocket);
 

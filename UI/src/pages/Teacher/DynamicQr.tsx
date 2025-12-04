@@ -1,8 +1,8 @@
 // src/pages/Teacher/DynamicQr.tsx
 import React, { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import instance from "../../utils/axiosInstance";
 
-const API_BASE = "http://localhost:4000/api/v1";
 
 interface DynamicQrProps {
   sessionId: number;
@@ -25,10 +25,10 @@ export const DynamicQr: React.FC<DynamicQrProps> = ({
 
     async function fetchToken() {
       try {
-        const res = await fetch(
-          `${API_BASE}/attendance/sessions/${sessionId}/totp-current`
+        const res = await instance.get(
+          `/attendance/sessions/${sessionId}/totp-current`
         );
-        const data = await res.json();
+        const data = res.data;
 
         if (data.success) {
           setToken(data.token);

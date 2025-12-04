@@ -57,13 +57,6 @@ type AttendanceSession = {
   attendances: Attendance[];
 };
 
-/* ========================
- *  CONFIG
- * ======================== */
-const API_BASE = "http://localhost:4000/api/v1";
-
-const RECOMMENDED_ACCURACY = 80;
-const MAX_ALLOWED_ACCURACY = 100;
 
 /* ========================
  *  Fingerprint & DeviceId
@@ -125,7 +118,7 @@ async function buildDeviceId() {
  *  Nonce & HMAC helpers
  * ======================== */
 async function getNonce(sessionId: number) {
-  const res = await instance.get(`${API_BASE}/attendance/session/${sessionId}/nonce`, {
+  const res = await instance.get(`/attendance/session/${sessionId}/nonce`, {
     withCredentials: true,
   });
   const data = res.data;
@@ -134,7 +127,7 @@ async function getNonce(sessionId: number) {
 }
 
 async function getSignature(base: string) {
-  const res = await instance.post(`${API_BASE}/attendance/sign`, {
+  const res = await instance.post(`/attendance/sign`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -213,7 +206,7 @@ export default function RollCallStudent() {
     setError("");
     try {
       const res = await fetch(
-        `${API_BASE}/attendance/sections/${sectionId}/sessions`,
+        `/attendance/sections/${sectionId}/sessions`,
         { credentials: "include" }
       );
       const data = await res.json();
@@ -271,7 +264,7 @@ export default function RollCallStudent() {
           ].join("|");
           const payloadSig = await getSignature(base);
 
-          const res = await fetch(`${API_BASE}/attendance/check-in`, {
+          const res = await fetch(`/attendance/check-in`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",

@@ -109,7 +109,7 @@ export default function Dashboard() {
 
     try {
       const res = await instance.get(
-        `http://localhost:4000/api/v1/subject-instructors/teacher/${user.teacher.id}`
+        `/subject-instructors/teacher/${user.teacher.id}`
       );
 
       if (res.data.success) {

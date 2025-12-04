@@ -44,7 +44,6 @@ import {
   CloseOutlined,
 } from '@ant-design/icons';
 import type { MenuProps, TableColumnsType } from 'antd';
-import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/authContext';
 import instance from '../../utils/axiosInstance';
@@ -55,7 +54,6 @@ const { Title, Text } = Typography;
 const { TextArea } = Input;
 const { Option } = Select;
 
-const API_BASE_URL = 'http://localhost:4000/api/v1';
 
 // ============================================================
 // TYPES
@@ -225,8 +223,8 @@ export default function GradesTeacher() {
 
   const loadGradeColumns = async () => {
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/grade-columns`,
+      const response = await instance.get(
+        `/grade-columns`,
         { params: { section_id: sectionId, limit: 100 } }
       );
       if (response.data.success) {
@@ -240,8 +238,8 @@ export default function GradesTeacher() {
   const loadStudentGrades = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(
-        `${API_BASE_URL}/students-grades`,
+      const response = await instance.get(
+        `/students-grades`,
         { params: { section_id: sectionId, limit: 1000 } }
       );
       if (response.data.success) {
@@ -275,7 +273,7 @@ export default function GradesTeacher() {
   // ✅ SỬA: Chỉ load buổi điểm danh của section hiện tại
   const loadAttendanceSessions = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/attendance/sections/${sectionId}/sessions`);
+      const response = await instance.get(`/attendance/sections/${sectionId}/sessions`);
       if (response.data.success) {
         // ✅ Filter chỉ lấy sessions của section hiện tại
         const sessionsOfCurrentSection = response.data.data.filter(
@@ -294,8 +292,8 @@ export default function GradesTeacher() {
   // ✅ SỬA: Chỉ load assignments của section hiện tại
   const loadAssignments = async () => {
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/assignments`,
+      const response = await instance.get(
+        `/assignments`,
         {
           params: {
             section_id: sectionId, // ✅ Đã có param này rồi, backend cần xử lý đúng
@@ -392,8 +390,8 @@ export default function GradesTeacher() {
       }
 
       // Gọi API tạo cột
-      const response = await axios.post(
-        `${API_BASE_URL}/grade-columns`,
+      const response = await instance.post(
+        `/grade-columns`,
         payload
       );
 
@@ -445,8 +443,8 @@ export default function GradesTeacher() {
         payload.dependencies = selectedDependencies;
       }
 
-      const response = await axios.patch(
-        `${API_BASE_URL}/grade-columns/${selectedColumn.id}`,
+      const response = await instance.patch(
+        `/grade-columns/${selectedColumn.id}`,
         payload
       );
 
@@ -472,7 +470,7 @@ export default function GradesTeacher() {
   const handleDeleteColumn = async (columnId: number) => {
     try {
       setLoading(true);
-      await axios.delete(`${API_BASE_URL}/grade-columns/${columnId}`);
+      await instance.delete(`/grade-columns/${columnId}`);
       toast.success('Xóa cột điểm thành công');
       await loadGradeColumns();
       await loadStudentGrades();
@@ -486,8 +484,8 @@ export default function GradesTeacher() {
   const handleCalculateGrades = async (columnId: number) => {
     try {
       setLoading(true);
-      const response = await axios.post(
-        `${API_BASE_URL}/grade-calculation/calculate`,
+      const response = await instance.post(
+        `/grade-calculation/calculate`,
         {
           grade_column_id: columnId,
           force_recalculate: true,
@@ -511,8 +509,8 @@ export default function GradesTeacher() {
   const handleCalculateAllGrades = async () => {
     try {
       setLoading(true);
-      const response = await axios.post(
-        `${API_BASE_URL}/grade-calculation/calculate-all`,
+      const response = await instance.post(
+        `/grade-calculation/calculate-all`,
         {
           section_id: sectionId,
           force_recalculate: true,
@@ -545,8 +543,8 @@ export default function GradesTeacher() {
   const handlePreviewCalculation = async (studentId: number, columnId: number) => {
     try {
       setLoading(true);
-      const response = await axios.post(
-        `${API_BASE_URL}/grade-calculation/preview`,
+      const response = await instance.post(
+        `/grade-calculation/preview`,
         {
           student_id: studentId,
           grade_column_id: columnId,
@@ -572,7 +570,7 @@ export default function GradesTeacher() {
       setLoading(true);
 
       // 1. GỌI API LẤY THÔNG TIN LỚP HỌC PHẦN
-      const sectionResponse = await axios.get(`${API_BASE_URL}/course-sections/${sectionId}`);
+      const sectionResponse = await instance.get(`/course-sections/${sectionId}`);
 
       if (!sectionResponse.data.success) {
         throw new Error("Không thể lấy thông tin lớp học phần");
@@ -941,7 +939,7 @@ export default function GradesTeacher() {
     form.setFieldsValue(formValues);
 
     try {
-      const response = await axios.get(`${API_BASE_URL}/grade-columns/${column.id}`);
+      const response = await instance.get(`/grade-columns/${column.id}`);
       if (response.data.success) {
         const columnDetail = response.data.data;
 

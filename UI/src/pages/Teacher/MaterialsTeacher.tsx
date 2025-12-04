@@ -44,7 +44,6 @@ import instance from "../../utils/axiosInstance";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
-const API_BASE = "http://localhost:4000/api/v1";
 
 type Material = {
 	id: number;
@@ -428,7 +427,7 @@ export default function MaterialsTeacher() {
 		if (material.link) {
 			window.open(material.link, "_blank");
 		} else if (material.filePath) {
-			window.open(`http://localhost:4000/${material.filePath}`, "_blank");
+			window.open(`${import.meta.env.VITE_API_URL}/${material.filePath}`, "_blank");
 		} else {
 			toast.error("Tài liệu này chưa có nội dung để xem");
 		}

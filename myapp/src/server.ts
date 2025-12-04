@@ -16,18 +16,19 @@ io.on("connection", (socket) => {
     console.log("[Server] 🔌 User connected:", socket.id);
     console.log("========================================");
 
-    // 👤 Handler cho Chat (giữ nguyên)
+    // 👤 Handler cho User
     socket.on("joinUser", (userId: number) => {
         socket.join(`user_${userId}`);
         console.log(`[Server] 👤 Socket ${socket.id} joined user_${userId}`);
     });
 
+    // 💬 Handler cho Chat Room
     socket.on("joinRoom", (roomId: number) => {
         socket.join(`room_${roomId}`);
         console.log(`[Server] 💬 Socket ${socket.id} joined room_${roomId}`);
     });
 
-    // 🆕 Handler cho Groups (THÊM MỚI)
+    // 📚 Handler cho Section
     socket.on("joinSection", (sectionId: number) => {
         socket.join(`section_${sectionId}`);
         console.log("========================================");

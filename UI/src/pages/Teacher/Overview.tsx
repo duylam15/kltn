@@ -41,7 +41,6 @@ dayjs.extend(relativeTime);
 dayjs.locale("vi");
 
 const { Title, Text } = Typography;
-const API_BASE = "http://localhost:4000/api/v1";
 
 export default function Overview() {
   const navigate = useNavigate();

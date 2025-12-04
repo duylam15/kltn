@@ -83,7 +83,7 @@ export default function Chat() {
   useEffect(() => {
     if (!roomId) return;
 
-    const newSocket = io("http://localhost:4000", {
+    const newSocket = io(import.meta.env.VITE_API_URL, {
       withCredentials: true,
     });
     setSocket(newSocket);

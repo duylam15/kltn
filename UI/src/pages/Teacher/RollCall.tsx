@@ -3,7 +3,6 @@ import {
   Table,
   Button,
   Spin,
-  Typography,
   Tag,
   Modal,
   Input,
@@ -33,7 +32,6 @@ import { useAuth } from "../../context/authContext";
 import { DynamicQr } from "../../pages/Teacher/DynamicQr";
 import instance from "../../utils/axiosInstance";
 
-const { Title } = Typography;
 
 type Session = {
   id: number;
@@ -960,7 +958,7 @@ export default function RollCall() {
         ) : selectedSession?.qrCodeUrl ? (
           <div style={{ textAlign: "center" }}>
             <img
-              src={`http://localhost:4000${selectedSession.qrCodeUrl}`}
+                src={`${import.meta.env.VITE_API_URL}${selectedSession.qrCodeUrl}`}
               alt="QR Code động"
               width={320}
               height={320}

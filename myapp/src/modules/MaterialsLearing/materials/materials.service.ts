@@ -132,19 +132,77 @@ export async function deleteMaterial(id: number) {
     return prisma.material.delete({ where: { id } });
 }
 
-// Gán tài liệu vào lớp
 export async function assignMaterialToClass(
     courseSectionId: number,
     materialId: number,
     assignedBy: number
 ) {
-    return prisma.courseMaterial.create({
+    // Tạo liên kết tài liệu với lớp
+    const courseMaterial = await prisma.courseMaterial.create({
         data: {
             courseSectionId,
             materialId,
-            assignedBy, // ← THÊM THAM SỐ
+            assignedBy,
+        },
+        include: {
+            material: true,
+            courseSection: {
+                include: {
+                    subject: true,
+                },
+            },
+            assigner: {
+                select: {
+                    id: true,
+                    fullName: true,
+                    email: true,
+                },
+            },
         },
     });
+
+    // Lấy danh sách sinh viên trong lớp
+    const enrollments = await prisma.sectionEnrollment.findMany({
+        where: {
+            sectionId: courseSectionId,
+            status: "enrolled",
+        },
+        include: {
+            student: {
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            fullName: true,
+                            email: true,
+                        },
+                    },
+                },
+            },
+        },
+    });
+
+    // Tạo thông báo cho sinh viên
+    if (enrollments.length > 0) {
+        await prisma.notification.createMany({
+            data: enrollments.map((enrollment) => ({
+                userId: enrollment.student.userId,
+                type: "system", // Dùng "system" vì NotificationType không có "material"
+                title: `Tài liệu mới: ${courseMaterial.material.title}`,
+                message: `${courseMaterial.assigner.fullName} đã chia sẻ tài liệu mới trong lớp ${courseMaterial.courseSection.subject.subjectName}`,
+                sectionId: courseSectionId,
+            })),
+        });
+    }
+
+    return {
+        courseMaterial,
+        studentsNotified: enrollments.map((e) => ({
+            userId: e.student.userId,
+            studentId: e.studentId,
+            fullName: e.student.user.fullName,
+        })),
+    };
 }
 
 // Lấy tài liệu theo lớp

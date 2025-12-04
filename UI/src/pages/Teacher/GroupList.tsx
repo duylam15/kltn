@@ -29,9 +29,9 @@ import {
 import axios from "axios";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
+import instance from "../../utils/axiosInstance";
 
 const { Title } = Typography;
-const API_BASE = "http://localhost:4000/api/v1";
 
 type Student = {
 	id: number;
@@ -76,8 +76,8 @@ export default function GroupList() {
 	async function fetchGroups() {
 		try {
 			setLoading(true);
-			const res = await axios.get<{ success: boolean; data: Group[] }>(
-				`${API_BASE}/sections-groups/sections/${sectionId}/groups`
+			const res = await instance.get<{ success: boolean; data: Group[] }>(
+				`/sections-groups/sections/${sectionId}/groups`
 			);
 			if (res.data.success) {
 				setGroups(res.data.data || []);
@@ -91,7 +91,7 @@ export default function GroupList() {
 
 	const handleDelete = async (id: number) => {
 		try {
-			await axios.delete(`${API_BASE}/sections-groups/${id}`);
+			await instance.delete(`/sections-groups/${id}`);
 			toast.success("Đã xóa nhóm");
 			setGroups((prev) => prev.filter((g) => g.id !== id));
 		} catch (err) {
@@ -111,10 +111,10 @@ export default function GroupList() {
 			};
 
 			if (editing) {
-				await axios.patch(`${API_BASE}/sections-groups/${editing.id}`, payload);
+				await instance.patch(`/sections-groups/${editing.id}`, payload);
 				toast.success("Đã cập nhật nhóm");
 			} else {
-				await axios.post(`${API_BASE}/sections-groups`, payload);
+				await instance.post(`/sections-groups`, payload);
 				toast.success("Đã thêm nhóm mới");
 			}
 

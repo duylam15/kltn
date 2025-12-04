@@ -106,7 +106,7 @@ export default function MaterialsAdmin() {
 
 	const handleView = (material: Material) => {
 		if (material.filePath) {
-			window.open(`http://localhost:4000/${material.filePath}`, "_blank");
+			window.open(`${import.meta.env.VITE_API_URL}/${material.filePath}`, "_blank");
 		} else {
 			toast.error("Tài liệu này chưa có file để xem");
 		}
