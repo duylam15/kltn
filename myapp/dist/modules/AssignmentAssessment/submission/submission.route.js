@@ -41,18 +41,12 @@ const controller = __importStar(require("./submission.controller"));
 const validation = __importStar(require("./submission.validation"));
 const validate_1 = __importDefault(require("../../../middlewares/validate"));
 const router = (0, express_1.Router)();
-// 🗂️ Lấy tất cả bài nộp (admin)
-router.get("/", controller.getAll);
-// 📘 Lịch sử nộp bài của 1 student trong 1 assignment
+// GET: lịch sử nộp bài của 1 student trong 1 assignment
 router.get("/assignment/:assignmentId/student/:studentId", (0, validate_1.default)(validation.getHistorySchema), controller.getHistory);
-// 🏆 Bài nộp điểm cao nhất của 1 student trong 1 assignment
-router.get("/assignment/:assignmentId/student/:studentId/best", (0, validate_1.default)(validation.getBestSchema), controller.getBest);
-// 📘 Chi tiết 1 lần nộp cụ thể
+// GET: chi tiết 1 lần nộp cụ thể
 router.get("/:id", (0, validate_1.default)(validation.getByIdSchema), controller.getById);
-// 🆕 Tạo bài nộp mới
-router.post("/", (0, validate_1.default)(validation.createSchema), controller.create);
-// ✏️ Cập nhật bài nộp (điểm, feedback,...)
-router.put("/:id", (0, validate_1.default)(validation.updateSchema), controller.update);
-// ❌ Xoá bài nộp
-router.delete("/:id", (0, validate_1.default)(validation.deleteSchema), controller.remove);
+// POST: chọn lần nộp làm điểm chính thức
+router.post("/:id/select-final", (0, validate_1.default)(validation.selectFinalSchema), controller.selectFinalSubmission);
+// 🔥 PUT: sửa điểm submission
+router.put("/:id", (0, validate_1.default)(validation.updateScoreSchema), controller.updateScore);
 exports.default = router;

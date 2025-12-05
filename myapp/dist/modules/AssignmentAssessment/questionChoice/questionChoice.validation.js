@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteChoiceSchema = exports.updateChoiceSchema = exports.createChoiceSchema = void 0;
+exports.getChoiceSchema = exports.deleteChoiceSchema = exports.updateChoiceSchema = exports.createChoiceSchema = void 0;
 const zod_1 = require("zod");
 exports.createChoiceSchema = zod_1.z.object({
     params: zod_1.z.object({
@@ -25,5 +25,10 @@ exports.updateChoiceSchema = zod_1.z.object({
 exports.deleteChoiceSchema = zod_1.z.object({
     params: zod_1.z.object({
         id: zod_1.z.string().regex(/^\d+$/), // choiceId
+    }),
+});
+exports.getChoiceSchema = zod_1.z.object({
+    params: zod_1.z.object({
+        id: zod_1.z.string().regex(/^\d+$/).transform(Number),
     }),
 });

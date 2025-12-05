@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteSchema = exports.updateSchema = exports.createSchema = exports.getBestSchema = exports.getByIdSchema = exports.getHistorySchema = void 0;
+exports.updateScoreSchema = exports.selectFinalSchema = exports.getByIdSchema = exports.getHistorySchema = void 0;
 const zod_1 = require("zod");
 exports.getHistorySchema = zod_1.z.object({
     params: zod_1.z.object({
@@ -13,34 +13,22 @@ exports.getByIdSchema = zod_1.z.object({
         id: zod_1.z.string().regex(/^\d+$/), // submissionId
     }),
 });
-exports.getBestSchema = zod_1.z.object({
+exports.selectFinalSchema = zod_1.z.object({
     params: zod_1.z.object({
-        assignmentId: zod_1.z.string().regex(/^\d+$/),
-        studentId: zod_1.z.string().regex(/^\d+$/),
+        id: zod_1.z.string().regex(/^\d+$/), // submissionId
     }),
 });
-exports.createSchema = zod_1.z.object({
-    body: zod_1.z.object({
-        assignmentId: zod_1.z.number(),
-        studentId: zod_1.z.number(),
-        filePath: zod_1.z.string().optional(),
-        answerText: zod_1.z.string().optional(),
-        attempt: zod_1.z.number().optional(),
-    }),
-});
-exports.updateSchema = zod_1.z.object({
+exports.updateScoreSchema = zod_1.z.object({
     params: zod_1.z.object({
-        id: zod_1.z.string().regex(/^\d+$/),
+        id: zod_1.z.string().regex(/^\d+$/, "ID phải là số"), // submissionId
     }),
     body: zod_1.z.object({
-        score: zod_1.z.number().optional(),
-        maxScore: zod_1.z.number().optional(),
+        score: zod_1.z
+            .union([
+            zod_1.z.number(),
+            zod_1.z.string().regex(/^\d+(\.\d+)?$/), // cho phép gửi dạng string số
+        ])
+            .optional(),
         feedback: zod_1.z.string().optional(),
-        autoGraded: zod_1.z.boolean().optional(),
-    }),
-});
-exports.deleteSchema = zod_1.z.object({
-    params: zod_1.z.object({
-        id: zod_1.z.string().regex(/^\d+$/),
     }),
 });

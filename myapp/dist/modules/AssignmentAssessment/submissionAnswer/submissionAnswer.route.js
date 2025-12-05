@@ -43,4 +43,8 @@ const validate_1 = __importDefault(require("../../../middlewares/validate"));
 const router = (0, express_1.Router)();
 // GET /submission-answers/submission/:submissionId
 router.get("/submission/:submissionId", (0, validate_1.default)(validation.getBySubmissionSchema), controller.getBySubmission);
+// GET /code-submission-results/:id
+router.get("/:id", (0, validate_1.default)(validation.getByIdSchema), controller.getById);
+// PATCH /submission-answers/:id
+router.put("/:id", (0, validate_1.default)(validation.updateSchema), controller.update);
 exports.default = router;

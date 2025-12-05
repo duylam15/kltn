@@ -2,15 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getSubmissionsHistory = getSubmissionsHistory;
 exports.getSubmissionById = getSubmissionById;
-exports.getBestSubmission = getBestSubmission;
-exports.createSubmission = createSubmission;
-exports.updateSubmission = updateSubmission;
-exports.deleteSubmission = deleteSubmission;
-exports.getAllSubmissions = getAllSubmissions;
+exports.setFinalSubmission = setFinalSubmission;
+exports.updateSubmissionScore = updateSubmissionScore;
 const client_1 = require("../../../prisma/client");
-/**
- * 🔹 Lấy lịch sử nộp bài (tất cả các lần)
- */
 async function getSubmissionsHistory(assignmentId, studentId) {
     return client_1.prisma.submission.findMany({
         where: { assignmentId, studentId },
@@ -32,9 +26,6 @@ async function getSubmissionsHistory(assignmentId, studentId) {
         },
     });
 }
-/**
- * 🔹 Lấy bài nộp theo ID
- */
 async function getSubmissionById(id) {
     return client_1.prisma.submission.findUnique({
         where: { id },
@@ -45,71 +36,65 @@ async function getSubmissionById(id) {
                 },
             },
             assignment: true,
-            student: {
-                select: { id: true, user: true },
-            },
         },
     });
 }
-/**
- * 🔹 Lấy bài nộp có điểm cao nhất cho 1 học sinh trong 1 bài tập
- */
-async function getBestSubmission(assignmentId, studentId) {
-    return client_1.prisma.submission.findFirst({
-        where: { assignmentId, studentId },
-        orderBy: [{ score: "desc" }, { submittedAt: "desc" }],
-        include: {
-            assignment: true,
-            student: {
-                select: { id: true, user: true },
-            },
-        },
+async function setFinalSubmission(submissionId) {
+    // Lấy bản ghi submission
+    const submission = await client_1.prisma.submission.findUnique({
+        where: { id: submissionId },
     });
-}
-/**
- * 🔹 Tạo bài nộp mới
- */
-async function createSubmission(data) {
-    return client_1.prisma.submission.create({
-        data: {
-            ...data,
-            submittedAt: new Date(),
+    if (!submission)
+        throw new Error("Submission không tồn tại");
+    const { assignmentId, studentId } = submission;
+    // Bỏ chọn các submission khác
+    await client_1.prisma.submission.updateMany({
+        where: {
+            assignmentId,
+            studentId,
+            NOT: { id: submissionId },
         },
+        data: { isFinal: false },
     });
-}
-/**
- * 🔹 Cập nhật bài nộp (ví dụ chấm điểm, thêm feedback)
- */
-async function updateSubmission(id, data) {
+    // Chọn submission này làm final
     return client_1.prisma.submission.update({
-        where: { id },
+        where: { id: submissionId },
+        data: { isFinal: true },
+    });
+}
+// 🔥 HÀM CẬP NHẬT ĐIỂM SUBMISSION
+async function updateSubmissionScore(submissionId, data) {
+    const submission = await client_1.prisma.submission.findUnique({
+        where: { id: submissionId },
+    });
+    if (!submission) {
+        throw new Error("Submission không tồn tại");
+    }
+    // Cập nhật submission
+    const updated = await client_1.prisma.submission.update({
+        where: { id: submissionId },
         data: {
-            ...data,
-            gradedAt: data.gradedAt ?? new Date(),
+            score: data.score !== undefined ? data.score : submission.score,
+            feedback: data.feedback !== undefined
+                ? data.feedback
+                : submission.feedback,
+            gradedAt: new Date(), // 🔥 Cập nhật thời gian chấm
         },
-    });
-}
-/**
- * 🔹 Xoá bài nộp
- */
-async function deleteSubmission(id) {
-    return client_1.prisma.submission.delete({
-        where: { id },
-    });
-}
-/**
- * 🔹 Lấy tất cả bài nộp (admin xem)
- */
-async function getAllSubmissions() {
-    return client_1.prisma.submission.findMany({
-        orderBy: { submittedAt: "desc" },
         include: {
-            assignment: {
-                select: { id: true, title: true },
-            },
-            student: {
-                select: { id: true, user: true },
+            answers: {
+                include: {
+                    question: {
+                        select: {
+                            id: true,
+                            type: true,
+                            content: true,
+                            order: true,
+                            points: true,
+                        },
+                    },
+                },
             },
         },
     });
+    return updated;
 }

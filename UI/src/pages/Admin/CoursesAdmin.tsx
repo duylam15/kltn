@@ -187,7 +187,6 @@ export default function CoursesAdmin() {
   };
 
   if (loading) return <Spin tip="Đang tải..." />;
-  if (!data.length) return <p>Không tìm thấy dữ liệu</p>;
 
   // Lọc dữ liệu theo keyword, status, term
   // eslint-disable-next-line prefer-const

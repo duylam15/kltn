@@ -35,64 +35,50 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getHistory = getHistory;
 exports.getById = getById;
-exports.getBest = getBest;
-exports.create = create;
-exports.update = update;
-exports.remove = remove;
-exports.getAll = getAll;
+exports.selectFinalSubmission = selectFinalSubmission;
+exports.updateScore = updateScore;
 const service = __importStar(require("./submission.service"));
-/**
- * 📘 Lấy lịch sử nộp bài của 1 student trong 1 assignment
- */
 async function getHistory(req, res) {
     const { params } = req.validated;
     const submissions = await service.getSubmissionsHistory(Number(params.assignmentId), Number(params.studentId));
     res.json({ success: true, data: submissions });
 }
-/**
- * 📘 Lấy chi tiết 1 bài nộp
- */
 async function getById(req, res) {
     const { params } = req.validated;
     const submission = await service.getSubmissionById(Number(params.id));
     res.json({ success: true, data: submission });
 }
-/**
- * 🏆 Lấy bài nộp có điểm cao nhất của 1 student trong 1 assignment
- */
-async function getBest(req, res) {
+async function selectFinalSubmission(req, res) {
     const { params } = req.validated;
-    const submission = await service.getBestSubmission(Number(params.assignmentId), Number(params.studentId));
-    res.json({ success: true, data: submission });
+    const submissionId = Number(params.id);
+    const updated = await service.setFinalSubmission(submissionId);
+    return res.json({
+        success: true,
+        message: "Đã chọn lần nộp này làm điểm chính thức.",
+        data: updated,
+    });
 }
-/**
- * 🆕 Tạo bài nộp mới
- */
-async function create(req, res) {
-    const { body } = req.validated;
-    const newSubmission = await service.createSubmission(body);
-    res.json({ success: true, data: newSubmission });
-}
-/**
- * ✏️ Cập nhật bài nộp (chấm điểm, feedback, autoGraded...)
- */
-async function update(req, res) {
-    const { params, body } = req.validated;
-    const updated = await service.updateSubmission(Number(params.id), body);
-    res.json({ success: true, data: updated });
-}
-/**
- * ❌ Xoá bài nộp
- */
-async function remove(req, res) {
-    const { params } = req.validated;
-    await service.deleteSubmission(Number(params.id));
-    res.json({ success: true, message: "Deleted successfully" });
-}
-/**
- * 🗂️ Lấy tất cả bài nộp (admin xem)
- */
-async function getAll(req, res) {
-    const submissions = await service.getAllSubmissions();
-    res.json({ success: true, data: submissions });
+// 🔥 HÀM CẬP NHẬT ĐIỂM SUBMISSION
+async function updateScore(req, res) {
+    try {
+        const { params, body } = req.validated;
+        const submissionId = Number(params.id);
+        const { score, feedback } = body;
+        const updated = await service.updateSubmissionScore(submissionId, {
+            score: score !== undefined ? Number(score) : undefined,
+            feedback: feedback || undefined,
+        });
+        return res.json({
+            success: true,
+            message: "Đã cập nhật điểm submission.",
+            data: updated,
+        });
+    }
+    catch (error) {
+        console.error("Error updating submission score:", error);
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Lỗi khi cập nhật điểm",
+        });
+    }
 }

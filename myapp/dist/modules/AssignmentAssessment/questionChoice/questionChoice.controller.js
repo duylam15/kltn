@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.create = create;
 exports.update = update;
 exports.remove = remove;
+exports.getById = getById;
 const service = __importStar(require("./questionChoice.service"));
 async function create(req, res) {
     const { params, body } = req.validated;
@@ -51,4 +52,9 @@ async function remove(req, res) {
     const { params } = req.validated;
     await service.deleteChoice(Number(params.id));
     res.json({ success: true });
+}
+async function getById(req, res) {
+    const { params } = req.validated;
+    const choice = await service.getChoiceById(Number(params.id));
+    res.json({ success: true, data: choice });
 }

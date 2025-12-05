@@ -59,8 +59,9 @@ export default function NotificationBell() {
 	useEffect(() => {
 		if (!user?.id) return;
 
-		const newSocket = io(import.meta.env.VITE_API_URL, {
+		const newSocket = io("https://www.quanlyhoctapsgu.cloud", {
 			withCredentials: true,
+			transports: ["websocket"],
 		});
 		setSocket(newSocket);
 

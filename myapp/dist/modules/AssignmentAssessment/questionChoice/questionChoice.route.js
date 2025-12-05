@@ -41,6 +41,8 @@ const controller = __importStar(require("./questionChoice.controller"));
 const validation = __importStar(require("./questionChoice.validation"));
 const validate_1 = __importDefault(require("../../../middlewares/validate"));
 const router = (0, express_1.Router)();
+// GET /choices/:id
+router.get("/choices/:id", (0, validate_1.default)(validation.getChoiceSchema), controller.getById);
 // POST /questions/:questionId/choices
 router.post("/:questionId/choices", (0, validate_1.default)(validation.createChoiceSchema), controller.create);
 // PUT /choices/:id

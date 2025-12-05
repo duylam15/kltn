@@ -35,28 +35,82 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.list = list;
 exports.markRead = markRead;
+exports.getUnreadCount = getUnreadCount;
+exports.getAllByUserId = getAllByUserId;
 const notification_validation_1 = require("./notification.validation");
 const svc = __importStar(require("./notification.service"));
+// Lấy danh sách thông báo (có phân trang)
 async function list(req, res) {
     const parse = notification_validation_1.listNotiSchema.safeParse(req);
-    if (!parse.success)
+    if (!parse.success) {
         return res
             .status(400)
             .json({ success: false, error: parse.error.flatten() });
+    }
     const userId = req.user.id;
     const unread = parse.data.query.unread === "true";
     const limit = parse.data.query.limit ? Number(parse.data.query.limit) : 20;
     const cursor = parse.data.query.cursor;
-    const data = await svc.list(userId, { unread, limit, cursor });
-    res.json({ success: true, data });
+    try {
+        const data = await svc.list(userId, { unread, limit, cursor });
+        // Trả về cursor của item cuối cùng để dùng cho pagination
+        const nextCursor = data.length === limit ? data[data.length - 1].id : null;
+        res.json({
+            success: true,
+            data,
+            nextCursor,
+            hasMore: data.length === limit,
+        });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
 }
+// Đánh dấu đã đọc
 async function markRead(req, res) {
-    const parse = notification_validation_1.markReadSchema.safeParse(req);
-    if (!parse.success)
-        return res
-            .status(400)
-            .json({ success: false, error: parse.error.flatten() });
     const userId = req.user.id;
-    await svc.markAsRead(userId, parse.data.body.ids);
-    res.json({ success: true });
+    const { notificationIds } = req.body; // Array of IDs hoặc "all"
+    try {
+        const result = await svc.markRead(userId, notificationIds);
+        res.json({
+            success: true,
+            message: `Đã đánh dấu ${result.count} thông báo đã đọc`,
+        });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+}
+// Lấy số lượng thông báo chưa đọc
+async function getUnreadCount(req, res) {
+    const userId = req.user.id;
+    try {
+        const count = await svc.getUnreadCount(userId);
+        res.json({ success: true, data: { count } });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+}
+// Lấy TẤT CẢ thông báo của user theo userId từ URL parameter
+async function getAllByUserId(req, res) {
+    const userId = parseInt(req.params.userId); // Lấy userId từ URL params
+    // Kiểm tra userId có hợp lệ không
+    if (isNaN(userId)) {
+        return res.status(400).json({
+            success: false,
+            message: "userId không hợp lệ"
+        });
+    }
+    try {
+        const data = await svc.getAllByUserId(userId);
+        res.json({
+            success: true,
+            data,
+            total: data.length
+        });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
 }

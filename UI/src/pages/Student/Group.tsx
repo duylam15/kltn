@@ -51,6 +51,7 @@ export default function Group() {
   const sectionId = Number(path.split("/")[3]);
 
   const { user } = useAuth();
+  console.log(user);
   const studentId = user?.student?.id;
 
   // Fetch danh sách nhóm
@@ -96,11 +97,10 @@ export default function Group() {
 
   // Socket realtime
   useEffect(() => {
-    const newSocket = io(import.meta.env.VITE_API_URL, {
+    const newSocket = io("https://www.quanlyhoctapsgu.cloud", {
       withCredentials: true,
-      transports: ["websocket", "polling"],
+      transports: ["websocket"],
     });
-
 
     setSocket(newSocket);
 
@@ -181,7 +181,7 @@ export default function Group() {
       newSocket.disconnect();
     };
   }, [sectionId, studentId, groupData?.currentGroup?.id]);
-
+console.log(studentId);
   // Join nhóm
   const handleJoinGroup = async (groupId: number) => {
     if (!studentId || joining) return;
@@ -192,11 +192,7 @@ export default function Group() {
     try {
       const res = await instance.post(
         `/sections-groups/${sectionId}/groups/${groupId}/join`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ studentId }),
-        }
+        { studentId } // <- body JSON thật sự
       );
 
       const data = await res.data;

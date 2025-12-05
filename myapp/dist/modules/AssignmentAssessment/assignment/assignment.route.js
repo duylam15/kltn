@@ -75,10 +75,10 @@ router.put("/:id", (0, validate_1.default)(validation.updateAssignmentSchema), c
 router.delete("/:id", (0, validate_1.default)(validation.deleteAssignmentSchema), controller.remove);
 router.get("/", (0, validate_1.default)(validation.listAssignmentsSchema), controller.list);
 router.get("/:id", (0, validate_1.default)(validation.getAssignmentByIdSchema), controller.getById);
+router.get("/:id/best-submissions", controller.getBestSubmissions);
 router.get("/:id/submissions", (0, validate_1.default)(validation.listSubmissionsByAssignmentSchema), controller.submissions);
 router.get("/teacher/:teacherId", controller.getAssignmentsByTeacher);
 router.get("/sections/:sectionId/assignments", controller.bySection);
-router.get("/:id/best-submissions", controller.getBestSubmissions);
 // Student Routes
 router.get("/section/:sectionId/student/:studentId", controller.getAssignmentsBySectionForStudent);
 router.post("/:id/start", controller.start);

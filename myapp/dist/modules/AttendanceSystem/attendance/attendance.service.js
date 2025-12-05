@@ -8,7 +8,6 @@ exports.checkInAttendance = checkInAttendance;
 exports.getAttendanceSessions = getAttendanceSessions;
 exports.getAttendanceSessionById = getAttendanceSessionById;
 exports.deleteAttendanceSession = deleteAttendanceSession;
-exports.listStudentAttendance = listStudentAttendance;
 const qrcode_1 = __importDefault(require("qrcode"));
 const path_1 = __importDefault(require("path"));
 const crypto_1 = __importDefault(require("crypto"));
@@ -96,30 +95,31 @@ async function getAttendanceSessionById(id) {
     });
 }
 async function deleteAttendanceSession(id) {
-    return client_1.prisma.attendanceSession.delete({ where: { id } });
-}
-//Danh sách điểm danh của 1 sinh viên trong 1 lớp học phần
-async function listStudentAttendance(sectionId, studentId) {
-    const records = await client_1.prisma.attendance.findMany({
-        where: { studentId, session: { sectionId } },
-        include: {
-            session: {
-                select: {
-                    id: true,
-                    name: true,
-                    createdAt: true,
-                    expiresAt: true,
-                },
-            },
-        },
-        orderBy: { sessionId: "asc" },
+    // kiểm tra tồn tại trước
+    const exists = await client_1.prisma.attendanceSession.findUnique({ where: { id } });
+    if (!exists) {
+        const err = new Error("Session not found");
+        err.statusCode = 404;
+        throw err;
+    }
+    await client_1.prisma.$transaction(async (tx) => {
+        // 1) Xoá các bản ghi phụ thuộc
+        await tx.attendanceLog.deleteMany({ where: { sessionId: id } });
+        await tx.attendanceNonce.deleteMany({ where: { sessionId: id } });
+        await tx.attendance.deleteMany({ where: { sessionId: id } });
+        // 2) Xoá session
+        await tx.attendanceSession.delete({ where: { id } });
     });
-    return records.map((a) => ({
-        attendanceId: a.id,
-        sessionId: a.sessionId,
-        sessionName: a.session?.name ?? `Session #${a.sessionId}`,
-        createdAt: a.session?.createdAt,
-        expiresAt: a.session?.expiresAt,
-        status: a.status,
-    }));
+    // 3) (không bắt buộc) dọn file QR nếu có
+    try {
+        if (exists.qrCodeUrl) {
+            const uploadsDir = path_1.default.join(__dirname, "../../../uploads");
+            const filename = path_1.default.basename(exists.qrCodeUrl);
+            const filePath = path_1.default.join(uploadsDir, filename);
+            if (fs_1.default.existsSync(filePath))
+                fs_1.default.unlinkSync(filePath);
+        }
+    }
+    catch { /* ignore file errors */ }
+    return true;
 }

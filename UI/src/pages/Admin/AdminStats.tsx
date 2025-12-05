@@ -405,10 +405,17 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
 
             {/* Lọc điểm */}
             <Form.Item label="Điểm min">
-              <InputNumber min={0} max={10} step={0.5} value={minScore} onChange={setMinScore} style={{ width: 100 }} />
+              <InputNumber
+                min={0}
+                max={10}
+                step={0.5}
+                value={minScore}
+                onChange={(val) => setMinScore(val ?? 0)}
+                style={{ width: 100 }}
+              />
             </Form.Item>
             <Form.Item label="Điểm max">
-              <InputNumber min={0} max={10} step={0.5} value={maxScore} onChange={setMaxScore} style={{ width: 100 }} />
+                <InputNumber min={0} max={10} step={0.5} value={maxScore} onChange={(val) => setMaxScore(val ?? 0)} style={{ width: 100 }} />
             </Form.Item>
             <Tooltip title="Thang 10; để trống = bỏ qua lọc">
               <InfoCircleOutlined style={{ color: "#999" }} />
@@ -603,7 +610,7 @@ function BucketsTab({
 
     try {
       setLoading(true);
-      const res = await axios.get(`${API_BASE}/stats/grade-buckets`, {
+      const res = await instance.get(`/stats/grade-buckets`, {
         params: { mode, ids: ids.join(","), scheme: "vn10" },
       });
       setData(res.data);
@@ -1123,10 +1130,24 @@ function DepartmentTab({
 
             {/* Lọc điểm */}
             <Form.Item label="Điểm min">
-              <InputNumber min={0} max={10} step={0.5} value={minScore} onChange={setMinScore} style={{ width: 100 }} />
+              <InputNumber
+                min={0}
+                max={10}
+                step={0.5}
+                value={minScore}
+                onChange={(val) => setMinScore(val ?? 0)}
+                style={{ width: 100 }}
+              />
             </Form.Item>
             <Form.Item label="Điểm max">
-              <InputNumber min={0} max={10} step={0.5} value={maxScore} onChange={setMaxScore} style={{ width: 100 }} />
+              <InputNumber
+                min={0}
+                max={10}
+                step={0.5}
+                value={maxScore}
+                onChange={(val) => setMaxScore(val ?? 0)}
+                style={{ width: 100 }}
+              />
             </Form.Item>
             <Tooltip title="Thang 10; để trống = bỏ qua lọc"><InfoCircleOutlined style={{ color: "#999" }} /></Tooltip>
 

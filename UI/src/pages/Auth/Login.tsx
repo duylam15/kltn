@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock, LogIn, User as UserIcon, AlertCircle } from "lucide-react";
 import { useAuth } from "../../context/authContext";
+import { toast } from "react-hot-toast";
 
 export default function Login() {
 	const navigate = useNavigate();
@@ -27,10 +28,8 @@ export default function Login() {
 			else navigate("/", { replace: true });
 		} catch (err: any) {
 			const errorMessage =
-				err?.response?.data?.message ||
-				err?.message ||
 				"Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.";
-			setError(errorMessage);
+			toast.error(errorMessage);
 		} finally {
 			setLoading(false);
 		}

@@ -12,6 +12,7 @@ exports.refreshFromCookie = refreshFromCookie;
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const auth_service_1 = require("./auth.service");
 const client_1 = require("../../../prisma/client");
+const cookie_1 = require("../../../utils/cookie"); // ✅ Import helpers
 const SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
 async function register(req, res) {
     try {
@@ -34,6 +35,7 @@ async function register(req, res) {
             .json({ success: false, message: "Register failed" });
     }
 }
+// ✅ LOGIN - Dùng helper
 async function login(req, res) {
     const { studentCode, password } = req.body;
     const user = await (0, auth_service_1.validateUser)(studentCode, password);
@@ -53,19 +55,8 @@ async function login(req, res) {
         studentCode: user.studentCode,
     });
     const refreshToken = await (0, auth_service_1.issueRefreshToken)(user.id);
-    // lưu access token vào cookie HttpOnly
-    res.cookie("access_token", accessToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: 15 * 60 * 1000, // 15 phút
-    });
-    res.cookie("refresh_token", refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 ngày
-    });
+    // ✅ Set cookies bằng helper
+    (0, cookie_1.setAuthCookies)(res, accessToken, refreshToken);
     return res.json({
         success: true,
         message: "Logged in",
@@ -116,23 +107,15 @@ async function refresh(req, res) {
             .json({ success: false, message: "Refresh failed" });
     }
 }
+// ✅ LOGOUT - Dùng helper
 async function logout(req, res) {
     try {
-        const refreshToken = req.cookies["refresh_token"]; // 👈 lấy từ cookie
+        const refreshToken = req.cookies["refresh_token"];
         if (refreshToken) {
             await (0, auth_service_1.revokeRefreshToken)(refreshToken);
         }
-        // Xóa cookie ở client
-        res.clearCookie("access_token", {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "strict",
-        });
-        res.clearCookie("refresh_token", {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "strict",
-        });
+        // ✅ Clear cookies bằng helper
+        (0, cookie_1.clearAuthCookies)(res);
         return res.json({ success: true, message: "Logged out" });
     }
     catch (e) {
@@ -156,6 +139,7 @@ async function me(req, res) {
                 email: true,
                 fullName: true,
                 studentCode: true,
+                avatarUrl: true,
                 role: {
                     select: {
                         id: true,
@@ -169,7 +153,6 @@ async function me(req, res) {
                         },
                     },
                 },
-                // lấy thêm thông tin teacher & student
                 teacher: {
                     select: {
                         id: true,
@@ -203,6 +186,7 @@ async function me(req, res) {
                 email: user.email,
                 fullName: user.fullName,
                 studentCode: user.studentCode,
+                avatarUrl: user.avatarUrl,
                 role: {
                     id: user.role.id,
                     name: user.role.name,
@@ -220,7 +204,7 @@ async function me(req, res) {
             .json({ success: false, message: "Error fetching user" });
     }
 }
-// Thêm hàm này vào auth.controller.ts
+// ✅ REFRESH FROM COOKIE - Dùng helper
 async function refreshFromCookie(req, res) {
     try {
         const refreshToken = req.cookies["refresh_token"];
@@ -230,7 +214,7 @@ async function refreshFromCookie(req, res) {
             return res.status(401).json({
                 success: false,
                 message: "No refresh token",
-                code: "NO_REFRESH_TOKEN"
+                code: "NO_REFRESH_TOKEN",
             });
         }
         const rotated = await (0, auth_service_1.rotateRefreshToken)(refreshToken);
@@ -239,7 +223,7 @@ async function refreshFromCookie(req, res) {
             return res.status(401).json({
                 success: false,
                 message: "Invalid or expired refresh token",
-                code: "INVALID_REFRESH_TOKEN"
+                code: "INVALID_REFRESH_TOKEN",
             });
         }
         const user = await client_1.prisma.user.findUnique({
@@ -250,7 +234,7 @@ async function refreshFromCookie(req, res) {
             return res.status(401).json({
                 success: false,
                 message: "User not found",
-                code: "USER_NOT_FOUND"
+                code: "USER_NOT_FOUND",
             });
         }
         const accessToken = (0, auth_service_1.signAccessToken)({
@@ -258,28 +242,16 @@ async function refreshFromCookie(req, res) {
             roleId: user.roleId,
             studentCode: user.studentCode,
         });
-        // Cập nhật cookie với access token mới
-        res.cookie("access_token", accessToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "strict",
-            maxAge: 1 * 60 * 1000, // 1 phút (test)
-        });
-        // Cập nhật cookie với refresh token mới
-        res.cookie("refresh_token", rotated.refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "strict",
-            maxAge: 5 * 60 * 1000, // 5 phút (test)
-        });
+        // ✅ Set cookies bằng helper (tự động đọc TTL từ . env)
+        (0, cookie_1.setAuthCookies)(res, accessToken, rotated.refreshToken);
         console.log("✅ Tokens refreshed successfully for user:", user.id);
         return res.json({
             success: true,
             message: "Token refreshed",
             data: {
                 userId: user.id,
-                studentCode: user.studentCode
-            }
+                studentCode: user.studentCode,
+            },
         });
     }
     catch (error) {
@@ -287,7 +259,7 @@ async function refreshFromCookie(req, res) {
         return res.status(500).json({
             success: false,
             message: "Refresh failed",
-            code: "REFRESH_ERROR"
+            code: "REFRESH_ERROR",
         });
     }
 }

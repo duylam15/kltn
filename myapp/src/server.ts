@@ -7,7 +7,15 @@ import { Server } from "socket.io";
 const httpServer = createServer(app);
 
 export const io = new Server(httpServer, {
-    cors: { origin: "http://localhost:5173", credentials: true },
+    cors: {
+        origin: [
+            "http://localhost:5173",
+            "http://www.quanlyhoctapsgu.cloud",
+            "http://quanlyhoctapsgu.cloud",
+            "http://42.96.15.24:4000", // prod (non-www)
+        ],
+        credentials: true,
+    },
 });
 
 // Khởi tạo Socket.IO

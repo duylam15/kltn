@@ -39,6 +39,7 @@ exports.unassignFromSection = unassignFromSection;
 exports.listBySection = listBySection;
 exports.listByAssignment = listByAssignment;
 const service = __importStar(require("./sectionAssignment.service"));
+const server_1 = require("../../../server");
 async function toggleVisibility(req, res) {
     try {
         const { sectionId, assignmentId } = req.params;
@@ -61,8 +62,35 @@ async function assignToSection(req, res) {
     const sectionId = Number(req.params.id);
     const { assignmentId } = req.validated.body;
     try {
-        const sa = await service.assignToSection(sectionId, assignmentId);
-        res.json({ success: true, data: sa });
+        const { sectionAssignment, studentsNotified } = await service.assignToSection(sectionId, assignmentId);
+        // 🔥 Phát thông báo realtime cho toàn bộ lớp
+        server_1.io.to(`section_${sectionId}`).emit("newAssignment", {
+            assignment: sectionAssignment.assignment,
+            section: {
+                id: sectionAssignment.section.id,
+                sectionCode: sectionAssignment.section.sectionCode,
+                sectionName: sectionAssignment.section.sectionName,
+                subject: sectionAssignment.section.subject,
+            },
+            message: `Bài tập mới: ${sectionAssignment.assignment.title}`,
+            timestamp: new Date(),
+        });
+        // 🔥 Phát notification riêng cho từng sinh viên
+        studentsNotified.forEach((student) => {
+            server_1.io.to(`user_${student.userId}`).emit("newNotification", {
+                type: "assignment",
+                title: `Bài tập mới: ${sectionAssignment.assignment.title}`,
+                message: `Bạn có bài tập mới trong lớp ${sectionAssignment.section.subject.subjectName}`,
+                assignmentId: sectionAssignment.assignment.id,
+                sectionId: sectionId,
+                createdAt: new Date(),
+            });
+        });
+        res.json({
+            success: true,
+            data: sectionAssignment,
+            studentsNotified: studentsNotified.length,
+        });
     }
     catch (err) {
         res.status(400).json({ success: false, message: err.message });

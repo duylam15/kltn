@@ -1,6 +1,7 @@
 // context/AuthContext. tsx
 import React, { createContext, useContext, useEffect, useState } from "react";
 import instance from "../utils/axiosInstance";
+import axios from "axios";
 
 type Permission = { id: number; name: string };
 
@@ -80,7 +81,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         password: string
     ): Promise<User> => {
         // Gọi login API
-        await instance.post("/auths/login", { studentCode, password });
+        await instance.post(`/auths/login`, {
+            studentCode,
+            password,
+        });
 
         // Fetch user info
         const res: any = await instance.get("/auths/me");

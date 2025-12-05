@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getQuestionByIdSchema = exports.listQuestionsByAssignmentSchema = exports.deleteQuestionSchema = exports.updateQuestionSchema = exports.createQuestionSchema = exports.submitAssignmentSchema = exports.listSubmissionsByAssignmentSchema = exports.listAssignmentsSchema = exports.getAssignmentByIdSchema = exports.deleteAssignmentSchema = exports.updateAssignmentSchema = exports.createAssignmentSchema = exports.publicSchema = exports.getAssignmentsBySectionForStudentSchema = void 0;
+exports.getQuestionByIdSchema = exports.listQuestionsByAssignmentSchema = exports.deleteQuestionSchema = exports.updateQuestionSchema = exports.createQuestionSchema = exports.submitAssignmentSchema = exports.listSubmissionsByAssignmentSchema = exports.listAssignmentsSchema = exports.getAssignmentByIdSchema = exports.deleteAssignmentSchema = exports.updateAssignmentSchema = exports.createAssignmentSchema = exports.getAssignmentsBySectionForStudentSchema = void 0;
 const client_1 = require("@prisma/client");
 const zod_1 = require("zod");
 exports.getAssignmentsBySectionForStudentSchema = zod_1.z.object({
@@ -13,10 +13,6 @@ exports.getAssignmentsBySectionForStudentSchema = zod_1.z.object({
         status: zod_1.z.enum(["all", "not_started", "in_progress", "completed", "overdue"]).optional().default("all"),
     }),
 });
-// Không yêu cầu params
-exports.publicSchema = zod_1.z.object({
-    params: zod_1.z.object({}).optional(),
-});
 exports.createAssignmentSchema = zod_1.z.object({
     body: zod_1.z.object({
         title: zod_1.z.string().min(1, "Tiêu đề không được bỏ trống"),
@@ -27,15 +23,15 @@ exports.createAssignmentSchema = zod_1.z.object({
         passingScore: zod_1.z.number().nullable().optional(),
         timeLimit: zod_1.z.number().nullable().optional(),
         maxAttempts: zod_1.z.number().default(1),
+        subjectId: zod_1.z.coerce.number().int().nullable().optional(),
+        chapterId: zod_1.z.coerce.number().int().nullable().optional(),
+        difficulty: zod_1.z.enum(["REMEDIAL", "NORMAL", "ADVANCED"]).default("NORMAL"),
         createdBy: zod_1.z.coerce.number().int(),
         isPublic: zod_1.z.boolean().optional(),
-        originalAssignmentId: zod_1.z.string().uuid().optional(),
+        originalAssignmentId: zod_1.z.string().uuid().optional(), // 👈 đổi sang string
         shuffleQuestions: zod_1.z.boolean().default(false),
         showAnswersAfterSubmit: zod_1.z.boolean().default(false),
         allowLateSubmission: zod_1.z.boolean().default(false),
-        // 🆕 Thêm hai trường phân loại
-        subjectId: zod_1.z.number().int().nullable().optional(),
-        chapterId: zod_1.z.number().int().nullable().optional(),
     }),
 });
 exports.updateAssignmentSchema = zod_1.z.object({

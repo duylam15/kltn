@@ -2,6 +2,5 @@ node_modules
 dist
 .git
 .vscode
-.env
 .vercel
 npm-debug.log

@@ -49,12 +49,16 @@ exports.updateMaterialVisibility = updateMaterialVisibility;
 exports.getMaterialsByTeacher = getMaterialsByTeacher;
 exports.listPublicMaterialsGrouped = listPublicMaterialsGrouped;
 exports.copyMaterial = copyMaterial;
+exports.createMaterialFromLink = createMaterialFromLink;
+exports.getMaterialsBySubject = getMaterialsBySubject;
+exports.getMaterialsByChapter = getMaterialsByChapter;
 const materialService = __importStar(require("./materials.service"));
 const client_1 = require("../../../prisma/client");
 const bigint_1 = require("../../../utils/bigint");
 const catchAsync_1 = __importDefault(require("../../../utils/catchAsync"));
 const ApiError_1 = __importDefault(require("../../../utils/ApiError"));
 const response_1 = require("../../../utils/response");
+const server_1 = require("../../../server");
 async function getMaterials(req, res) {
     try {
         const materials = await materialService.getAllMaterials();
@@ -148,9 +152,7 @@ async function assignMaterialToClass(req, res) {
                 message: "Tài liệu không tồn tại",
             });
         }
-        // ✅ Kiểm tra quyền: chỉ gán được nếu:
-        // - Là tài liệu của mình HOẶC
-        // - Là tài liệu public của người khác
+        // ✅ Kiểm tra quyền
         const isOwner = material.uploadedBy === Number(assignedBy);
         const isPublic = material.isPublic;
         if (!isOwner && !isPublic) {
@@ -174,9 +176,46 @@ async function assignMaterialToClass(req, res) {
                 message: "Tài liệu này đã được gán vào lớp rồi",
             });
         }
-        // ✅ Tạo liên kết
-        const courseMaterial = await materialService.assignMaterialToClass(Number(courseSectionId), Number(materialId), Number(assignedBy));
-        res.json({ success: true, data: courseMaterial });
+        // ✅ Tạo liên kết và lấy danh sách sinh viên
+        const { courseMaterial, studentsNotified } = await materialService.assignMaterialToClass(Number(courseSectionId), Number(materialId), Number(assignedBy));
+        // 🔥 Phát thông báo realtime cho toàn bộ lớp
+        server_1.io.to(`section_${courseSectionId}`).emit("newMaterial", {
+            material: {
+                id: courseMaterial.material.id,
+                title: courseMaterial.material.title,
+                description: courseMaterial.material.description,
+                category: courseMaterial.material.category,
+                filePath: courseMaterial.material.filePath,
+                fileType: courseMaterial.material.fileType,
+            },
+            section: {
+                id: courseMaterial.courseSection.id,
+                sectionCode: courseMaterial.courseSection.sectionCode,
+                sectionName: courseMaterial.courseSection.sectionName,
+                subject: courseMaterial.courseSection.subject,
+            },
+            assignedBy: {
+                id: courseMaterial.assigner.id,
+                fullName: courseMaterial.assigner.fullName,
+            },
+            message: `Tài liệu mới: ${courseMaterial.material.title}`,
+            timestamp: new Date(),
+        });
+        // 🔥 Phát notification riêng cho từng sinh viên
+        studentsNotified.forEach((student) => {
+            server_1.io.to(`user_${student.userId}`).emit("newNotification", {
+                type: "system",
+                title: `Tài liệu mới: ${courseMaterial.material.title}`,
+                message: `${courseMaterial.assigner.fullName} đã chia sẻ tài liệu mới`,
+                sectionId: courseSectionId,
+                createdAt: new Date(),
+            });
+        });
+        res.json({
+            success: true,
+            data: courseMaterial,
+            studentsNotified: studentsNotified.length,
+        });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -442,3 +481,86 @@ exports.listOpenBySection = (0, catchAsync_1.default)(async (req, res, next) => 
         .map((r) => r.material);
     (0, response_1.sendResponse)(res, { success: true, data: (0, bigint_1.jsonSafe)(validMaterials) });
 });
+// 🆕 Tạo tài liệu từ link (không cần upload file)
+async function createMaterialFromLink(req, res) {
+    try {
+        const { title, description, link, category, isPublic, uploadedBy, subjectId, chapterId, } = req.body;
+        // Validate required fields
+        if (!title || !link || !uploadedBy) {
+            return res.status(400).json({
+                success: false,
+                message: "Thiếu thông tin: title, link, uploadedBy là bắt buộc",
+            });
+        }
+        const material = await materialService.createMaterialFromLink({
+            title,
+            description,
+            link, // Chỉ là string, không validate
+            category: category || "other",
+            isPublic: isPublic === true || isPublic === "true",
+            uploadedBy: Number(uploadedBy),
+            subjectId: subjectId ? Number(subjectId) : undefined,
+            chapterId: chapterId ? Number(chapterId) : undefined,
+        });
+        res.status(201).json({
+            success: true,
+            data: (0, bigint_1.jsonSafe)(material),
+            message: "Tạo tài liệu từ link thành công",
+        });
+    }
+    catch (error) {
+        console.error("❌ Error creating material from link:", error);
+        res.status(500).json({
+            success: false,
+            message: error.message || "Lỗi khi tạo tài liệu từ link",
+        });
+    }
+}
+// 🆕 Lấy tài liệu theo môn học
+async function getMaterialsBySubject(req, res) {
+    try {
+        const subjectId = parseInt(req.params.subjectId);
+        if (isNaN(subjectId)) {
+            return res.status(400).json({
+                success: false,
+                message: "subjectId không hợp lệ",
+            });
+        }
+        const materials = await materialService.getMaterialsBySubject(subjectId);
+        res.json({
+            success: true,
+            data: (0, bigint_1.jsonSafe)(materials),
+            total: materials.length,
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+}
+// 🆕 Lấy tài liệu theo chương
+async function getMaterialsByChapter(req, res) {
+    try {
+        const chapterId = parseInt(req.params.chapterId);
+        if (isNaN(chapterId)) {
+            return res.status(400).json({
+                success: false,
+                message: "chapterId không hợp lệ",
+            });
+        }
+        const materials = await materialService.getMaterialsByChapter(chapterId);
+        res.json({
+            success: true,
+            data: (0, bigint_1.jsonSafe)(materials),
+            total: materials.length,
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+}

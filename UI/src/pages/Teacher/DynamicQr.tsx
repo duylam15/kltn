@@ -1,11 +1,13 @@
 // src/pages/Teacher/DynamicQr.tsx
 import React, { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import instance from "../../utils/axiosInstance";
 
 
 interface DynamicQrProps {
   sessionId: number;
+  secretBase32?: string;
+  period?: number;
+  digits?: number;
   size?: number;
 }
 
@@ -20,15 +22,14 @@ export const DynamicQr: React.FC<DynamicQrProps> = ({
   const [period, setPeriod] = useState<number>(DEFAULT_PERIOD);
 
   useEffect(() => {
-    let countdownTimer: number;
-    let fetchTimer: number;
+   
 
     async function fetchToken() {
       try {
-        const res = await instance.get(
-          `/attendance/sessions/${sessionId}/totp-current`
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL}/attendance/sessions/${sessionId}/totp-current`
         );
-        const data = res.data;
+        const data = await res.json();
 
         if (data.success) {
           setToken(data.token);
@@ -47,13 +48,12 @@ export const DynamicQr: React.FC<DynamicQrProps> = ({
     // gọi ngay lần đầu
     fetchToken();
 
-    // đếm ngược mỗi 1s
-    countdownTimer = window.setInterval(() => {
+    const countdownTimer = window.setInterval(() => {
       setSecondsLeft((prev) => (prev <= 1 ? period : prev - 1));
     }, 1000);
 
-    // gọi lại backend mỗi `period` giây
-    fetchTimer = window.setInterval(fetchToken, period * 1000);
+    const fetchTimer = window.setInterval(fetchToken, period * 1000);
+
 
     return () => {
       clearInterval(countdownTimer);

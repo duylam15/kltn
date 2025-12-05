@@ -36,9 +36,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.listBySection = void 0;
 exports.createSession = createSession;
+exports.getSessionTotpConfig = getSessionTotpConfig;
+exports.getSessionCurrentTotp = getSessionCurrentTotp;
+exports.signPayload = signPayload;
+exports.issueNonce = issueNonce;
 exports.checkIn = checkIn;
+exports.manualCheckIn = manualCheckIn;
+exports.cancelAttendance = cancelAttendance;
 exports.adjustAttendance = adjustAttendance;
 exports.getWarningAttendances = getWarningAttendances;
 exports.listAllSessions = listAllSessions;
@@ -47,276 +52,461 @@ exports.getSession = getSession;
 exports.updateSession = updateSession;
 exports.deleteSession = deleteSession;
 const attendanceService = __importStar(require("./attendance.service"));
-const qrcode_1 = __importDefault(require("qrcode"));
-const path_1 = __importDefault(require("path"));
-const fs_1 = __importDefault(require("fs"));
+const crypto_1 = require("crypto");
+const net_utils_1 = require("../../../common/net.utils");
+const hmac_1 = require("../../../common/hmac");
+const ua_parser_js_1 = require("ua-parser-js");
+const crypto_2 = __importDefault(require("crypto"));
+const otplib_1 = require("otplib");
 const client_1 = require("../../../prisma/client");
-const attendance_service_1 = require("./attendance.service");
-const catchAsync_1 = __importDefault(require("../../../utils/catchAsync"));
-const ApiError_1 = __importDefault(require("../../../utils/ApiError"));
-const response_1 = require("../../../utils/response");
-// Tạo session + QR code
+const SECRET = process.env.ATTENDANCE_HMAC_SECRET || "dev-secret";
+// cấu hình mặc định cho toàn hệ thống (có thể chuyển .env)
+const DEFAULT_TOTP_PERIOD = 10; // 10 giây
+const DEFAULT_TOTP_DIGITS = 6;
+// ===== helper sinh secret base32 mạnh
+function generateTotpSecretBase32() {
+    // 20 bytes random -> base32 (tương thích otplib)
+    return Buffer.from(crypto_2.default.randomBytes(20)).toString("base64") // raw
+        .replace(/[^A-Z2-7]/gi, "A") // normalize
+        .slice(0, 32) // 32 chars
+        .toUpperCase(); // base32-like
+}
+/* ===================== ====================================
+ * 1) TẠO PHIÊN ĐIỂM DANH (bổ sung secret TOTP)
+ * ========================================================= */
 async function createSession(req, res) {
     try {
-        const { sectionId, name, expiresAt, latitude, longitude, radius, requireDeviceCheck, maxCheckInsPerIP, } = req.body;
-        const sectionIdNum = Number(sectionId);
-        if (!sectionIdNum || Number.isNaN(sectionIdNum)) {
-            return res
-                .status(400)
-                .json({ success: false, message: "sectionId required" });
-        }
-        const sessionCode = Math.random()
-            .toString(36)
-            .substring(2, 10)
-            .toUpperCase();
+        const { sectionId, name, expiresAt, latitude, longitude, radius, requireDeviceCheck, maxCheckInsPerIP, sessionScore, // ⬅️ thêm
+         } = req.body;
+        const sessionCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+        const totpSecretBase32 = generateTotpSecretBase32();
         const session = await client_1.prisma.attendanceSession.create({
             data: {
-                sectionId: sectionIdNum,
+                sectionId: Number(sectionId),
                 sessionCode,
                 name: name || null,
-                latitude: latitude || null,
-                longitude: longitude || null,
-                radius: radius || 50,
+                latitude: latitude ?? null,
+                longitude: longitude ?? null,
+                radius: radius ?? 100,
                 requireDeviceCheck: requireDeviceCheck ?? true,
-                maxCheckInsPerIP: maxCheckInsPerIP || 3,
                 expiresAt: expiresAt ? new Date(expiresAt) : null,
+                // TOTP
+                totpSecretBase32,
+                totpPeriod: DEFAULT_TOTP_PERIOD,
+                totpDigits: DEFAULT_TOTP_DIGITS,
+                // ⬇️ lưu điểm của buổi
+                sessionScore: sessionScore !== undefined && sessionScore !== null
+                    ? Number(sessionScore)
+                    : 10,
             },
         });
-        const checkInUrl = `http://localhost:5173/diemdanh?sessionId=${session.id}`;
-        const uploadsDir = path_1.default.join(__dirname, "../../../uploads");
-        if (!fs_1.default.existsSync(uploadsDir))
-            fs_1.default.mkdirSync(uploadsDir, { recursive: true });
-        const qrPath = path_1.default.join(uploadsDir, `${session.id}.png`);
-        await qrcode_1.default.toFile(qrPath, checkInUrl);
-        const updatedSession = await client_1.prisma.attendanceSession.update({
-            where: { id: session.id },
-            data: { qrCodeUrl: `/uploads/${session.id}.png` },
+        return res.json({
+            success: true,
+            data: session,
+            totp: {
+                secretBase32: totpSecretBase32,
+                period: DEFAULT_TOTP_PERIOD,
+                digits: DEFAULT_TOTP_DIGITS,
+            },
         });
-        res.json({ success: true, data: updatedSession, link: checkInUrl });
     }
     catch (err) {
         console.error(err);
-        res.status(500).json({ success: false, message: err.message });
+        return res
+            .status(500)
+            .json({ success: false, message: err.message || "Server error" });
     }
 }
-// 🔥 Sinh viên check-in với chống gian lận
+/* =========================================================
+ * 1a) API CHỈ GV DÙNG: LẤY SECRET TOTP CỦA 1 SESSION
+ * ========================================================= */
+async function getSessionTotpConfig(req, res) {
+    try {
+        const id = Number(req.params.id);
+        const s = await client_1.prisma.attendanceSession.findUnique({
+            where: { id },
+            select: { totpSecretBase32: true, totpPeriod: true, totpDigits: true }
+        });
+        if (!s || !s.totpSecretBase32) {
+            return res.status(404).json({ success: false, message: "Không có TOTP cho phiên" });
+        }
+        return res.json({
+            success: true,
+            totp: {
+                secretBase32: s.totpSecretBase32,
+                period: s.totpPeriod || DEFAULT_TOTP_PERIOD,
+                digits: s.totpDigits || DEFAULT_TOTP_DIGITS,
+            }
+        });
+    }
+    catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+    }
+}
+/* =========================================================
+ * 1b) Lấy mã TOTP hiện tại cho session (dùng trong QR động)
+ * ========================================================= */
+async function getSessionCurrentTotp(req, res) {
+    try {
+        const id = Number(req.params.id);
+        const sess = await client_1.prisma.attendanceSession.findUnique({ where: { id } });
+        if (!sess)
+            return res.json({ success: false, message: "Session not found" });
+        otplib_1.totp.options = { digits: 6, step: 10 };
+        const token = generateTotpSecretBase32();
+        return res.json({
+            success: true,
+            token,
+            period: 10
+        });
+    }
+    catch (err) {
+        return res.json({ success: false, message: err.message });
+    }
+}
+/* =========================================================
+ * 2. KÝ PAYLOAD TẠM (HMAC)
+ * ========================================================= */
+async function signPayload(req, res) {
+    try {
+        const { base } = req.body;
+        if (!base) {
+            return res.status(400).json({ success: false, message: "Thiếu base string để ký" });
+        }
+        const signature = crypto_2.default.createHmac("sha256", SECRET).update(base).digest("hex");
+        return res.json({ success: true, signature });
+    }
+    catch (err) {
+        console.error("❌ signPayload error:", err);
+        return res.status(500).json({ success: false, message: err.message || "Server error" });
+    }
+}
+/* =========================================================
+ * 3. CẤP NONCE
+ * ========================================================= */
+async function issueNonce(req, res) {
+    try {
+        const { sessionId } = req.params;
+        const session = await client_1.prisma.attendanceSession.findUnique({ where: { id: Number(sessionId) } });
+        if (!session)
+            return res.status(404).json({ success: false, message: "Session not found" });
+        const value = (0, crypto_1.randomBytes)(16).toString("hex");
+        const expiresAt = new Date(Date.now() + 60 * 1000); // 60s
+        await client_1.prisma.attendanceNonce.create({
+            data: { sessionId: session.id, value, expiresAt, used: false },
+        });
+        return res.json({ success: true, nonce: value, expiresAt });
+    }
+    catch (err) {
+        console.error("❌ issueNonce error:", err);
+        return res.status(500).json({ success: false, message: err.message || "Server error" });
+    }
+}
+/* =========================================================
+ * 4. SV CHECK-IN (kiểm accuracy + distance + IP-Geo + deviceId)
+ * ========================================================= */
 async function checkIn(req, res) {
     try {
-        const { sessionId, studentCode, latitude, longitude } = req.body;
+        const { sessionId, studentCode, scannedToken, latitude, longitude, accuracy, deviceId, nonce, payloadSig, } = req.body;
         if (!sessionId || !studentCode) {
+            return res.status(400).json({ success: false, message: "sessionId và studentCode là bắt buộc" });
+        }
+        if (latitude == null || longitude == null) {
+            return res.status(400).json({ success: false, message: "Vị trí GPS là bắt buộc để điểm danh" });
+        }
+        // accuracy client phải <= 100m
+        const MAX_ALLOWED_ACCURACY = 100;
+        const accNum = Number(accuracy);
+        if (!Number.isFinite(accNum) || accNum > MAX_ALLOWED_ACCURACY) {
             return res.status(400).json({
                 success: false,
-                message: "sessionId và studentCode là bắt buộc",
+                message: `Không thể xác định vị trí chính xác (Sai số: ${Number.isFinite(accNum) ? Math.round(accNum) + "m" : "N/A"} > ${MAX_ALLOWED_ACCURACY}m). Vui lòng tắt->bật lại Wi-Fi THỬ.`,
             });
         }
-        // 1️⃣ Lấy thông tin thiết bị và IP
-        const ipAddress = req.headers["x-forwarded-for"]?.split(",")[0] ||
-            req.socket.remoteAddress ||
-            "unknown";
-        const userAgent = req.headers["user-agent"] || "unknown";
-        const deviceInfo = extractDeviceInfo(userAgent);
-        [];
-        // 2️⃣ Tìm session
-        const session = await client_1.prisma.attendanceSession.findUnique({
+        // -- Lấy session & secret
+        const sessionDb = await client_1.prisma.attendanceSession.findUnique({
             where: { id: Number(sessionId) },
         });
-        if (!session) {
-            return res
-                .status(404)
-                .json({ success: false, message: "Session không tồn tại" });
-        }
-        // 3️⃣ Kiểm tra session hết hạn
-        if (session.expiresAt && new Date() > session.expiresAt) {
-            return res.status(400).json({
-                success: false,
-                message: "Session điểm danh đã hết hạn",
+        if (!sessionDb)
+            return res.status(404).json({ success: false, message: "Session not found" });
+        // ✅ TOTP chỉ kiểm khi client có gửi scannedToken
+        if (sessionDb.totpSecretBase32 && scannedToken) {
+            otplib_1.totp.options = {
+                step: sessionDb.totpPeriod || DEFAULT_TOTP_PERIOD,
+                digits: sessionDb.totpDigits || DEFAULT_TOTP_DIGITS,
+            };
+            const isValidToken = otplib_1.totp.verify({
+                token: String(scannedToken),
+                secret: sessionDb.totpSecretBase32,
+                window: 1, // chấp nhận lệch 1 step
             });
+            if (!isValidToken) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Mã QR đã hết hạn hoặc không hợp lệ. Hãy quét lại QR đang hiển thị.",
+                });
+            }
         }
-        // 4️⃣ Tìm student
-        const student = await client_1.prisma.student.findUnique({
-            where: { studentCode },
-            include: { user: true },
-        });
-        if (!student) {
-            return res
-                .status(404)
-                .json({ success: false, message: "Sinh viên không tồn tại" });
+        // Nếu không có scannedToken -> bỏ qua bước TOTP (nút bấm thuần)
+        // 1) IP & UA
+        const ipAddress = (0, net_utils_1.getClientIp)(req);
+        const userAgent = req.headers["user-agent"] || "";
+        const ua = new ua_parser_js_1.UAParser(userAgent).getResult();
+        const deviceInfo = `${ua.os.name ?? ""} ${ua.os.version ?? ""} | ${ua.browser.name ?? ""} ${ua.browser.version ?? ""}`;
+        // 2) Nonce
+        const found = await client_1.prisma.attendanceNonce.findUnique({ where: { value: nonce } });
+        if (!found || found.used || found.expiresAt < new Date()) {
+            return res.status(400).json({ success: false, message: "Nonce invalid or expired." });
         }
-        // 5️⃣ Kiểm tra sinh viên có trong lớp không
+        // 3) Verify HMAC
+        const base = [sessionId, latitude, longitude, accuracy, nonce].join("|");
+        if (!(0, hmac_1.verify)(base, payloadSig)) {
+            return res.status(400).json({ success: false, message: "Signature mismatch." });
+        }
+        // 4) Session
+        const session = await client_1.prisma.attendanceSession.findUnique({ where: { id: Number(sessionId) } });
+        if (!session)
+            return res.status(404).json({ success: false, message: "Session not found" });
+        if (session.expiresAt && new Date() > new Date(session.expiresAt)) {
+            return res.status(410).json({ success: false, message: "Buổi điểm danh đã hết hạn." });
+        }
+        // 5) Student
+        const student = await client_1.prisma.student.findUnique({ where: { studentCode }, include: { user: true } });
+        if (!student)
+            return res.status(404).json({ success: false, message: "Sinh viên không tồn tại" });
+        // 6) Enrollment
         const enrolled = await client_1.prisma.sectionEnrollment.findFirst({
             where: { sectionId: session.sectionId, studentId: student.id },
         });
-        if (!enrolled) {
-            return res.status(400).json({
-                success: false,
-                message: "Sinh viên không thuộc học phần này",
-            });
-        }
-        // 6️⃣ Kiểm tra đã điểm danh chưa
+        if (!enrolled)
+            return res.status(400).json({ success: false, message: "Sinh viên không thuộc học phần này" });
+        // 7) Đã điểm danh?
         const existing = await client_1.prisma.attendance.findFirst({
             where: { sessionId: session.id, studentId: student.id },
         });
         if (existing) {
-            return res.status(400).json({
-                success: false,
-                message: "Bạn đã điểm danh rồi",
-                data: existing,
-            });
+            return res.status(400).json({ success: false, message: "Bạn đã điểm danh rồi", data: existing });
         }
-        // 7️⃣ 🔥 CHỐNG GIAN LẬN: Kiểm tra số lần điểm danh từ cùng IP
+        // 8) Chống spam theo IP
         const ipCheckCount = await client_1.prisma.attendance.count({
-            where: {
-                sessionId: session.id,
-                ipAddress,
-            },
+            where: { sessionId: session.id, ipAddress },
         });
-        if (ipCheckCount >= (session.maxCheckInsPerIP || 3)) {
-            return res.status(400).json({
-                success: false,
-                message: `IP này đã điểm danh ${ipCheckCount} lần. Nghi vấn gian lận!`,
-                isValid: false,
-            });
-        }
-        // 8️⃣ 🔥 CHỐNG GIAN LẬN: Kiểm tra vị trí
-        let status = "present";
+        // 9) GPS trong bán kính
         let distance = null;
         let isValid = true;
-        if (latitude === null ||
-            latitude === undefined ||
-            longitude === null ||
-            longitude === undefined) {
-            return res.status(400).json({
+        let status = "present";
+        if (session.latitude && session.longitude && session.radius) {
+            distance = (0, net_utils_1.haversineMeters)(session.latitude, session.longitude, Number(latitude), Number(longitude));
+            const inRadius = distance <= (session.radius ?? 50);
+            if (!inRadius)
+                isValid = false;
+        }
+        // 10) So sánh IP vs GPS
+        const ipGeo = (0, net_utils_1.getIpGeo)(ipAddress);
+        let ipVsGpsKm = null;
+        if (ipGeo)
+            ipVsGpsKm = (0, net_utils_1.haversineMeters)(Number(latitude), Number(longitude), ipGeo.lat, ipGeo.lon) / 1000;
+        const suspiciousByIpGeo = ipVsGpsKm !== null && ipVsGpsKm > 50;
+        if (suspiciousByIpGeo)
+            isValid = false;
+        // 11) DEVICE trong session (không cho 1 device dùng cho SV khác)
+        if (!deviceId) {
+            return res.status(400).json({ success: false, message: "Thiếu deviceId. Không thể điểm danh." });
+        }
+        const existingDeviceInSession = await client_1.prisma.deviceFingerprint.findFirst({
+            where: { sessionId: session.id, deviceId },
+        });
+        if (existingDeviceInSession && existingDeviceInSession.studentId !== student.id) {
+            const owner = await client_1.prisma.student.findUnique({
+                where: { id: existingDeviceInSession.studentId },
+                select: { studentCode: true },
+            });
+            return res.status(403).json({
                 success: false,
-                message: "Vị trí GPS là bắt buộc để điểm danh",
+                message: "Thiết bị này đã được dùng để điểm danh bởi sinh viên khác trong buổi này!",
+                warning: owner ? `Thiết bị đã dùng bởi MSSV: ${owner.studentCode}` : undefined,
             });
         }
-        if (session.latitude && session.longitude && session.radius) {
-            distance = getDistanceFromLatLonInM(session.latitude, session.longitude, latitude, longitude);
-            if (distance > session.radius) {
-                status = "warning";
-                isValid = false; // Đánh dấu không hợp lệ nếu ngoài phạm vi
-            }
-        }
-        // 9️⃣ 🔥 CHỐNG GIAN LẬN: Kiểm tra thiết bị (nếu bật)
-        if (session.requireDeviceCheck && session.allowedDevices) {
-            const allowedList = session.allowedDevices;
-            if (!allowedList.includes(deviceInfo)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Thiết bị của bạn chưa được đăng ký",
-                });
-            }
-        }
-        // 🔟 🔥 TÍNH ĐIỂM TỰ ĐỘNG
-        let score = 10; // Điểm mặc định
-        // 1. Lấy quy tắc chấm điểm của section
-        const scoreRules = await client_1.prisma.attendanceScoreRule.findMany({
-            where: { sectionId: session.sectionId },
+        await client_1.prisma.deviceFingerprint.upsert({
+            where: { uniq_session_device: { sessionId: session.id, deviceId } },
+            update: { studentId: student.id, userAgent },
+            create: { studentId: student.id, sessionId: session.id, deviceId, userAgent },
         });
-        // 2. Tìm quy tắc phù hợp với status
-        const rule = scoreRules.find((r) => r.status === status);
-        if (rule) {
-            score = rule.score;
-        }
-        else {
-            // Quy tắc mặc định nếu không có trong DB
-            switch (status) {
-                case "present":
-                    score = 10;
-                    break;
-            }
-        }
-        // 3. Điều chỉnh điểm nếu không hợp lệ (ngoài phạm vi)
-        if (!isValid && distance) {
-            // Giảm điểm theo khoảng cách
-            const extraDistance = distance - (session.radius || 50);
-            const penalty = Math.min(extraDistance / 100, 3); // Mỗi 100m trừ 1 điểm, tối đa trừ 3
-            score = Math.max(score - penalty, 0);
-        }
-        // 4. Kiểm tra điểm danh muộn (dựa vào thời gian tạo session)
-        const now = new Date();
-        const sessionStart = new Date(session.createdAt);
-        const minutesLate = Math.floor((now.getTime() - sessionStart.getTime()) / (1000 * 60));
-        if (minutesLate > 15 && minutesLate <= 30) {
-            // Muộn 15-30 phút
-            status = "late";
-            score = Math.max(score - 2, 0);
-        }
-        else if (minutesLate > 30) {
-            // Muộn > 30 phút
-            status = "late";
-            score = Math.max(score - 4, 0);
-        }
-        // Làm tròn điểm 1 chữ số thập phân
-        score = Math.round(score * 10) / 10;
-        // 1️⃣1️⃣ Tạo record điểm danh
+        // 12) Điểm cho buổi này = sessionScore của session
+        const baseScore = session.sessionScore !== undefined &&
+            session.sessionScore !== null
+            ? Number(session.sessionScore)
+            : 10;
+        const score = baseScore; // không phụ thuộc status / rule / trễ nữa
+        // 13) Lưu attendance
         const attendance = await client_1.prisma.attendance.create({
             data: {
                 sessionId: session.id,
                 studentId: student.id,
                 status,
-                latitude,
-                longitude,
+                latitude: Number(latitude),
+                longitude: Number(longitude),
                 distance,
                 ipAddress,
                 deviceInfo,
                 userAgent,
                 isValid,
-                score, // 🔥 Lưu điểm vào DB
+                score,
             },
             include: { student: { include: { user: true } } },
         });
-        // 🔔 Gửi cảnh báo cho GV nếu nghi vấn gian lận
-        if (!isValid) {
-            console.warn(`⚠️ Nghi vấn gian lận: Student ${studentCode}, Distance: ${distance}m, IP: ${ipAddress}, Score: ${score}`);
-        }
-        // 1️⃣2️⃣ Log chi tiết
-        console.log(`✅ Check-in successful:`, {
-            student: studentCode,
-            status,
-            score,
-            distance: distance?.toFixed(2),
-            minutesLate,
-            isValid,
-        });
-        res.json({
-            success: true,
-            message: isValid
-                ? "Điểm danh thành công"
-                : "Điểm danh thành công nhưng có cảnh báo",
-            data: attendance,
-            warning: !isValid
-                ? `Bạn ở ngoài phạm vi lớp học (${distance?.toFixed(0)}m). Điểm: ${score}/10`
-                : null,
-            scoreInfo: {
-                score,
-                status,
-                minutesLate,
-                appliedRule: rule
-                    ? `Quy tắc của GV: ${rule.score} điểm`
-                    : "Quy tắc mặc định",
+        // 14) Đánh dấu nonce & log
+        await client_1.prisma.attendanceNonce.update({ where: { value: nonce }, data: { used: true } });
+        await client_1.prisma.attendanceLog.create({
+            data: {
+                studentId: student.id,
+                sessionId: session.id,
+                ipAddress,
+                userAgent,
+                ipCountry: ipGeo?.country,
+                ipCity: ipGeo?.city,
+                flags: JSON.stringify({ ipVsGpsKm, suspiciousByIpGeo, usedTotp: Boolean(scannedToken) }),
+                note: isValid ? null : "Suspicious attendance (geo/device).",
             },
+        });
+        return res.json({
+            success: true,
+            message: isValid ? "Điểm danh thành công" : "Điểm danh thành công nhưng có cảnh báo",
+            data: attendance,
+            warning: !isValid ? `Lệch vị trí/thiết bị. Khoảng cách: ${distance?.toFixed?.(0) ?? "?"}m.` : null,
+            scoreInfo: { score, status }, // đủ dùng, không cần minutesLate/matchedRule nữa
         });
     }
     catch (err) {
         console.error("❌ Error in checkIn:", err);
-        res.status(500).json({ success: false, message: err.message });
+        return res.status(500).json({ success: false, message: err.message || "Server error" });
     }
 }
-// 🔥 GV chỉnh điểm danh
+/* =========================================================
+ * 4b. MANUAL CHECK-IN (GV)
+ * ========================================================= */
+async function manualCheckIn(req, res) {
+    try {
+        const { sessionId, studentCode, teacherId, note, status } = req.body;
+        if (!sessionId || !studentCode || !teacherId) {
+            return res.status(400).json({ success: false, message: "sessionId, studentCode, teacherId là bắt buộc" });
+        }
+        const session = await client_1.prisma.attendanceSession.findUnique({ where: { id: Number(sessionId) } });
+        if (!session)
+            return res.status(404).json({ success: false, message: "Session not found" });
+        const student = await client_1.prisma.student.findUnique({ where: { studentCode }, include: { user: true } });
+        if (!student)
+            return res.status(404).json({ success: false, message: "Sinh viên không tồn tại" });
+        const enrolled = await client_1.prisma.sectionEnrollment.findFirst({
+            where: { sectionId: session.sectionId, studentId: student.id },
+        });
+        if (!enrolled)
+            return res.status(400).json({ success: false, message: "Sinh viên không thuộc học phần này" });
+        const existed = await client_1.prisma.attendance.findFirst({
+            where: { sessionId: session.id, studentId: student.id },
+            include: { student: { include: { user: true } } },
+        });
+        if (existed) {
+            return res.status(200).json({
+                success: true,
+                message: "Sinh viên đã điểm danh trước đó",
+                data: existed,
+            });
+        }
+        let finalStatus = status || "present";
+        const baseScore = session.sessionScore !== undefined &&
+            session.sessionScore !== null
+            ? Number(session.sessionScore)
+            : 10;
+        const score = baseScore;
+        const attendance = await client_1.prisma.attendance.create({
+            data: {
+                sessionId: session.id,
+                studentId: student.id,
+                status: finalStatus,
+                latitude: null,
+                longitude: null,
+                distance: null,
+                ipAddress: "manual",
+                deviceInfo: "Manual by teacher",
+                userAgent: req.headers["user-agent"] || null,
+                isValid: true,
+                score,
+                adjustedBy: Number(teacherId),
+                adjustedAt: new Date(),
+            },
+            include: { student: { include: { user: true } } },
+        });
+        await client_1.prisma.attendanceLog.create({
+            data: {
+                studentId: student.id,
+                sessionId: session.id,
+                ipAddress: "manual",
+                userAgent: req.headers["user-agent"] || "",
+                ipCountry: null,
+                ipCity: null,
+                flags: JSON.stringify({ source: "manual", teacherId }),
+                note: note || "Manual check-in by teacher",
+            },
+        });
+        return res.json({ success: true, message: "Điểm danh thủ công thành công", data: attendance });
+    }
+    catch (err) {
+        console.error("❌ manualCheckIn error:", err);
+        return res.status(500).json({ success: false, message: err.message || "Server error" });
+    }
+}
+/* =========================================================
+ * 4c. HỦY ĐIỂM DANH
+ * ========================================================= */
+async function cancelAttendance(req, res) {
+    try {
+        const { sessionId, studentCode, teacherId, reason } = req.body;
+        if (!sessionId || !studentCode || !teacherId) {
+            return res.status(400).json({ success: false, message: "sessionId, studentCode, teacherId là bắt buộc" });
+        }
+        const session = await client_1.prisma.attendanceSession.findUnique({ where: { id: Number(sessionId) } });
+        if (!session)
+            return res.status(404).json({ success: false, message: "Session not found" });
+        const student = await client_1.prisma.student.findUnique({ where: { studentCode } });
+        if (!student)
+            return res.status(404).json({ success: false, message: "Sinh viên không tồn tại" });
+        const attendance = await client_1.prisma.attendance.findFirst({
+            where: { sessionId: session.id, studentId: student.id },
+        });
+        if (!attendance)
+            return res.status(404).json({ success: false, message: "Chưa có bản ghi để hủy" });
+        await client_1.prisma.attendance.delete({ where: { id: attendance.id } });
+        await client_1.prisma.attendanceLog.create({
+            data: {
+                studentId: student.id,
+                sessionId: session.id,
+                ipAddress: "manual",
+                userAgent: req.headers["user-agent"] || "",
+                flags: JSON.stringify({ action: "cancel", teacherId }),
+                note: reason || "Teacher cancelled attendance",
+            },
+        });
+        return res.json({ success: true, message: "Đã hủy điểm danh", id: attendance.id, studentId: student.id });
+    }
+    catch (err) {
+        console.error("❌ cancelAttendance error:", err);
+        const code = err.statusCode === 404 ? 404 : 400;
+        return res.status(code).json({ success: false, message: err.message || "Bad request" });
+    }
+}
+/* =========================================================
+ * 5. GV CHỈNH ĐIỂM DANH THỦ CÔNG
+ * ========================================================= */
 async function adjustAttendance(req, res) {
     try {
         const { attendanceId } = req.params;
-        const { status, score, note, adjustedBy } = req.body;
-        // Kiểm tra quyền (adjustedBy phải là giảng viên)
-        // TODO: Implement role check
+        const { status, score, adjustedBy } = req.body;
         const attendance = await client_1.prisma.attendance.findUnique({
             where: { id: Number(attendanceId) },
         });
         if (!attendance) {
-            return res
-                .status(404)
-                .json({ success: false, message: "Attendance not found" });
+            return res.status(404).json({ success: false, message: "Attendance not found" });
         }
         const updated = await client_1.prisma.attendance.update({
             where: { id: Number(attendanceId) },
@@ -325,7 +515,7 @@ async function adjustAttendance(req, res) {
                 score: score ?? attendance.score,
                 adjustedBy: adjustedBy || null,
                 adjustedAt: new Date(),
-                isValid: true, // GV xác nhận là hợp lệ
+                isValid: true,
             },
             include: {
                 student: { include: { user: true } },
@@ -342,7 +532,9 @@ async function adjustAttendance(req, res) {
         res.status(500).json({ success: false, message: err.message });
     }
 }
-// 🔥 Lấy danh sách điểm danh có cảnh báo
+/* =========================================================
+ * 6. LẤY DANH SÁCH CẢNH BÁO GIAN LẬN THEO SESSION
+ * ========================================================= */
 async function getWarningAttendances(req, res) {
     try {
         const { sessionId } = req.params;
@@ -356,15 +548,19 @@ async function getWarningAttendances(req, res) {
             },
             orderBy: { checkedInAt: "desc" },
         });
-        res.json({ success: true, data: warnings });
+        return res.json({ success: true, data: warnings });
     }
     catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        console.error("❌ getWarningAttendances error:", err);
+        return res
+            .status(500)
+            .json({ success: false, message: err.message || "Server error" });
     }
 }
-// Utility: Extract device info từ User-Agent
+/* =========================================================
+ * (Helper cũ, bạn có thể bỏ nếu không còn dùng)
+ * ========================================================= */
 function extractDeviceInfo(userAgent) {
-    // Simple extraction, có thể dùng thư viện như `ua-parser-js`
     if (userAgent.includes("iPhone"))
         return "iPhone";
     if (userAgent.includes("Android"))
@@ -375,7 +571,6 @@ function extractDeviceInfo(userAgent) {
         return "Mac";
     return "Unknown";
 }
-// Utility: tính khoảng cách Haversine
 function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
     const R = 6371e3;
     const toRad = (deg) => (deg * Math.PI) / 180;
@@ -389,7 +584,9 @@ function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
 }
-// Lấy tất cả session điểm danh
+/* =========================================================
+ * 7. LIỆT KÊ TOÀN BỘ PHIÊN ĐIỂM DANH (CHO ADMIN)
+ * ========================================================= */
 async function listAllSessions(req, res) {
     try {
         const sessions = await client_1.prisma.attendanceSession.findMany({
@@ -411,19 +608,23 @@ async function listAllSessions(req, res) {
             },
             orderBy: { createdAt: "desc" },
         });
-        res.json({ success: true, data: sessions });
+        return res.json({ success: true, data: sessions });
     }
     catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false, message: err.message });
+        console.error("❌ listAllSessions error:", err);
+        return res
+            .status(500)
+            .json({ success: false, message: err.message || "Server error" });
     }
 }
-// Controller
+/* =========================================================
+ * 8. LIỆT KÊ SESSION THEO LỚP (SECTION)
+ * ========================================================= */
 async function listSessions(req, res) {
     try {
         const sectionId = parseInt(req.params.sectionId);
         const sessions = await attendanceService.getAttendanceSessions(sectionId);
-        // Map lại để tính status "warning" nếu ngoài bán kính
+        // set status = "warning" nếu SV đứng ngoài bán kính
         const updated = sessions.map((session) => {
             if (!session.latitude || !session.longitude)
                 return session;
@@ -441,70 +642,100 @@ async function listSessions(req, res) {
             });
             return { ...session, attendances };
         });
-        res.json({ success: true, data: updated });
+        return res.json({ success: true, data: updated });
     }
     catch (err) {
-        res.status(400).json({ success: false, message: err.message });
+        console.error("❌ listSessions error:", err);
+        return res
+            .status(400)
+            .json({ success: false, message: err.message || "Bad request" });
     }
 }
+/* =========================================================
+ * 9. CHI TIẾT 1 SESSION
+ * ========================================================= */
 async function getSession(req, res) {
     try {
-        const id = parseInt(req.params.id);
-        const session = await attendanceService.getAttendanceSessionById(id);
-        res.json({ success: true, data: session });
+        const id = Number(req.params.id);
+        const session = await client_1.prisma.attendanceSession.findUnique({
+            where: { id },
+            include: {
+                attendances: {
+                    include: { student: { include: { user: true } } },
+                    orderBy: { checkedInAt: 'desc' }
+                }
+            }
+        });
+        if (!session)
+            return res.status(404).json({ success: false, message: "Session not found" });
+        // Trả về TOTP config cho GV (chỉ GV được phép thấy)
+        const totpConfig = session.totpSecretBase32 ? {
+            secretBase32: session.totpSecretBase32,
+            period: session.totpPeriod || DEFAULT_TOTP_PERIOD,
+            digits: session.totpDigits || DEFAULT_TOTP_DIGITS,
+        } : null;
+        return res.json({
+            success: true,
+            data: {
+                ...session,
+                totpSecretBase32: session.totpSecretBase32, // ← Đảm bảo có
+                totpPeriod: session.totpPeriod,
+                totpDigits: session.totpDigits,
+                sessionScore: session.sessionScore,
+            }
+        });
     }
     catch (err) {
-        res.status(400).json({ success: false, message: err.message });
+        return res.status(500).json({ success: false, message: err.message });
     }
 }
-// Sửa QR Session
+/* =========================================================
+ * 10. CẬP NHẬT THÔNG TIN PHIÊN ĐIỂM DANH
+ * ========================================================= */
 async function updateSession(req, res) {
     try {
         const { id } = req.params;
-        const { name, expiresAt } = req.body;
-        // check tồn tại
+        const { name, expiresAt, radius, sessionScore } = req.body; // ⬅️ nhận thêm
         const session = await client_1.prisma.attendanceSession.findUnique({
             where: { id: Number(id) },
         });
         if (!session) {
-            return res
-                .status(404)
-                .json({ success: false, message: "Session not found" });
+            return res.status(404).json({ success: false, message: "Session not found" });
+        }
+        const updates = {
+            name,
+            expiresAt: expiresAt ? new Date(expiresAt) : undefined,
+        };
+        if (radius !== undefined && radius !== null && radius !== "") {
+            const safeRadius = Math.min(Math.max(Number(radius), 20), 500);
+            updates.radius = safeRadius;
+        }
+        if (sessionScore !== undefined && sessionScore !== null && sessionScore !== "") {
+            updates.sessionScore = Number(sessionScore);
         }
         const updated = await client_1.prisma.attendanceSession.update({
             where: { id: Number(id) },
-            data: {
-                name,
-                expiresAt: expiresAt ? new Date(expiresAt) : undefined,
-            },
+            data: updates,
         });
-        res.json({ success: true, data: updated });
+        return res.json({ success: true, data: updated });
     }
     catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false, message: err.message });
+        console.error("❌ updateSession error:", err);
+        return res.status(500).json({ success: false, message: err.message || "Server error" });
     }
 }
+/* =========================================================
+ * 11. XOÁ 1 PHIÊN ĐIỂM DANH
+ * ========================================================= */
 async function deleteSession(req, res) {
     try {
-        const id = parseInt(req.params.id);
+        const id = Number(req.params.id);
         await attendanceService.deleteAttendanceSession(id);
-        res.json({ success: true, message: "Deleted successfully" });
+        return res.json({ success: true, message: "Deleted successfully" });
     }
     catch (err) {
-        res.status(400).json({ success: false, message: err.message });
+        console.error("❌ deleteSession error:", err);
+        const code = err.statusCode === 404 ? 404 : 400;
+        return res.status(code).json({ success: false, message: err.message || "Bad request" });
     }
 }
-// Danh sách điểm danh của 1 sinh viên trong 1 lớp học phần
-exports.listBySection = (0, catchAsync_1.default)(async (req, res, next) => {
-    const sectionId = Number(req.params.sectionId);
-    const studentId = Number(req.params.studentId);
-    if (isNaN(sectionId) || isNaN(studentId)) {
-        return next(new ApiError_1.default(400, "Invalid params"));
-    }
-    const items = await (0, attendance_service_1.listStudentAttendance)(sectionId, studentId);
-    return (0, response_1.sendResponse)(res, {
-        success: true,
-        data: items,
-    });
-});

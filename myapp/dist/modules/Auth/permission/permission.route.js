@@ -36,9 +36,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const permissionController = __importStar(require("./permission.controller"));
 const router = (0, express_1.Router)();
+// Tất cả API cần đăng nhập
+// tạo permission → cần quyền "permission.create"
 router.post("/", permissionController.createPermission);
-router.get("/", permissionController.listPermissions);
+// xem danh sách → cần quyền "permission.view"
+router.get("/", 
+// requirePermission(["notification:viewxx", "notification:dexxlete"]),
+permissionController.listPermissions);
+// xem 1 permission
 router.get("/:id", permissionController.getPermission);
+// update
 router.put("/:id", permissionController.updatePermission);
+// delete
 router.delete("/:id", permissionController.deletePermission);
 exports.default = router;

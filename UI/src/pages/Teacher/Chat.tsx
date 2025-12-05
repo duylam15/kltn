@@ -83,9 +83,11 @@ export default function Chat() {
   useEffect(() => {
     if (!roomId) return;
 
-    const newSocket = io(import.meta.env.VITE_API_URL, {
-      withCredentials: true,
+    const newSocket = io("https://www.quanlyhoctapsgu.cloud", {
+          withCredentials: true,
+          transports: ["websocket"],
     });
+    
     setSocket(newSocket);
 
     newSocket.on("connect", () => {
