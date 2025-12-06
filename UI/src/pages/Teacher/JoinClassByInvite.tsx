@@ -17,6 +17,7 @@ export default function JoinClassByInvite() {
 
 	const [submitting, setSubmitting] = useState(false);
 	const [success, setSuccess] = useState(false);
+	
 
 	const handleJoin = async (values: { studentCode: string }) => {
 		try {
@@ -107,12 +108,12 @@ export default function JoinClassByInvite() {
 
 					if (enrollRes.data.success) {
 						console.log(`✅ Successfully enrolled student into class`);
-						setSuccess(true);
-						toast.success("Đăng ký vào lớp thành công!");
+						toast.success("🎉 Bạn đã vào lớp thành công!");
+
 
 						setTimeout(() => {
 							navigate("/login");
-						}, 3000);
+						}, 2000);
 					} else {
 						throw new Error(enrollRes.data.message || "Không thể đăng ký vào lớp");
 					}
@@ -125,7 +126,7 @@ export default function JoinClassByInvite() {
 						console.log("⚠️ Student already enrolled in this class");
 						toast.success("Bạn đã có trong lớp này rồi!");
 						setSuccess(true);
-						setTimeout(() => navigate("/login"), 3000);
+						setTimeout(() => navigate("/login"), 2000);
 					} else {
 						throw enrollError;
 					}
@@ -211,92 +212,85 @@ export default function JoinClassByInvite() {
 
 	return (
 		<div
-			style={{
-				display: "flex",
-				justifyContent: "center",
-				alignItems: "center",
-				minHeight: "100vh",
-				background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-				padding: 20,
-			}}
+			className="min-h-screen w-full bg-cover bg-center bg-no-repeat relative flex items-center justify-center"
+			style={{ backgroundImage: "url('/bgsgu3.jpg')" }}
 		>
-			<Card
-				style={{
-					maxWidth: 500,
-					width: "100%",
-					boxShadow: "0 10px 40px rgba(0,0,0,0.2)",
-					borderRadius: 12,
-				}}
-			>
-				<div style={{ textAlign: "center", marginBottom: 24 }}>
-					<Typography.Title level={3} style={{ marginBottom: 8 }}>
-						Tham gia lớp học
-					</Typography.Title>
-					<Typography.Text type="secondary">
-						Nhập mã số sinh viên để tham gia
-					</Typography.Text>
-				</div>
+			{/* Lớp mờ overlay */}
+			<div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
 
-				<Alert
-					message="Lưu ý"
-					description={
-						<ul style={{ marginBottom: 0, paddingLeft: 20, fontSize: 13 }}>
-							<li><strong>Nếu bạn đã có tài khoản:</strong> Bạn sẽ được thêm vào lớp ngay lập tức</li>
-							<li>
-								<strong>Nếu bạn chưa có tài khoản:</strong> Hệ thống sẽ tự động tạo tài khoản mới với mật khẩu: <strong style={{ color: '#1890ff' }}>{defaultPassword}</strong>
-							</li>
-							<li>Bạn có thể đổi mật khẩu sau khi đăng nhập</li>
-						</ul>
-					}
-					type="info"
-					showIcon
-					style={{ marginBottom: 24 }}
-				/>
+			<div className="relative w-full max-w-lg">
+				<div className="bg-white/90 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/40 p-8">
+					<div className="text-center mb-6">
+						<Typography.Title level={3} style={{ marginBottom: 6 }}>
+							Tham gia lớp học
+						</Typography.Title>
+						<Typography.Text type="secondary">
+							Nhập mã số sinh viên để tham gia
+						</Typography.Text>
+					</div>
 
-				<Form form={form} layout="vertical" onFinish={handleJoin}>
-					<Form.Item
-						name="studentCode"
-						label="Mã số sinh viên"
-						rules={[
-							{ required: true, message: "Vui lòng nhập mã số sinh viên" },
-							{
-								pattern: /^[0-9]{6,12}$/,
-								message: "MSSV phải là số và có từ 6-12 ký tự",
-							},
-						]}
-					>
-						<Input
-							prefix={<UserOutlined />}
-							placeholder="Nhập MSSV của bạn (VD: 3122410208)"
-							size="large"
-							autoFocus
-						/>
-					</Form.Item>
+					<Alert
+						message="Lưu ý"
+						description={
+							<ul style={{ marginBottom: 0, paddingLeft: 20, fontSize: 13 }}>
+								<li><strong>Nếu bạn đã có tài khoản:</strong> Bạn sẽ được thêm vào lớp ngay lập tức</li>
+								<li>
+									<strong>Nếu bạn chưa có tài khoản:</strong> Hệ thống sẽ tự động tạo tài khoản mới với mật khẩu: <strong style={{ color: '#1890ff' }}>{defaultPassword}</strong>
+								</li>
+								<li>Bạn có thể đổi mật khẩu sau khi đăng nhập</li>
+							</ul>
+						}
+						type="info"
+						showIcon
+						style={{ marginBottom: 24, borderRadius: 10, background: "rgba(255,255,255,0.6)" }}
+					/>
 
-					<Form.Item style={{ marginBottom: 0 }}>
-						<Button
-							type="primary"
-							htmlType="submit"
-							loading={submitting}
-							block
-							size="large"
-							style={{ marginTop: 8 }}
+					<Form form={form} layout="vertical" onFinish={handleJoin}>
+						<Form.Item
+							name="studentCode"
+							label="Mã số sinh viên"
+							rules={[
+								{ required: true, message: "Vui lòng nhập mã số sinh viên" },
+								{
+									pattern: /^[0-9]{6,12}$/,
+									message: "MSSV phải là số và có từ 6-12 ký tự",
+								},
+							]}
 						>
-							{submitting ? "Đang xử lý..." : "Tham gia lớp học"}
-						</Button>
-					</Form.Item>
-				</Form>
+							<Input
+								prefix={<UserOutlined />}
+								placeholder="VD: 3122410208"
+								size="large"
+							/>
+						</Form.Item>
 
-				<div style={{ marginTop: 24, textAlign: "center" }}>
-					<Typography.Text type="secondary" style={{ fontSize: 12 }}>
-						Mật khẩu mặc định cho tài khoản mới: <strong>{defaultPassword}</strong>
-					</Typography.Text>
-					<br />
-					<Typography.Text type="secondary" style={{ fontSize: 12 }}>
-						Bạn gặp vấn đề? Liên hệ giảng viên để được hỗ trợ
-					</Typography.Text>
+						<Form.Item style={{ marginBottom: 0 }}>
+							<Button
+								type="primary"
+								htmlType="submit"
+								loading={submitting}
+								block
+								size="large"
+								className="mt-3"
+								style={{ borderRadius: 10 }}
+							>
+								{submitting ? "Đang xử lý..." : "Tham gia lớp học"}
+							</Button>
+						</Form.Item>
+					</Form>
+
+					<div style={{ marginTop: 24, textAlign: "center" }}>
+						<Typography.Text type="secondary" style={{ fontSize: 12 }}>
+							Mật khẩu mặc định: <strong>{defaultPassword}</strong>
+						</Typography.Text>
+						<br />
+						<Typography.Text type="secondary" style={{ fontSize: 12 }}>
+							Gặp vấn đề? Liên hệ giảng viên để được hỗ trợ
+						</Typography.Text>
+					</div>
 				</div>
-			</Card>
+			</div>
 		</div>
 	);
+
 }

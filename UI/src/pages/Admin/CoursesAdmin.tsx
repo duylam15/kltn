@@ -233,73 +233,82 @@ export default function CoursesAdmin() {
   }, {});
 
   return (
-    <div className="pl-3 pr-3">
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 16,
-      }}>
-        <Title level={3} className="mt-2">
-          <div className="flex items-center gap-2">
-            <Layers /> Quản lý học phần
+    <div className="p-4">
+      <div className="">
+
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+
+          <div className="flex items-center gap-2 pb-4">
+            <Layers className="text-blue-600" size={26} />
+            <Title level={3} style={{ margin: 0 }}>Quản lý học phần</Title>
           </div>
-        </Title>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Input
-            allowClear
-            prefix={<SearchOutlined />}
-            placeholder="Tìm kiếm"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            style={{ width: 150 }}
-          />
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3 justify-start sm:justify-end">
 
-          <Select
-            allowClear
-            placeholder="Lọc theo trạng thái"
-            style={{ width: 150 }}
-            value={statusFilter ?? undefined}
-            onChange={(value) => setStatusFilter(value)}
-          >
-            <Option value="planned">Planned</Option>
-            <Option value="ongoing">Ongoing</Option>
-            <Option value="finished">Finished</Option>
-            <Option value="completed">Completed</Option>
-          </Select>
+            <Input
+              allowClear
+              prefix={<SearchOutlined />}
+              placeholder="Tìm kiếm..."
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              className="min-w-[100px] sm:w-[100px] rounded-lg"
+            />
 
-          <Select
-            allowClear
-            placeholder="Lọc theo học kỳ"
-            style={{ width: 150 }}
-            value={termFilter ?? undefined}
-            onChange={(value) => setTermFilter(value)}
-          >
-            {terms.map((t) => (
-              <Option key={t.id} value={t.id}>
-                {t.name}
-              </Option>
-            ))}
-          </Select>
+            <Select
+              allowClear
+              placeholder="Trạng thái"
+              value={statusFilter ?? undefined}
+              onChange={(value) => setStatusFilter(value)}
+              className="min-w-[100px] sm:w-[100px] rounded-lg"
+            >
+              <Option value="planned">Planned</Option>
+              <Option value="ongoing">Ongoing</Option>
+              <Option value="finished">Finished</Option>
+              <Option value="completed">Completed</Option>
+            </Select>
 
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={() => {
-              setKeyword("");
-              setStatusFilter(null);
-              setTermFilter(null);
-              fetchSections();
-            }}
-          >
-            Làm mới
-          </Button>
+            <Select
+              allowClear
+              placeholder="Học kỳ"
+              value={termFilter ?? undefined}
+              onChange={(value) => setTermFilter(value)}
+              className="min-w-[100px] sm:w-[100px] rounded-lg"
+            >
+              {terms.map((t) => (
+                <Option key={t.id} value={t.id}>
+                  {t.name}
+                </Option>
+              ))}
+            </Select>
 
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalVisible(true)}>
-            Thêm học phần
-          </Button>
+            <Button
+              icon={<ReloadOutlined />}
+              className="rounded-lg"
+              onClick={() => {
+                setKeyword("");
+                setStatusFilter(null);
+                setTermFilter(null);
+                fetchSections();
+              }}
+            >
+              Làm mới
+            </Button>
+
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              className="rounded-lg"
+              onClick={() => setModalVisible(true)}
+            >
+              Thêm học phần
+            </Button>
+
+          </div>
         </div>
       </div>
+
 
       {/* Danh sách nhóm */}
       {Object.values(grouped).map((subject: any, idx) => (

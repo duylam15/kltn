@@ -21,16 +21,17 @@ import {
 import { PrettyTooltip } from "../../components/PrettyTooltip";
 import { exportToXlsx } from "../../utils/xlsx-export";
 import instance from "../../utils/axiosInstance";
+import { AreaChartIcon, CheckCircle, FileText, Trophy } from "lucide-react";
 
 /* === Types & API === */
-type CatalogTerm = { id:number; code:string; name:string; startDate:string; endDate:string };
-type CatalogSubject = { id:number; subjectCode:string; subjectName:string };
-type CatalogTeacher = { id:number; code:string; fullName:string };
-type CatalogSection = { id:number; sectionCode:string; sectionName:string; subjectId:number; termId:number; teacherIds:number[] };
+type CatalogTerm = { id: number; code: string; name: string; startDate: string; endDate: string };
+type CatalogSubject = { id: number; subjectCode: string; subjectName: string };
+type CatalogTeacher = { id: number; code: string; fullName: string };
+type CatalogSection = { id: number; sectionCode: string; sectionName: string; subjectId: number; termId: number; teacherIds: number[] };
 
-type TotalRow = { sectionId:number; studentId:number; studentCode:string; studentName:string; total10:number; };
-type BucketSeriesRes = { scheme:string; buckets: { label:string; from:number; to:number }[]; total: number; series: { label:string; count:number }[]; };
-type AttendanceItem = { sectionId:number; present:number; late:number; excused:number; absent:number; total:number; rate:number; };
+type TotalRow = { sectionId: number; studentId: number; studentCode: string; studentName: string; total10: number; };
+type BucketSeriesRes = { scheme: string; buckets: { label: string; from: number; to: number }[]; total: number; series: { label: string; count: number }[]; };
+type AttendanceItem = { sectionId: number; present: number; late: number; excused: number; absent: number; total: number; rate: number; };
 
 
 /* === CSS Glassmorphism === */
@@ -116,10 +117,10 @@ function FloatingPanel({ visible, title, onClose, children }: FloatingPanelProps
 
 /* === Sort helpers === */
 type Order = "ascend" | "descend";
-const cmpStr = (a?: string, b?: string, ord: Order="ascend") =>
-  (a||"").localeCompare(b||"") * (ord==="ascend" ? 1 : -1);
-const cmpNum = (a?: number, b?: number, ord: Order="ascend") =>
-  ((a ?? -Infinity) - (b ?? -Infinity)) * (ord==="ascend" ? 1 : -1);
+const cmpStr = (a?: string, b?: string, ord: Order = "ascend") =>
+  (a || "").localeCompare(b || "") * (ord === "ascend" ? 1 : -1);
+const cmpNum = (a?: number, b?: number, ord: Order = "ascend") =>
+  ((a ?? -Infinity) - (b ?? -Infinity)) * (ord === "ascend" ? 1 : -1);
 
 /* === useCatalog === */
 function useCatalog() {
@@ -139,7 +140,7 @@ function useCatalog() {
       setSubjects(data.subjects || []);
       setTeachers(data.teachers || []);
       setSections(data.sections || []);
-    } catch (e:any) {
+    } catch (e: any) {
       message.error(e?.response?.data?.message || "Không tải được danh mục");
     } finally {
       setLoading(false);
@@ -186,7 +187,7 @@ export default function AdminStats() {
         {/* Header */}
         <div style={glassStyle}>
           <div className="flex items-center gap-3">
-            <div style={kpiIconStyle("#6c5ce7", "#8e79ff")}>📊</div>
+            <div style={kpiIconStyle("#6c5ce7", "#8e79ff")}><AreaChartIcon size={24} /></div>
             <div>
               <h2 className="m-0 text-xl font-bold text-gray-800">Thống kê học tập &amp; chuyên cần</h2>
               <p className="m-0 text-sm text-gray-600">Tổng hợp dữ liệu theo lớp, môn, học kỳ</p>
@@ -199,14 +200,22 @@ export default function AdminStats() {
           onChange={setActiveKey}
           tabBarStyle={{ marginBottom: 0 }}
           items={[
-            { key: "grades", label: <Space><LineChartOutlined />Điểm trung bình</Space>, children:
-              <GradesTab {...{ sections, subjects, subjectById, termById, teacherById, catalogLoading: catLoading }} /> },
-            { key: "buckets", label: <Space><PieChartOutlined />Phân bố điểm</Space>, children:
-              <BucketsTab {...{ sections, subjects, catalogLoading: catLoading }} /> },
-            { key: "attendance", label: <Space><ClockCircleOutlined />Chuyên cần</Space>, children:
-              <AttendanceTab {...{ sections, subjects, catalogLoading: catLoading }} /> },
-            { key: "dept", label: <Space><BarChartOutlined />Tổng quan Khoa</Space>, children:
-              <DepartmentTab {...{ sections, subjects, subjectById, termById, catalogLoading: catLoading }} /> },
+            {
+              key: "grades", label: <Space><LineChartOutlined />Điểm trung bình</Space>, children:
+                <GradesTab {...{ sections, subjects, subjectById, termById, teacherById, catalogLoading: catLoading }} />
+            },
+            {
+              key: "buckets", label: <Space><PieChartOutlined />Phân bố điểm</Space>, children:
+                <BucketsTab {...{ sections, subjects, catalogLoading: catLoading }} />
+            },
+            {
+              key: "attendance", label: <Space><ClockCircleOutlined />Chuyên cần</Space>, children:
+                <AttendanceTab {...{ sections, subjects, catalogLoading: catLoading }} />
+            },
+            {
+              key: "dept", label: <Space><BarChartOutlined />Tổng quan Khoa</Space>, children:
+                <DepartmentTab {...{ sections, subjects, subjectById, termById, catalogLoading: catLoading }} />
+            },
           ]}
         />
       </Space>
@@ -228,7 +237,7 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
   const [maxScore, setMaxScore] = useState<number | undefined>();
 
   // sort for chart
-  const [chartSort, setChartSort] = useState<"name_az"|"avg_asc"|"avg_desc">("name_az");
+  const [chartSort, setChartSort] = useState<"name_az" | "avg_asc" | "avg_desc">("name_az");
   // sorted table for export
   const [sortedTable, setSortedTable] = useState<any[]>([]);
 
@@ -247,11 +256,11 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
   }, [items]);
 
   const statsBySection = useMemo(() => {
-    const ret: Record<number, { n:number; avg:number; min:number; max:number }> = {};
+    const ret: Record<number, { n: number; avg: number; min: number; max: number }> = {};
     groupedBySection.forEach((rows, secId) => {
       const vals = rows.map(r => r.total10);
       const n = vals.length || 1;
-      const avg = +(vals.reduce((a,b)=>a+b,0) / n).toFixed(2);
+      const avg = +(vals.reduce((a, b) => a + b, 0) / n).toFixed(2);
       const min = Math.min(...vals);
       const max = Math.max(...vals);
       ret[secId] = { n, avg, min, max };
@@ -274,7 +283,7 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
 
       const { data } = await instance.get(`/stats/grades`, { params });
       setItems(data.items || []);
-    } catch (e:any) {
+    } catch (e: any) {
       message.error(e?.response?.data?.message || "Không tải được điểm");
     } finally {
       setLoading(false);
@@ -305,7 +314,7 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
   }, [items, sections, subjectById, termById, teacherById, mode]);
 
   // keep sorted table in sync initially
-  useEffect(()=>{ setSortedTable(dataSource); }, [dataSource]);
+  useEffect(() => { setSortedTable(dataSource); }, [dataSource]);
 
   const chartData = useMemo(() => {
     const arr = Array.from(groupedBySection.entries()).map(([secId, list]) => {
@@ -317,34 +326,42 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
       return { name: label, avg: st?.avg || 0 };
     });
 
-    if (chartSort === "name_az") return arr.sort((a,b)=>a.name.localeCompare(b.name));
-    if (chartSort === "avg_asc") return arr.sort((a,b)=>a.avg-b.avg);
-    return arr.sort((a,b)=>b.avg-a.avg);
+    if (chartSort === "name_az") return arr.sort((a, b) => a.name.localeCompare(b.name));
+    if (chartSort === "avg_asc") return arr.sort((a, b) => a.avg - b.avg);
+    return arr.sort((a, b) => b.avg - a.avg);
   }, [groupedBySection, statsBySection, sections, subjectById, mode, chartSort]);
 
   const values = items.map(i => i.total10 ?? 0);
-  const avg = values.length ? +(values.reduce((a,b)=>a+b,0)/values.length).toFixed(2) : 0;
-  const pass = values.filter(v=>v>=5).length;
-  const excellent = values.filter(v=>v>=8).length;
+  const avg = values.length ? +(values.reduce((a, b) => a + b, 0) / values.length).toFixed(2) : 0;
+  const pass = values.filter(v => v >= 5).length;
+  const excellent = values.filter(v => v >= 8).length;
 
   const gradeColumns: ColumnsType<any> = [
-    { title: "Mã SV", dataIndex: "studentCode", width: 110,
-      sorter: (a,b)=>cmpStr(a.studentCode,b.studentCode), },
-    { title: "Họ tên", dataIndex: "studentName",
-      sorter: (a,b)=>cmpStr(a.studentName,b.studentName), },
-    { title: mode === "section" ? "Lớp" : "Môn", dataIndex: "sectionLabel",
-      sorter: (a,b)=>cmpStr(a.sectionLabel,b.sectionLabel), },
-    { title: "Điểm TB", dataIndex: "total10", align: "right",
-      sorter: (a,b)=>cmpNum(a.total10,b.total10),
-      render: (v:number) => <Tag color={v>=8?"green":v>=6.5?"geekblue":v>=5?"gold":"red"} style={{ borderRadius: 8 }}>{v.toFixed(2)}</Tag> },
+    {
+      title: "Mã SV", dataIndex: "studentCode", width: 110,
+      sorter: (a, b) => cmpStr(a.studentCode, b.studentCode),
+    },
+    {
+      title: "Họ tên", dataIndex: "studentName",
+      sorter: (a, b) => cmpStr(a.studentName, b.studentName),
+    },
+    {
+      title: mode === "section" ? "Lớp" : "Môn", dataIndex: "sectionLabel",
+      sorter: (a, b) => cmpStr(a.sectionLabel, b.sectionLabel),
+    },
+    {
+      title: "Điểm TB", dataIndex: "total10", align: "right",
+      sorter: (a, b) => cmpNum(a.total10, b.total10),
+      render: (v: number) => <Tag color={v >= 8 ? "green" : v >= 6.5 ? "geekblue" : v >= 5 ? "gold" : "red"} style={{ borderRadius: 8 }}>{v.toFixed(2)}</Tag>
+    },
   ];
 
-  const onGradeTableChange = (_p:any,_f:any,sorter:any) => {
+  const onGradeTableChange = (_p: any, _f: any, sorter: any) => {
     if (!sorter || !sorter.field) { setSortedTable([...dataSource]); return; }
-    const { field, order } = sorter as { field:string; order:Order };
+    const { field, order } = sorter as { field: string; order: Order };
     const arr = [...dataSource];
-    const sortNum = (k:string)=>arr.sort((a,b)=>cmpNum(a[k],b[k],order));
-    const sortStr = (k:string)=>arr.sort((a,b)=>cmpStr(a[k],b[k],order));
+    const sortNum = (k: string) => arr.sort((a, b) => cmpNum(a[k], b[k], order));
+    const sortStr = (k: string) => arr.sort((a, b) => cmpStr(a[k], b[k], order));
 
     if (field === "total10") sortNum("total10");
     else if (field === "studentCode") sortStr("studentCode");
@@ -364,7 +381,7 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
   };
 
   // fullscreen states
-     const [chartFull, setChartFull] = useState(false);
+  const [chartFull, setChartFull] = useState(false);
   const [tableFull, setTableFull] = useState(false);
 
   const toggleChartFull = () =>
@@ -383,71 +400,111 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
     <Space direction="vertical" size={20} style={{ width: "100%" }}>
       {/* Filter */}
       <Card style={glassStyle} className="sticky top-0 z-10" bodyStyle={{ padding: 16 }}>
-        <Form form={form} layout="inline" onFinish={onFetch}>
-          <Space wrap>
-            <Form.Item label="Chế độ">
-              <Segmented value={mode} onChange={v => setMode(v as any)}
-                options={[{ label: "Theo lớp", value: "section" }, { label: "Theo môn", value: "subject" }]} />
-            </Form.Item>
+        <Form form={form} layout="vertical" onFinish={onFetch}>
+          <Space size="large" wrap style={{ width: "100%", justifyContent: "space-between" }}>
 
-            <Form.Item name="ids" style={{ minWidth: 300 }}>
-              <Select
-                mode="multiple"
-                placeholder={mode === "section" ? "Chọn lớp..." : "Chọn môn..."}
-                loading={catalogLoading}
-                options={(mode === "section" ? sections : subjects).map((s: any) => ({
-                  value: s.id,
-                  label: mode === "section" ? `${s.sectionName} (${s.sectionCode})` : `${s.subjectCode} – ${s.subjectName}`,
-                }))}
-                onChange={(vals: number[]) => mode === "section" ? setSectionIds(vals) : setSubjectIds(vals)}
-              />
-            </Form.Item>
+            {/* Nhóm 1: Chọn chế độ + lớp/môn */}
+            <Space direction="vertical" size={8} style={{ minWidth: 220 }}>
+              <Form.Item label="Chế độ">
+                <Segmented
+                  value={mode}
+                  onChange={(v) => setMode(v as any)}
+                  options={[
+                    { label: "Theo lớp", value: "section" },
+                    { label: "Theo môn", value: "subject" },
+                  ]}
+                />
+              </Form.Item>
 
-            {/* Lọc điểm */}
-            <Form.Item label="Điểm min">
-              <InputNumber
-                min={0}
-                max={10}
-                step={0.5}
-                value={minScore}
-                onChange={(val) => setMinScore(val ?? 0)}
-                style={{ width: 100 }}
-              />
-            </Form.Item>
-            <Form.Item label="Điểm max">
-                <InputNumber min={0} max={10} step={0.5} value={maxScore} onChange={(val) => setMaxScore(val ?? 0)} style={{ width: 100 }} />
-            </Form.Item>
-            <Tooltip title="Thang 10; để trống = bỏ qua lọc">
-              <InfoCircleOutlined style={{ color: "#999" }} />
-            </Tooltip>
+              <Form.Item name="ids" label={mode === "section" ? "Chọn lớp" : "Chọn môn"}>
+                <Select
+                  mode="multiple"
+                  placeholder={mode === "section" ? "Chọn lớp..." : "Chọn môn..."}
+                  loading={catalogLoading}
+                  options={(mode === "section" ? sections : subjects).map((s: any) => ({
+                    value: s.id,
+                    label:
+                      mode === "section"
+                        ? `${s.sectionName} (${s.sectionCode})`
+                        : `${s.subjectCode} – ${s.subjectName}`,
+                  }))}
+                  onChange={(vals: number[]) =>
+                    mode === "section" ? setSectionIds(vals) : setSubjectIds(vals)
+                  }
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
+            </Space>
 
-            {/* Sort biểu đồ */}
-            <Form.Item label="Sắp xếp biểu đồ">
-              <Select
-                value={chartSort}
-                onChange={setChartSort}
-                style={{ width: 170 }}
-                options={[
-                  { value: "name_az", label: "Tên A→Z" },
-                  { value: "avg_asc", label: "Điểm ↑" },
-                  { value: "avg_desc", label: "Điểm ↓" },
-                ]}
-              />
-            </Form.Item>
+            {/* Nhóm 2: Lọc điểm */}
+            <Space direction="vertical" size={8} style={{ minWidth: 220 }}>
+              <Form.Item label="Điểm min">
+                <InputNumber
+                  min={0}
+                  max={10}
+                  step={0.5}
+                  value={minScore}
+                  onChange={(val) => setMinScore(val ?? 0)}
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
 
-            <Button type="primary" htmlType="submit" icon={<LineChartOutlined />} loading={loading}>Xem</Button>
-            <Button onClick={onExport} icon={<DownloadOutlined />}>Xuất Excel</Button>
+              <Form.Item label="Điểm max">
+                <InputNumber
+                  min={0}
+                  max={10}
+                  step={0.5}
+                  value={maxScore}
+                  onChange={(val) => setMaxScore(val ?? 0)}
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
+            </Space>
+
+            {/* Nhóm 3: Sort */}
+            <Space direction="vertical" size={8} style={{ minWidth: 220 }}>
+              <Form.Item label="Sắp xếp biểu đồ">
+                <Select
+                  value={chartSort}
+                  onChange={setChartSort}
+                  options={[
+                    { value: "name_az", label: "Tên A→Z" },
+                    { value: "avg_asc", label: "Điểm ↑" },
+                    { value: "avg_desc", label: "Điểm ↓" },
+                  ]}
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
+            </Space>
+
+            {/* Nhóm 4: Button actions */}
+            <Space direction="vertical" size={8} style={{ minWidth: 200 }}>
+              <Button
+                type="primary"
+                htmlType="submit"
+                icon={<LineChartOutlined />}
+                loading={loading}
+                block
+              >
+                Xem biểu đồ
+              </Button>
+              <Button icon={<DownloadOutlined />} onClick={onExport} block>
+                Xuất Excel
+              </Button>
+            </Space>
+
           </Space>
         </Form>
       </Card>
 
+
       {/* KPI */}
       <Row gutter={[16, 16]}>
         {[
-          { label: "Số bản ghi", value: items.length, icon: "📄", color: ["#10b981", "#34d399"] },
-          { label: "Điểm TB", value: avg, icon: <AreaChart data={values.map((v,i)=>({i,v}))} style={{ height: 36 }} />, color: ["#6c5ce7", "#8e79ff"] },
-          { label: "≥ 5 điểm", value: pass, icon: "✅", color: ["#f59e0b", "#fbbf24"] },
-          { label: "≥ 8 điểm", value: excellent, icon: "🏆", color: ["#ec4899", "#f43f5e"] },
+          { label: "Số bản ghi", value: items.length, icon: <FileText size={20} />, color: ["#10b981", "#34d399"] },
+          { label: "Điểm TB", value: avg, icon: <AreaChartIcon size={20} />, color: ["#6c5ce7", "#8e79ff"] },
+          { label: "≥ 5 điểm", value: pass, icon: <CheckCircle size={20} />, color: ["#f59e0b", "#fbbf24"] },
+          { label: "≥ 8 điểm", value: excellent, icon: <Trophy size={20} />, color: ["#ec4899", "#f43f5e"] },
         ].map((kpi, i) => (
           <Col xs={12} md={6} key={i}>
             <Card style={glassStyle} className="hover:scale-105 transition-transform">
@@ -463,7 +520,7 @@ function GradesTab({ sections, subjects, subjectById, termById, teacherById, cat
         ))}
       </Row>
 
-                {/* Chart + Table (bản thường) */}
+      {/* Chart + Table (bản thường) */}
       <Row gutter={[16, 16]}>
         {/* CARD CHART nhỏ trên trang */}
         <Col xs={24} lg={10}>
@@ -639,29 +696,70 @@ function BucketsTab({
   return (
     <Space direction="vertical" size={20} style={{ width: "100%" }}>
       {/* Filter */}
-      <Card style={glassStyle} className="sticky top-0 z-10" bodyStyle={{ padding: 16 }}>
-        <Form form={form} layout="inline" onFinish={onFetch} initialValues={{ mode: "section" }}>
-          <Space wrap>
-            <Form.Item name="mode" label="Chế độ">
-              <Segmented options={[{ label: "Theo lớp", value: "section" }, { label: "Theo môn", value: "subject" }]} />
-            </Form.Item>
-            <Form.Item name="ids" style={{ minWidth: 300 }}>
-              <Select
-                mode="multiple"
-                placeholder={mode === "section" ? "Chọn lớp..." : "Chọn môn..."}
-                loading={catalogLoading}
-                options={(mode === "section" ? sections : subjects).map((x: any) => ({
-                  value: x.id,
-                  label: mode === "section" ? `${x.sectionName} (${x.sectionCode})` : `${x.subjectCode} – ${x.subjectName}`,
-                }))}
-                onChange={handleIdsChange}
-              />
-            </Form.Item>
-            <Button type="primary" htmlType="submit" icon={<PieChartOutlined />} loading={loading}>Xem phân bố</Button>
-            <Button onClick={onExport} icon={<DownloadOutlined />}>Xuất Excel</Button>
+      <Card
+        style={glassStyle}
+        className="sticky top-0 z-10"
+        bodyStyle={{ padding: 16 }}
+      >
+        <Form form={form} layout="vertical" onFinish={onFetch} initialValues={{ mode: "section" }}>
+          <Space
+            size="large"
+            wrap
+            style={{ width: "100%", justifyContent: "space-between" }}
+          >
+
+            {/* Nhóm 1 — Chế độ */}
+            <Space direction="vertical" size={8} style={{ minWidth: 220 }}>
+              <Form.Item name="mode" label="Chế độ">
+                <Segmented
+                  options={[
+                    { label: "Theo lớp", value: "section" },
+                    { label: "Theo môn", value: "subject" },
+                  ]}
+                />
+              </Form.Item>
+            </Space>
+
+            {/* Nhóm 2 — Chọn lớp/môn */}
+            <Space direction="vertical" size={8} style={{ minWidth: 280 }}>
+              <Form.Item name="ids" label={mode === "section" ? "Chọn lớp" : "Chọn môn"}>
+                <Select
+                  mode="multiple"
+                  placeholder={mode === "section" ? "Chọn lớp..." : "Chọn môn..."}
+                  loading={catalogLoading}
+                  options={(mode === "section" ? sections : subjects).map((x: any) => ({
+                    value: x.id,
+                    label:
+                      mode === "section"
+                        ? `${x.sectionName} (${x.sectionCode})`
+                        : `${x.subjectCode} – ${x.subjectName}`,
+                  }))}
+                  onChange={handleIdsChange}
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
+            </Space>
+
+            {/* Nhóm 3 — Action */}
+            <Space direction="vertical" size={8} style={{ minWidth: 200 }}>
+              <Button
+                type="primary"
+                htmlType="submit"
+                icon={<PieChartOutlined />}
+                loading={loading}
+                block
+              >
+                Xem phân bố
+              </Button>
+
+              <Button icon={<DownloadOutlined />} onClick={onExport} block>
+                Xuất Excel
+              </Button>
+            </Space>
           </Space>
         </Form>
       </Card>
+
 
       {/* Chart nhỏ trên trang */}
       <Row gutter={[16, 16]}>
@@ -774,7 +872,7 @@ function AttendanceTab({
       const params: any = { mode, ids: ids.join(",") };
       if (range) {
         params.from = (range[0] as any).startOf("day").toISOString();
-        params.to   = (range[1] as any).endOf("day").toISOString();
+        params.to = (range[1] as any).endOf("day").toISOString();
       }
       const { data } = await instance.get(`/stats/attendance`, { params });
       setItems(data.items || []);
@@ -794,37 +892,51 @@ function AttendanceTab({
   }, [items, sections]);
 
   // keep sorted for export
-  useEffect(()=>{ setSortedAttend(dataSource); }, [dataSource]);
+  useEffect(() => { setSortedAttend(dataSource); }, [dataSource]);
 
   const chartData = useMemo(() => dataSource.map(it => ({ section: it.sectionLabel, rate: it.rate })), [dataSource]);
 
   const attendColumns: ColumnsType<any> = [
-    { title: mode==="section"?"Lớp":"Môn", dataIndex:"sectionLabel",
-      sorter:(a,b)=>cmpStr(a.sectionLabel,b.sectionLabel) },
-    { title:"Có mặt", dataIndex:"present", align:"right", width:90,
-      sorter:(a,b)=>cmpNum(a.present,b.present) },
-    { title:"Trễ", dataIndex:"late", align:"right", width:70,
-      sorter:(a,b)=>cmpNum(a.late,b.late) },
-    { title:"Có phép", dataIndex:"excused", align:"right", width:90,
-      sorter:(a,b)=>cmpNum(a.excused,b.excused) },
-    { title:"Vắng", dataIndex:"absent", align:"right", width:70,
-      sorter:(a,b)=>cmpNum(a.absent,b.absent) },
-    { title:"Tổng", dataIndex:"total", align:"right", width:80,
-      sorter:(a,b)=>cmpNum(a.total,b.total) },
-    { title:"Tỷ lệ", dataIndex:"rate", align:"right",
-      sorter:(a,b)=>cmpNum(a.rate,b.rate),
-      render:(v:number)=>(<Tag color={v>=90?"green":v>=80?"geekblue":v>=65?"gold":"red"} style={{borderRadius:8}}>
+    {
+      title: mode === "section" ? "Lớp" : "Môn", dataIndex: "sectionLabel",
+      sorter: (a, b) => cmpStr(a.sectionLabel, b.sectionLabel)
+    },
+    {
+      title: "Có mặt", dataIndex: "present", align: "right", width: 90,
+      sorter: (a, b) => cmpNum(a.present, b.present)
+    },
+    {
+      title: "Trễ", dataIndex: "late", align: "right", width: 70,
+      sorter: (a, b) => cmpNum(a.late, b.late)
+    },
+    {
+      title: "Có phép", dataIndex: "excused", align: "right", width: 90,
+      sorter: (a, b) => cmpNum(a.excused, b.excused)
+    },
+    {
+      title: "Vắng", dataIndex: "absent", align: "right", width: 70,
+      sorter: (a, b) => cmpNum(a.absent, b.absent)
+    },
+    {
+      title: "Tổng", dataIndex: "total", align: "right", width: 80,
+      sorter: (a, b) => cmpNum(a.total, b.total)
+    },
+    {
+      title: "Tỷ lệ", dataIndex: "rate", align: "right",
+      sorter: (a, b) => cmpNum(a.rate, b.rate),
+      render: (v: number) => (<Tag color={v >= 90 ? "green" : v >= 80 ? "geekblue" : v >= 65 ? "gold" : "red"} style={{ borderRadius: 8 }}>
         {v.toFixed(1)}%
-      </Tag>) },
+      </Tag>)
+    },
   ];
 
-  const onAttendTableChange = (_p:any,_f:any,sorter:any)=>{
+  const onAttendTableChange = (_p: any, _f: any, sorter: any) => {
     if (!sorter || !sorter.field) { setSortedAttend([...dataSource]); return; }
-    const { field, order } = sorter as { field:string; order:Order };
+    const { field, order } = sorter as { field: string; order: Order };
     const arr = [...dataSource];
-    const numeric = ["present","late","excused","absent","total","rate"];
-    if (numeric.includes(field)) arr.sort((a,b)=>cmpNum(a[field],b[field],order));
-    else if (field==="sectionLabel") arr.sort((a,b)=>cmpStr(a.sectionLabel,b.sectionLabel,order));
+    const numeric = ["present", "late", "excused", "absent", "total", "rate"];
+    if (numeric.includes(field)) arr.sort((a, b) => cmpNum(a[field], b[field], order));
+    else if (field === "sectionLabel") arr.sort((a, b) => cmpStr(a.sectionLabel, b.sectionLabel, order));
     setSortedAttend(arr);
   };
 
@@ -859,32 +971,76 @@ function AttendanceTab({
   return (
     <Space direction="vertical" size={20} style={{ width: "100%" }}>
       {/* Filter */}
-      <Card style={glassStyle} className="sticky top-0 z-10" bodyStyle={{ padding: 16 }}>
-        <Form form={form} layout="inline" onFinish={onFetch} initialValues={{ mode: "section" }}>
-          <Space wrap>
-            <Form.Item name="mode" label="Chế độ">
-              <Segmented options={[{ label: "Theo lớp", value: "section" }, { label: "Theo môn", value: "subject" }]} />
-            </Form.Item>
-            <Form.Item name="ids" style={{ minWidth: 280 }}>
-              <Select
-                mode="multiple"
-                placeholder={mode === "section" ? "Chọn lớp..." : "Chọn môn..."}
-                loading={catalogLoading}
-                options={(mode === "section" ? sections : subjects).map((x: any) => ({
-                  value: x.id,
-                  label: mode === "section" ? `${x.sectionName} (${x.sectionCode})` : `${x.subjectCode} – ${x.subjectName}`,
-                }))}
-                onChange={handleIdsChange}
-              />
-            </Form.Item>
-            <Form.Item name="range">
-              <DatePicker.RangePicker allowEmpty={[true, true]} />
-            </Form.Item>
-            <Button type="primary" htmlType="submit" icon={<ClockCircleOutlined />} loading={loading}>Xem</Button>
-            <Button onClick={onExport} icon={<DownloadOutlined />}>Xuất Excel</Button>
+      <Card
+        style={glassStyle}
+        className="sticky top-0 z-10"
+        bodyStyle={{ padding: 16 }}
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={onFetch}
+          initialValues={{ mode: "section" }}
+        >
+          <Space size="large" wrap style={{ width: "100%", justifyContent: "space-between" }}>
+
+            {/* Nhóm 1: Chế độ + Lớp/Môn */}
+            <Space direction="vertical" size={8} style={{ minWidth: 220 }}>
+              <Form.Item name="mode" label="Chế độ">
+                <Segmented
+                  options={[
+                    { label: "Theo lớp", value: "section" },
+                    { label: "Theo môn", value: "subject" },
+                  ]}
+                />
+              </Form.Item>
+
+              <Form.Item name="ids" label={mode === "section" ? "Chọn lớp" : "Chọn môn"}>
+                <Select
+                  mode="multiple"
+                  placeholder={mode === "section" ? "Chọn lớp..." : "Chọn môn..."}
+                  loading={catalogLoading}
+                  options={(mode === "section" ? sections : subjects).map((x: any) => ({
+                    value: x.id,
+                    label:
+                      mode === "section"
+                        ? `${x.sectionName} (${x.sectionCode})`
+                        : `${x.subjectCode} – ${x.subjectName}`,
+                  }))}
+                  onChange={handleIdsChange}
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
+            </Space>
+
+            {/* Nhóm 2: Khoảng ngày */}
+            <Space direction="vertical" size={8} style={{ minWidth: 220 }}>
+              <Form.Item name="range" label="Khoảng ngày">
+                <DatePicker.RangePicker allowEmpty={[true, true]} style={{ width: "100%" }} />
+              </Form.Item>
+            </Space>
+
+            {/* Nhóm 3: Actions */}
+            <Space direction="vertical" size={8} style={{ minWidth: 200 }}>
+              <Button
+                type="primary"
+                htmlType="submit"
+                icon={<ClockCircleOutlined />}
+                loading={loading}
+                block
+              >
+                Xem thống kê
+              </Button>
+
+              <Button icon={<DownloadOutlined />} onClick={onExport} block>
+                Xuất Excel
+              </Button>
+            </Space>
+
           </Space>
         </Form>
       </Card>
+
 
       {/* Chart + Table nhỏ trên trang */}
       <Row gutter={[16, 16]}>
@@ -1007,7 +1163,7 @@ function DepartmentTab({
   const [topN, setTopN] = useState<number>(5);
   const [bottomN, setBottomN] = useState<number>(5);
 
-  const [deptChartSort, setDeptChartSort] = useState<"name_az"|"avg_asc"|"avg_desc">("avg_desc");
+  const [deptChartSort, setDeptChartSort] = useState<"name_az" | "avg_asc" | "avg_desc">("avg_desc");
 
   const filteredSections = useMemo(() => {
     const termId: number | undefined = form.getFieldValue("termId");
@@ -1054,24 +1210,24 @@ function DepartmentTab({
       const subj = subjectById.get(subId);
       const vals = list.map(x => x.total10);
       const n = vals.length || 1;
-      const avg = +(vals.reduce((a,b)=>a+b,0)/n).toFixed(2);
-      const pass = list.filter(x=>x.total10 >= 5).length;
-      const excellent = list.filter(x=>x.total10 >= 8).length;
+      const avg = +(vals.reduce((a, b) => a + b, 0) / n).toFixed(2);
+      const pass = list.filter(x => x.total10 >= 5).length;
+      const excellent = list.filter(x => x.total10 >= 8).length;
       return { key: subId, subjectId: subId, subject: `${subj?.subjectCode} – ${subj?.subjectName}`, n: vals.length, avg, pass, excellent };
-    }).sort((a,b) => String(a.subject).localeCompare(String(b.subject)));
+    }).sort((a, b) => String(a.subject).localeCompare(String(b.subject)));
   }, [grades, filteredSections, subjectById]);
 
   // Top/Bottom linh động
-  const topList = useMemo(() => [...subjectSummary].sort((a,b)=>b.avg-a.avg).slice(0, Math.max(0, topN)), [subjectSummary, topN]);
-  const bottomList = useMemo(() => [...subjectSummary].sort((a,b)=>a.avg-b.avg).slice(0, Math.max(0, bottomN)), [subjectSummary, bottomN]);
+  const topList = useMemo(() => [...subjectSummary].sort((a, b) => b.avg - a.avg).slice(0, Math.max(0, topN)), [subjectSummary, topN]);
+  const bottomList = useMemo(() => [...subjectSummary].sort((a, b) => a.avg - b.avg).slice(0, Math.max(0, bottomN)), [subjectSummary, bottomN]);
 
   // Attendance theo môn để vẽ line
   const attendanceChart = useMemo(() => {
-    const agg = new Map<number, { present:number; late:number; total:number }>();
+    const agg = new Map<number, { present: number; late: number; total: number }>();
     attendance.forEach(it => {
       const sec = filteredSections.find(s => s.id === it.sectionId);
       if (!sec) return;
-      const cur = agg.get(sec.subjectId) || { present:0, late:0, total:0 };
+      const cur = agg.get(sec.subjectId) || { present: 0, late: 0, total: 0 };
       cur.present += it.present; cur.late += it.late; cur.total += it.total;
       agg.set(sec.subjectId, cur);
     });
@@ -1079,20 +1235,20 @@ function DepartmentTab({
       const subj = subjectById.get(subId);
       const rate = v.total ? +(((v.present + v.late) / v.total) * 100).toFixed(1) : 0;
       return { subject: subj?.subjectCode || String(subId), rate };
-    }).sort((a,b) => a.subject.localeCompare(b.subject));
+    }).sort((a, b) => a.subject.localeCompare(b.subject));
   }, [attendance, filteredSections, subjectById]);
 
-  const subjectSummarySortedForChart = useMemo(()=>{
+  const subjectSummarySortedForChart = useMemo(() => {
     const arr = [...subjectSummary];
-    if (deptChartSort === "name_az") return arr.sort((a,b)=>String(a.subject).localeCompare(String(b.subject)));
-    if (deptChartSort === "avg_asc") return arr.sort((a,b)=>a.avg-b.avg);
-    return arr.sort((a,b)=>b.avg-a.avg);
+    if (deptChartSort === "name_az") return arr.sort((a, b) => String(a.subject).localeCompare(String(b.subject)));
+    if (deptChartSort === "avg_asc") return arr.sort((a, b) => a.avg - b.avg);
+    return arr.sort((a, b) => b.avg - a.avg);
   }, [subjectSummary, deptChartSort]);
 
   // Exports
   const exportSummary = () => {
     const rows = subjectSummary.map(r => ({
-      "Môn học": r.subject.replace(/,/g," "),
+      "Môn học": r.subject.replace(/,/g, " "),
       "Số SV": r.n,
       "Điểm TB": r.avg,
       "≥5": r.pass,
@@ -1119,60 +1275,97 @@ function DepartmentTab({
   return (
     <Space direction="vertical" size={20} style={{ width: "100%" }}>
       {/* Filter */}
-      <Card style={glassStyle} className="sticky top-0 z-10" bodyStyle={{ padding: 16 }}>
-        <Form form={form} layout="inline" onFinish={onFetch}>
-          <Space wrap>
-            <Form.Item name="termId" label="Học kỳ">
-              <Select allowClear loading={catalogLoading}
-                options={[...termById.values()].map(t => ({ value: t.id, label: `${t.code} – ${t.name}` }))}
-                style={{ width: 220 }} />
-            </Form.Item>
+      <Card
+        style={glassStyle}
+        className="sticky top-0 z-10"
+        bodyStyle={{ padding: 16 }}
+      >
+        <Form form={form} layout="vertical" onFinish={onFetch}>
+          <Space
+            size="large"
+            wrap
+            style={{ width: "100%", justifyContent: "space-between" }}
+          >
 
-            {/* Lọc điểm */}
-            <Form.Item label="Điểm min">
-              <InputNumber
-                min={0}
-                max={10}
-                step={0.5}
-                value={minScore}
-                onChange={(val) => setMinScore(val ?? 0)}
-                style={{ width: 100 }}
-              />
-            </Form.Item>
-            <Form.Item label="Điểm max">
-              <InputNumber
-                min={0}
-                max={10}
-                step={0.5}
-                value={maxScore}
-                onChange={(val) => setMaxScore(val ?? 0)}
-                style={{ width: 100 }}
-              />
-            </Form.Item>
-            <Tooltip title="Thang 10; để trống = bỏ qua lọc"><InfoCircleOutlined style={{ color: "#999" }} /></Tooltip>
+            {/* Nhóm 1 — Chọn học kỳ */}
+            <Space direction="vertical" size={8} style={{ minWidth: 220 }}>
+              <Form.Item name="termId" label="Học kỳ">
+                <Select
+                  allowClear
+                  loading={catalogLoading}
+                  options={[...termById.values()].map((t) => ({
+                    value: t.id,
+                    label: `${t.code} – ${t.name}`,
+                  }))}
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
+            </Space>
 
-            {/* sort biểu đồ */}
-            <Form.Item label="Sắp xếp biểu đồ">
-              <Select
-                value={deptChartSort}
-                onChange={setDeptChartSort}
-                style={{ width: 170 }}
-                options={[
-                  { value: "name_az", label: "Tên A→Z" },
-                  { value: "avg_asc", label: "Điểm ↑" },
-                  { value: "avg_desc", label: "Điểm ↓" },
-                ]}
-              />
-            </Form.Item>
+            {/* Nhóm 2 — Lọc điểm */}
+            <Space direction="vertical" size={8} style={{ minWidth: 220 }}>
+              <Form.Item label="Điểm min">
+                <InputNumber
+                  min={0}
+                  max={10}
+                  step={0.5}
+                  value={minScore}
+                  onChange={(val) => setMinScore(val ?? 0)}
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
 
-            <Button type="primary" htmlType="submit" icon={<BarChartOutlined />} loading={loading}>Tổng hợp</Button>
-            <Button onClick={exportSummary} icon={<DownloadOutlined />}>Xuất Excel</Button>
+              <Form.Item label="Điểm max">
+                <InputNumber
+                  min={0}
+                  max={10}
+                  step={0.5}
+                  value={maxScore}
+                  onChange={(val) => setMaxScore(val ?? 0)}
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
+            </Space>
+
+            {/* Nhóm 3 — Sắp xếp biểu đồ */}
+            <Space direction="vertical" size={8} style={{ minWidth: 220 }}>
+              <Form.Item label="Sắp xếp biểu đồ">
+                <Select
+                  value={deptChartSort}
+                  onChange={setDeptChartSort}
+                  options={[
+                    { value: "name_az", label: "Tên A→Z" },
+                    { value: "avg_asc", label: "Điểm ↑" },
+                    { value: "avg_desc", label: "Điểm ↓" },
+                  ]}
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
+            </Space>
+
+            {/* Nhóm 4 — Actions */}
+            <Space direction="vertical" size={8} style={{ minWidth: 200 }}>
+              <Button
+                type="primary"
+                htmlType="submit"
+                icon={<BarChartOutlined />}
+                loading={loading}
+                block
+              >
+                Tổng hợp
+              </Button>
+
+              <Button icon={<DownloadOutlined />} onClick={exportSummary} block>
+                Xuất Excel
+              </Button>
+            </Space>
           </Space>
         </Form>
       </Card>
 
+
       {/* KPIs */}
-      <Row gutter={[16,16]}>
+      <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
           <Card style={glassStyle} className="hover:scale-105 transition-transform">
             <Statistic title="Số môn" value={subjectSummary.length}
@@ -1188,7 +1381,7 @@ function DepartmentTab({
       </Row>
 
       {/* Chart: Avg by Subject */}
-      <Row gutter={[16,16]}>
+      <Row gutter={[16, 16]}>
         <Col xs={24}>
           <Card
             style={glassStyle}
@@ -1207,12 +1400,12 @@ function DepartmentTab({
             {loading ? <Spin /> : subjectSummary.length ? (
               <ResponsiveContainer>
                 <BarChart data={subjectSummarySortedForChart}>
-                  <defs><linearGradient id="barG3"><stop offset="0%" stopColor="#6366f1" stopOpacity={0.9}/><stop offset="100%" stopColor="#6366f1" stopOpacity={0.3}/></linearGradient></defs>
+                  <defs><linearGradient id="barG3"><stop offset="0%" stopColor="#6366f1" stopOpacity={0.9} /><stop offset="100%" stopColor="#6366f1" stopOpacity={0.3} /></linearGradient></defs>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="subject" angle={-15} textAnchor="end" height={80} />
-                  <YAxis domain={[0,10]} />
+                  <YAxis domain={[0, 10]} />
                   <RTooltip content={<PrettyTooltip />} />
-                  <Bar dataKey="avg" fill="url(#barG3)" radius={[8,8,0,0]} />
+                  <Bar dataKey="avg" fill="url(#barG3)" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : <Empty />}
@@ -1221,20 +1414,22 @@ function DepartmentTab({
       </Row>
 
       {/* Top/Bottom + Attendance */}
-      <Row gutter={[16,16]}>
+      <Row gutter={[16, 16]}>
         <Col xs={24} lg={12}>
           <Card style={glassStyle} title={
             <div className="flex items-center gap-3">
               <span>Top môn điểm cao</span>
-              <InputNumber min={0} max={50} value={topN} onChange={(v)=>setTopN((v||0))} style={{ width: 90 }} />
+              <InputNumber min={0} max={50} value={topN} onChange={(v) => setTopN((v || 0))} style={{ width: 90 }} />
               <Button size="small" onClick={exportTop} icon={<DownloadOutlined />}>Xuất Excel</Button>
             </div>
           }>
             <Table size="small" dataSource={topList} columns={[
-              { title: "Môn", dataIndex: "subject", sorter:(a:any,b:any)=>cmpStr(a.subject,b.subject) },
-              { title: "Điểm TB", dataIndex: "avg", sorter:(a:any,b:any)=>cmpNum(a.avg,b.avg),
-                render: (v:number) => <Tag color="green" style={{ borderRadius: 8 }}>{v}</Tag> },
-              { title: "Số SV", dataIndex: "n", width: 90, align: "right", sorter:(a:any,b:any)=>cmpNum(a.n,b.n) },
+              { title: "Môn", dataIndex: "subject", sorter: (a: any, b: any) => cmpStr(a.subject, b.subject) },
+              {
+                title: "Điểm TB", dataIndex: "avg", sorter: (a: any, b: any) => cmpNum(a.avg, b.avg),
+                render: (v: number) => <Tag color="green" style={{ borderRadius: 8 }}>{v}</Tag>
+              },
+              { title: "Số SV", dataIndex: "n", width: 90, align: "right", sorter: (a: any, b: any) => cmpNum(a.n, b.n) },
             ]} pagination={false} />
           </Card>
         </Col>
@@ -1242,21 +1437,23 @@ function DepartmentTab({
           <Card style={glassStyle} title={
             <div className="flex items-center gap-3">
               <span>Bottom môn điểm thấp</span>
-              <InputNumber min={0} max={50} value={bottomN} onChange={(v)=>setBottomN((v||0))} style={{ width: 90 }} />
+              <InputNumber min={0} max={50} value={bottomN} onChange={(v) => setBottomN((v || 0))} style={{ width: 90 }} />
               <Button size="small" onClick={exportBottom} icon={<DownloadOutlined />}>Xuất Excel</Button>
             </div>
           }>
             <Table size="small" dataSource={bottomList} columns={[
-              { title: "Môn", dataIndex: "subject", sorter:(a:any,b:any)=>cmpStr(a.subject,b.subject) },
-              { title: "Điểm TB", dataIndex: "avg", sorter:(a:any,b:any)=>cmpNum(a.avg,b.avg),
-                render: (v:number) => <Tag color="red" style={{ borderRadius: 8 }}>{v}</Tag> },
-              { title: "Số SV", dataIndex: "n", width: 90, align: "right", sorter:(a:any,b:any)=>cmpNum(a.n,b.n) },
+              { title: "Môn", dataIndex: "subject", sorter: (a: any, b: any) => cmpStr(a.subject, b.subject) },
+              {
+                title: "Điểm TB", dataIndex: "avg", sorter: (a: any, b: any) => cmpNum(a.avg, b.avg),
+                render: (v: number) => <Tag color="red" style={{ borderRadius: 8 }}>{v}</Tag>
+              },
+              { title: "Số SV", dataIndex: "n", width: 90, align: "right", sorter: (a: any, b: any) => cmpNum(a.n, b.n) },
             ]} pagination={false} />
           </Card>
         </Col>
       </Row>
 
-      <Row gutter={[16,16]}>
+      <Row gutter={[16, 16]}>
         <Col xs={24}>
           <Card
             style={glassStyle}
@@ -1277,7 +1474,7 @@ function DepartmentTab({
                 <LineChart data={attendanceChart}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="subject" angle={-15} textAnchor="end" height={80} />
-                  <YAxis domain={[0,100]} />
+                  <YAxis domain={[0, 100]} />
                   <RTooltip content={<PrettyTooltip />} />
                   <Line type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={3} dot={false} />
                 </LineChart>
@@ -1295,12 +1492,12 @@ function DepartmentTab({
       >
         <ResponsiveContainer>
           <BarChart data={subjectSummarySortedForChart}>
-            <defs><linearGradient id="barG3-big"><stop offset="0%" stopColor="#6366f1" stopOpacity={0.9}/><stop offset="100%" stopColor="#6366f1" stopOpacity={0.3}/></linearGradient></defs>
+            <defs><linearGradient id="barG3-big"><stop offset="0%" stopColor="#6366f1" stopOpacity={0.9} /><stop offset="100%" stopColor="#6366f1" stopOpacity={0.3} /></linearGradient></defs>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="subject" angle={-15} textAnchor="end" height={80} />
-            <YAxis domain={[0,10]} />
+            <YAxis domain={[0, 10]} />
             <RTooltip content={<PrettyTooltip />} />
-            <Bar dataKey="avg" fill="url(#barG3-big)" radius={[8,8,0,0]} />
+            <Bar dataKey="avg" fill="url(#barG3-big)" radius={[8, 8, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </FloatingPanel>
@@ -1315,7 +1512,7 @@ function DepartmentTab({
           <LineChart data={attendanceChart}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="subject" angle={-15} textAnchor="end" height={80} />
-            <YAxis domain={[0,100]} />
+            <YAxis domain={[0, 100]} />
             <RTooltip content={<PrettyTooltip />} />
             <Line type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={3} dot={false} />
           </LineChart>

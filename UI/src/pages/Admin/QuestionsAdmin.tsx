@@ -19,7 +19,7 @@ import {
 	Row,
 	Col,
 	Radio,
-	message,
+	Flex,
 } from "antd";
 import {
 	ReloadOutlined,
@@ -108,6 +108,11 @@ export default function QuestionsAdmin() {
 	const [filterDifficulty, setFilterDifficulty] = useState<string | null>(null);
 	const [filterType, setFilterType] = useState<string | null>(null);
 
+	// Pagination state
+	const [currentPage, setCurrentPage] = useState<number>(1);
+	const [pageSize, setPageSize] = useState<number>(20);
+	const [totalItems, setTotalItems] = useState<number>(0);
+
 	// modal thêm/sửa
 	const [form] = Form.useForm<any>();
 	const [modalOpen, setModalOpen] = useState(false);
@@ -128,21 +133,54 @@ export default function QuestionsAdmin() {
 	const [detailTestCases, setDetailTestCases] = useState<TestCase[]>([]);
 
 	useEffect(() => {
-		fetchQuestions();
+		// initial load page 1
+		fetchQuestions(1, pageSize);
 		fetchSubjects();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	async function fetchQuestions() {
+	/**
+	 * Fetch questions with pagination and server-side filters
+	 * Expects backend shape like:
+	 * {
+	 *   success: true,
+	 *   data: [ Question, Question, ... ],
+	 *   meta: { page: 2, limit: 20, total: 86, totalPages: 5 }
+	 * }
+	 */
+	async function fetchQuestions(page = 1, limit = 20) {
 		try {
 			setLoading(true);
-			const res = await instance.get<{ success: boolean; data: Question[] }>(
-				`/questions`
-			);
-			if (res.data.success) {
-				setQuestions(res.data.data || []);
+
+			const params = new URLSearchParams();
+			params.append("page", String(page));
+			params.append("limit", String(limit));
+			if (keyword) params.append("keyword", keyword);
+			if (filterSubject) params.append("subjectId", String(filterSubject));
+			if (filterChapter) params.append("chapterId", String(filterChapter));
+			if (filterDifficulty) params.append("difficulty", filterDifficulty);
+			if (filterType) params.append("type", filterType);
+
+			const res = await instance.get<any>(`/questions?${params.toString()}`);
+
+			if (res.data && res.data.success) {
+				// Backend returns data array at `data` and paging in `meta`
+				const items = Array.isArray(res.data.data) ? res.data.data : [];
+				const meta = res.data.meta || {};
+				setQuestions(items);
+				setTotalItems(typeof meta.total === "number" ? meta.total : items.length);
+				setCurrentPage(typeof meta.page === "number" ? meta.page : page);
+				setPageSize(typeof meta.limit === "number" ? meta.limit : limit);
+			} else {
+				toast.error("Không tải được danh sách câu hỏi");
+				setQuestions([]);
+				setTotalItems(0);
 			}
 		} catch (err) {
-			toast.error("Không tải được danh sách câu hỏi");
+			console.error("fetchQuestions error:", err);
+			toast.error("Lỗi khi tải câu hỏi");
+			setQuestions([]);
+			setTotalItems(0);
 		} finally {
 			setLoading(false);
 		}
@@ -226,6 +264,9 @@ export default function QuestionsAdmin() {
 		} else {
 			setChapters([]);
 		}
+
+		// reload page 1 with new filter
+		await fetchQuestions(1, pageSize);
 	};
 
 	const handleQuestionTypeChange = (type: string) => {
@@ -248,7 +289,8 @@ export default function QuestionsAdmin() {
 		try {
 			await instance.delete(`/questions/${id}`);
 			toast.success("Đã xóa câu hỏi");
-			setQuestions((prev) => prev.filter((q) => q.id !== id));
+			// refetch current page - backend meta will reflect new total
+			await fetchQuestions(currentPage, pageSize);
 		} catch (err) {
 			toast.error("Không thể xóa câu hỏi");
 		}
@@ -308,8 +350,6 @@ export default function QuestionsAdmin() {
 				toast.success("Đã thêm câu hỏi mới");
 			}
 
-			
-
 			// Handle test cases for code questions
 			if (values.type === "coding" && testCases.length > 0) {
 				try {
@@ -347,7 +387,8 @@ export default function QuestionsAdmin() {
 			setQuestionType("multiple_choice");
 			setSelectedSubjectId(null);
 			setFormChapters([]);
-			fetchQuestions();
+			// after create/update refetch current page (or first page)
+			await fetchQuestions(currentPage, pageSize);
 		} catch (err: any) {
 			console.log("👉 Backend error:", err.response?.data);
 			if (err?.errorFields) return;
@@ -414,7 +455,6 @@ export default function QuestionsAdmin() {
 		setDetailModalOpen(true);
 	};
 
-	// Render question type tag
 	const renderTypeTag = (type: string) => {
 		const config = {
 			multiple_choice: { color: "blue", text: "Trắc nghiệm", icon: <UnorderedListOutlined /> },
@@ -433,7 +473,6 @@ export default function QuestionsAdmin() {
 		);
 	};
 
-	// Render difficulty tag
 	const renderDifficultyTag = (difficulty: string) => {
 		const config = {
 			easy: { color: "green", text: "Dễ" },
@@ -530,7 +569,7 @@ export default function QuestionsAdmin() {
 			title: "Hành động",
 			key: "actions",
 			align: "center" as const,
-			width: "13%",
+			width: "8%",
 			fixed: "right" as const,
 			render: (_: any, record: Question) => (
 				<Space size="small">
@@ -610,7 +649,7 @@ export default function QuestionsAdmin() {
 	];
 
 	const filteredQuestions = questions.filter((q) => {
-		// Filter by keyword
+		// Client-side search fallback (if you rely on server search, you can remove this)
 		if (keyword) {
 			const kw = keyword.toLowerCase();
 			const matchContent = q.content?.toLowerCase().includes(kw);
@@ -647,87 +686,101 @@ export default function QuestionsAdmin() {
 		setFilterDifficulty(null);
 		setFilterType(null);
 
-		// reload data
-		await fetchQuestions();
+		// reload first page
+		await fetchQuestions(1, pageSize);
 	};
 
-
 	return (
-		<div className="pl-3 pr-3">
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					alignItems: "center",
-					marginBottom: 16,
-				}}
+		<div className="sm:px-3 h-auto sm:h-auto">
+			{/* 🎯 RESPONSIVE HEADER */}
+
+			<Flex
+				wrap="wrap"
+				gap={12}
+				className="flex-col sm:flex-row items-start sm:items-center w-full pt-3 pb-5"
 			>
-				<Title level={3} className="mt-2">
-					<div className="flex items-center gap-2">
-						<div className="mt-1">
-							<BookOpen />
-						</div>
-						Quản lý Câu hỏi
-					</div>
+				{/* Title Left */}
+				<Title level={3} style={{ margin: 0 }}>
+					<Flex align="center" gap={8}>
+						<BookOpen />
+						<span>Quản lý Câu hỏi</span>
+					</Flex>
 				</Title>
 
-				{/* Thanh tác vụ */}
-				<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-					{/* Tìm kiếm */}
+				{/* Action Right */}
+				<Flex
+					gap={8}
+					wrap="wrap"
+					className="w-full sm:w-auto sm:ml-auto"
+				>
+					{/* Search */}
 					<Input
 						allowClear
 						prefix={<SearchOutlined />}
-						placeholder="Tìm theo nội dung/môn học/chương..."
+						placeholder="Tìm theo nội dung..."
 						value={keyword}
 						onChange={(e) => setKeyword(e.target.value)}
-						style={{ width: 260 }}
+						onPressEnter={() => fetchQuestions(1, pageSize)}
+						className="w-full sm:w-72"
 					/>
-					{/* Nút refresh */}
-					<Button icon={<ReloadOutlined />} onClick={handleReload}>
-						Làm mới
-					</Button>
 
-					{/* Nút thêm */}
-					<Button
-						type="primary"
-						icon={<PlusOutlined />}
-						onClick={() => {
-							setEditing(null);
-							form.resetFields();
-							setChoices([{ content: "", isCorrect: false, order: 1 }]);
-							setTestCases([]);
-							setQuestionType("multiple_choice");
-							setSelectedSubjectId(null);
-							setFormChapters([]);
-							setModalOpen(true);
-						}}
-					>
-						Thêm câu hỏi
-					</Button>
-				</div>
-			</div>
-
+					{/* Buttons */}
+					<Flex gap={8} wrap="wrap">
+						<Button icon={<ReloadOutlined />} onClick={handleReload}>
+							<span className="hidden sm:inline">Làm mới</span>
+						</Button>
+						<Button
+							type="primary"
+							icon={<PlusOutlined />}
+							onClick={() => {
+								setEditing(null);
+								form.resetFields();
+								setChoices([{ content: "", isCorrect: false, order: 1 }]);
+								setTestCases([]);
+								setQuestionType("multiple_choice");
+								setSelectedSubjectId(null);
+								setFormChapters([]);
+								setModalOpen(true);
+							}}
+						>
+							<span className="hidden sm:inline">Thêm câu hỏi</span>
+							<span className="inline sm:hidden">Thêm</span>
+						</Button>
+					</Flex>
+				</Flex>
+			</Flex>
 
 			{loading ? (
 				<div style={{ textAlign: "center", padding: 60 }}>
 					<Spin size="large" tip="Đang tải danh sách câu hỏi..." />
 				</div>
 			) : (
-				<Table<Question>
-					dataSource={filteredQuestions}
-					columns={columns}
-					rowKey="id"
-					bordered
-					pagination={{
-						pageSize: 10,
-						showSizeChanger: true,
-						showTotal: (total) => `Tổng ${total} câu hỏi`,
-					}}
-					locale={{ emptyText: "Không có câu hỏi nào" }}
-					scroll={{ x: 1400 }}
-				/>
+				<div style={{ overflowX: "auto" }}>
+					<Table<Question>
+						dataSource={filteredQuestions}
+						columns={columns}
+						rowKey="id"
+						bordered
+						pagination={{
+							current: currentPage,
+							pageSize,
+							total: totalItems,
+							showSizeChanger: true,
+							pageSizeOptions: ["10", "20", "50", "100"],
+							onChange: async (page, newPageSize) => {
+								setCurrentPage(page);
+								setPageSize(newPageSize || pageSize);
+								await fetchQuestions(page, newPageSize || pageSize);
+							},
+							showTotal: (total) => `Tổng ${total} câu hỏi`,
+							position: ["bottomRight"],
+							style: { marginTop: 16 },
+						}}
+						locale={{ emptyText: "Không có câu hỏi nào" }}
+						scroll={{ x: 1400 }}
+					/>
+				</div>
 			)}
-
 			{/* Modal thêm/sửa */}
 			<Modal
 				title={

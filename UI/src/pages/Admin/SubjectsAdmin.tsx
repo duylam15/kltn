@@ -11,14 +11,13 @@ import {
   Form,
   Popconfirm,
   Space,
-  Statistic,
   Card,
-  Tabs,
   Empty,
   Collapse,
   Badge,
   Descriptions,
   InputNumber,
+  Flex,
 } from "antd";
 import {
   ReloadOutlined,
@@ -41,7 +40,7 @@ const { Title, Text } = Typography;
 const { TextArea } = Input;
 const { Panel } = Collapse;
 
-// Cập nhật type Subject
+// ==================== TYPES ====================
 type Subject = {
   id: number;
   subjectCode: string;
@@ -55,7 +54,7 @@ type Subject = {
     questions: number;
     courseSections?: number;
   };
-  chapters?: Chapter[]; // Đã có chapters luôn
+  chapters?: Chapter[];
 };
 
 type Chapter = {
@@ -100,7 +99,9 @@ type ApiResponse = {
   };
 };
 
+// ==================== COMPONENT ====================
 export default function SubjectsAdmin() {
+  // State
   const [loading, setLoading] = useState(true);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [keyword, setKeyword] = useState("");
@@ -110,101 +111,39 @@ export default function SubjectsAdmin() {
     total: 0,
   });
 
-  // modal thêm/sửa
+  // Modal thêm/sửa
   const [form] = Form.useForm<any>();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Subject | null>(null);
 
-  // modal xem chi tiết
+  // Modal xem chi tiết
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [chapters, setChapters] = useState<ChapterDetail[]>([]);
-  const [chapterQuestions, setChapterQuestions] = useState<
-    Record<number, Question[]>
-  >({});
+  const [chapterQuestions, setChapterQuestions] = useState<Record<number, Question[]>>({});
   const [loadingChapters, setLoadingChapters] = useState<number[]>([]);
 
-  // Thêm vào phần state declarations (sau dòng 60)
+  // Modal Chapter
   const [chapterModalOpen, setChapterModalOpen] = useState(false);
   const [editingChapter, setEditingChapter] = useState<Chapter | null>(null);
   const [chapterForm] = Form.useForm();
 
-
-  const handleEditChapter = (chapter: Chapter) => {
-    setEditingChapter(chapter);
-    chapterForm.setFieldsValue({
-      subjectId: chapter.subjectId,
-      chapterCode: chapter.chapterCode,
-      chapterName: chapter.chapterName,
-      description: chapter.description,
-      order: chapter.order,
-    });
-    setChapterModalOpen(true);
-  };
-
-  const handleSubmitChapter = async () => {
-    try {
-      const values = await chapterForm.validateFields();
-
-      if (editingChapter) {
-        await instance.patch(
-          `/chapters/${editingChapter.id}`,
-          values
-        );
-        toast.success("Đã cập nhật chương");
-      } else {
-        await instance.post(`/chapters`, values);
-        toast.success("Đã thêm chương mới");
-      }
-
-      setChapterModalOpen(false);
-      chapterForm.resetFields();
-
-      // Refresh subject detail
-      if (selectedSubject) {
-        fetchSubjectDetail(selectedSubject.id);
-      }
-    } catch (err: any) {
-      if (err?.errorFields) return;
-      const errorMsg = err?.response?.data?.message || "Không thể lưu chương";
-      toast.error(errorMsg);
-    }
-  };
-
-  const handleDeleteChapter = async (chapterId: number) => {
-    try {
-      await instance.delete(`/chapters/${chapterId}`);
-      toast.success("Đã xóa chương");
-
-      // Refresh subject detail
-      if (selectedSubject) {
-        fetchSubjectDetail(selectedSubject.id);
-      }
-    } catch (err: any) {
-      const errorMsg = err?.response?.data?.message || "Không thể xóa chương";
-      toast.error(errorMsg);
-    }
-  };
+  // ==================== EFFECTS ====================
   useEffect(() => {
     fetchSubjects(1, 10);
   }, []);
 
-  // Cập nhật hàm fetchSubjects - KHÔNG CẦN THAY ĐỔI GÌ
-  // API đã tự động trả về chapters rồi
+  // ==================== API CALLS ====================
   async function fetchSubjects(page = 1, limit = 10, search?: string) {
     try {
       setLoading(true);
       const params: any = { page, limit };
       if (search) params.q = search;
 
-      const res = await instance.get<ApiResponse>(
-        `/subjects`,
-        { params }
-      );
+      const res = await instance.get<ApiResponse>("/subjects", { params });
 
       if (res.data.success) {
-        // subjects đã có chapters bên trong rồi
         setSubjects(res.data.data || []);
         setPagination({
           current: res.data.meta.page,
@@ -220,13 +159,11 @@ export default function SubjectsAdmin() {
     }
   }
 
-  // 🆕 Cập nhật fetchSubjectDetail - ĐƠN GIẢN HƠN
   const fetchSubjectDetail = async (subjectId: number) => {
     try {
       setDetailLoading(true);
       setDetailModalOpen(true);
 
-      // Lấy chi tiết môn học (đã có chapters)
       const subjectRes = await instance.get(`/subjects/${subjectId}`);
 
       if (subjectRes.data.success) {
@@ -241,31 +178,13 @@ export default function SubjectsAdmin() {
     }
   };
 
-  // 🆕 Đơn giản hóa handleCreateChapter
-  const handleCreateChapter = () => {
-    if (!selectedSubject) return;
-
-    setEditingChapter(null);
-    chapterForm.setFieldsValue({
-      subjectId: selectedSubject.id, // Dùng trực tiếp subject.id
-      chapterCode: "",
-      chapterName: "",
-      description: "",
-      order: chapters.length,
-    });
-    setChapterModalOpen(true);
-  };
-
-  // 🆕 Lấy danh sách câu hỏi của chương
   const fetchChapterQuestions = async (chapterId: number) => {
-    if (chapterQuestions[chapterId]) return; // Đã load rồi
+    if (chapterQuestions[chapterId]) return;
 
     try {
       setLoadingChapters((prev) => [...prev, chapterId]);
 
-      const res = await instance.get(
-        `/chapters/${chapterId}/questions`
-      );
+      const res = await instance.get(`/chapters/${chapterId}/questions`);
 
       if (res.data.success) {
         setChapterQuestions((prev) => ({
@@ -281,19 +200,7 @@ export default function SubjectsAdmin() {
     }
   };
 
-  // 🆕 Lấy thống kê câu hỏi theo độ khó
-  const fetchChapterStats = async (chapterId: number) => {
-    try {
-      const res = await instance.get(
-        `/chapters/${chapterId}/questions/stats`
-      );
-      return res.data.data;
-    } catch (err) {
-      console.error(err);
-      return null;
-    }
-  };
-
+  // ==================== HANDLERS ====================
   const handleDelete = async (id: number) => {
     try {
       await instance.delete(`/subjects/${id}`);
@@ -315,13 +222,10 @@ export default function SubjectsAdmin() {
       };
 
       if (editing) {
-        await instance.patch(
-          `/subjects/${editing.id}`,
-          payload
-        );
+        await instance.patch(`/subjects/${editing.id}`, payload);
         toast.success("Đã cập nhật môn học");
       } else {
-        await instance.post(`/subjects`, payload);
+        await instance.post("/subjects", payload);
         toast.success("Đã thêm môn học mới");
       }
 
@@ -344,7 +248,72 @@ export default function SubjectsAdmin() {
     fetchSubjects(newPagination.current, newPagination.pageSize, keyword);
   };
 
-  // 🎨 Render tag độ khó
+  const handleCreateChapter = () => {
+    if (!selectedSubject) return;
+
+    setEditingChapter(null);
+    chapterForm.setFieldsValue({
+      subjectId: selectedSubject.id,
+      chapterCode: "",
+      chapterName: "",
+      description: "",
+      order: chapters.length,
+    });
+    setChapterModalOpen(true);
+  };
+
+  const handleEditChapter = (chapter: Chapter) => {
+    setEditingChapter(chapter);
+    chapterForm.setFieldsValue({
+      subjectId: chapter.subjectId,
+      chapterCode: chapter.chapterCode,
+      chapterName: chapter.chapterName,
+      description: chapter.description,
+      order: chapter.order,
+    });
+    setChapterModalOpen(true);
+  };
+
+  const handleSubmitChapter = async () => {
+    try {
+      const values = await chapterForm.validateFields();
+
+      if (editingChapter) {
+        await instance.patch(`/chapters/${editingChapter.id}`, values);
+        toast.success("Đã cập nhật chương");
+      } else {
+        await instance.post("/chapters", values);
+        toast.success("Đã thêm chương mới");
+      }
+
+      setChapterModalOpen(false);
+      chapterForm.resetFields();
+
+      if (selectedSubject) {
+        fetchSubjectDetail(selectedSubject.id);
+      }
+    } catch (err: any) {
+      if (err?.errorFields) return;
+      const errorMsg = err?.response?.data?.message || "Không thể lưu chương";
+      toast.error(errorMsg);
+    }
+  };
+
+  const handleDeleteChapter = async (chapterId: number) => {
+    try {
+      await instance.delete(`/chapters/${chapterId}`);
+      toast.success("Đã xóa chương");
+
+      if (selectedSubject) {
+        fetchSubjectDetail(selectedSubject.id);
+      }
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || "Không thể xóa chương";
+      toast.error(errorMsg);
+    }
+  };
+
+  // ==================== RENDER HELPERS ====================
   const renderDifficultyTag = (difficulty: string) => {
     const config = {
       easy: { color: "green", text: "Dễ" },
@@ -358,7 +327,6 @@ export default function SubjectsAdmin() {
     return <Tag color={diff.color}>{diff.text}</Tag>;
   };
 
-  // 🎨 Render tag loại câu hỏi
   const renderQuestionTypeTag = (type: string) => {
     const config = {
       multiple_choice: { color: "blue", text: "Trắc nghiệm" },
@@ -373,12 +341,13 @@ export default function SubjectsAdmin() {
     return <Tag color={t.color}>{t.text}</Tag>;
   };
 
+  // ==================== TABLE COLUMNS ====================
   const columns = [
     {
       title: "Mã môn học",
       dataIndex: "subjectCode",
       key: "subjectCode",
-      width: "12%",
+      width: 120,
       render: (text: string) => (
         <Tag color="blue" style={{ fontSize: 14, fontWeight: 600 }}>
           {text}
@@ -389,17 +358,15 @@ export default function SubjectsAdmin() {
       title: "Tên môn học",
       dataIndex: "subjectName",
       key: "subjectName",
-      width: "22%",
+      width: 200,
       render: (text: string) => <strong>{text}</strong>,
     },
     {
       title: "Mô tả",
       dataIndex: "description",
       key: "description",
-      width: "25%",
-      ellipsis: {
-        showTitle: false,
-      },
+      width: 250,
+      ellipsis: { showTitle: false },
       render: (text: string) => (
         <Tooltip title={text}>
           {text || <span style={{ color: "#999" }}>Chưa có mô tả</span>}
@@ -410,11 +377,10 @@ export default function SubjectsAdmin() {
       title: "Số chương",
       key: "chapters",
       align: "center" as const,
-      width: "10%",
+      width: 120,
       render: (_: any, record: Subject) => (
         <Tag icon={<FileTextOutlined />} color="cyan">
           {record._count?.chapters || 0}
-          <span style={{ marginLeft: 4 }}>Chương</span>
         </Tag>
       ),
     },
@@ -422,7 +388,7 @@ export default function SubjectsAdmin() {
       title: "Số câu hỏi",
       key: "questions",
       align: "center" as const,
-      width: "10%",
+      width: 110,
       render: (_: any, record: Subject) => (
         <Tag icon={<QuestionCircleOutlined />} color="green">
           {record._count?.questions || 0}
@@ -433,14 +399,14 @@ export default function SubjectsAdmin() {
       title: "Ngày tạo",
       dataIndex: "createdAt",
       key: "createdAt",
-      width: "10%",
+      width: 110,
       render: (v: string) => (v ? dayjs(v).format("DD/MM/YYYY") : "—"),
     },
     {
       title: "Hành động",
       key: "actions",
       align: "center" as const,
-      width: "12%",
+      width: 150,
       fixed: "right" as const,
       render: (_: any, record: Subject) => (
         <Space size="small">
@@ -473,7 +439,7 @@ export default function SubjectsAdmin() {
               title="Xóa môn học"
               description={
                 <div>
-                  <p>Bạn có chắc muốn xóa môn học này?</p>
+                  <p>Bạn có chắc muốn xóa môn học này? </p>
                   {record._count && record._count.chapters > 0 && (
                     <p style={{ color: "red", marginTop: 8 }}>
                       ⚠️ Môn học này có {record._count.chapters} chương và{" "}
@@ -495,75 +461,93 @@ export default function SubjectsAdmin() {
     },
   ];
 
+  // ==================== RENDER ====================
   return (
-    <div className="pl-3 pr-3">
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 16,
-        }}
+    <div className="sm:px-3 h-auto sm:h-auto">
+      {/* 🎯 RESPONSIVE HEADER */}
+      <Flex
+        wrap="wrap"
+        gap={12}
+        className="flex-col sm:flex-row items-start sm:items-center w-full pt-3 pb-5"
       >
-        <Title level={3} className="mt-2">
-          <div className="flex justify-center items-center gap-2">
-            <div className="">
-              <Book />
-            </div>{" "}
-            Quản lý Môn học
-          </div>
+
+        {/* Title Left */}
+        <Title level={3} style={{ margin: 0 }}>
+          <Flex align="center" gap={8}>
+            <Book />
+            <span>Quản lý Môn học</span>
+          </Flex>
         </Title>
-        <div style={{ display: "flex", gap: 8 }}>
+
+        {/* Action Right */}
+        <Flex
+          gap={8}
+          wrap="wrap"
+          className="w-full sm:w-auto sm:ml-auto"
+        >
+          {/* Search */}
           <Input.Search
             allowClear
             prefix={<SearchOutlined />}
-            placeholder="Tìm theo mã, tên môn học..."
+            placeholder="Tìm theo mã, tên..."
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             onSearch={handleSearch}
-            style={{ width: 400 }}
+            className="w-full sm:w-72"
           />
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={() => fetchSubjects(1, pagination.pageSize)}
-          >
-            Làm mới
-          </Button>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setEditing(null);
-              form.resetFields();
-              setModalOpen(true);
-            }}
-          >
-            Thêm môn học
-          </Button>
-        </div>
-      </div>
 
+          {/* Buttons */}
+          <Flex gap={8} wrap="wrap">
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={() => fetchSubjects(1, pagination.pageSize)}
+            >
+              <span className="hidden sm:inline">Làm mới</span>
+            </Button>
+
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setEditing(null);
+                form.resetFields();
+                setModalOpen(true);
+              }}
+            >
+              <span className="hidden sm:inline">Thêm môn học</span>
+              <span className="inline sm:hidden">Thêm</span>
+            </Button>
+          </Flex>
+
+        </Flex>
+      </Flex>
+
+
+      {/* 🎯 TABLE WITH PROPER PAGINATION */}
       {loading ? (
         <div style={{ textAlign: "center", padding: 60 }}>
           <Spin size="large" tip="Đang tải danh sách môn học..." />
         </div>
       ) : (
-          // Thêm vào component Subjects
+        <div style={{ overflowX: "auto" }}>
           <Table<Subject>
             dataSource={subjects}
             columns={columns}
             rowKey="id"
             bordered
             pagination={{
-              ...pagination,
+              current: pagination.current,
+              pageSize: pagination.pageSize,
+              total: pagination.total,
               showSizeChanger: true,
               showTotal: (total) => `Tổng ${total} môn học`,
               pageSizeOptions: ["10", "20", "50", "100"],
+              position: ["bottomRight"],
+              style: { marginTop: 16 },
             }}
             onChange={handleTableChange}
             locale={{ emptyText: "Không có môn học nào" }}
-            scroll={{ x: 1400 }}
-            // 🆕 THÊM EXPANDABLE
+            scroll={{ x: 1200 }}
             expandable={{
               expandedRowRender: (record) => {
                 if (!record.chapters || record.chapters.length === 0) {
@@ -581,33 +565,33 @@ export default function SubjectsAdmin() {
                         title: "Mã chương",
                         dataIndex: "chapterCode",
                         key: "chapterCode",
-                        width: "15%",
+                        width: 120,
                         render: (text: string) => <Tag color="purple">{text}</Tag>,
                       },
                       {
                         title: "Tên chương",
                         dataIndex: "chapterName",
                         key: "chapterName",
-                        width: "35%",
+                        width: 250,
                       },
                       {
                         title: "Mô tả",
                         dataIndex: "description",
                         key: "description",
-                        width: "30%",
+                        width: 250,
                         ellipsis: true,
                       },
                       {
                         title: "Thứ tự",
                         dataIndex: "order",
                         key: "order",
-                        width: "10%",
+                        width: 80,
                         align: "center" as const,
                       },
                       {
                         title: "Số câu hỏi",
                         key: "questions",
-                        width: "10%",
+                        width: 100,
                         align: "center" as const,
                         render: (_: any, chapter: Chapter) => (
                           <Tag color="green">{chapter._count?.questions || 0}</Tag>
@@ -619,24 +603,9 @@ export default function SubjectsAdmin() {
               },
               rowExpandable: (record) =>
                 (record.chapters && record.chapters.length > 0) || true,
-              expandIcon: ({ expanded, onExpand, record }) =>
-                expanded ? (
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<span>▼</span>}
-                    onClick={(e) => onExpand(record, e)}
-                  />
-                ) : (
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<span>▶</span>}
-                    onClick={(e) => onExpand(record, e)}
-                  />
-                ),
             }}
           />
+        </div>
       )}
 
       {/* Modal thêm/sửa */}
@@ -668,10 +637,7 @@ export default function SubjectsAdmin() {
                 pattern: /^[A-Z0-9]+$/i,
                 message: "Mã môn học chỉ chứa chữ cái và số",
               },
-              {
-                max: 30,
-                message: "Mã môn học tối đa 30 ký tự",
-              },
+              { max: 30, message: "Mã môn học tối đa 30 ký tự" },
             ]}
           >
             <Input
@@ -687,10 +653,7 @@ export default function SubjectsAdmin() {
             name="subjectName"
             rules={[
               { required: true, message: "Vui lòng nhập tên môn học" },
-              {
-                max: 200,
-                message: "Tên môn học tối đa 200 ký tự",
-              },
+              { max: 200, message: "Tên môn học tối đa 200 ký tự" },
             ]}
           >
             <Input placeholder="VD: Lập trình căn bản" maxLength={200} />
@@ -699,12 +662,7 @@ export default function SubjectsAdmin() {
           <Form.Item
             label="Mô tả"
             name="description"
-            rules={[
-              {
-                max: 500,
-                message: "Mô tả tối đa 500 ký tự",
-              },
-            ]}
+            rules={[{ max: 500, message: "Mô tả tối đa 500 ký tự" }]}
           >
             <TextArea
               placeholder="Nhập mô tả chi tiết về môn học (không bắt buộc)"
@@ -731,7 +689,7 @@ export default function SubjectsAdmin() {
         </Form>
       </Modal>
 
-      {/* 🆕 Modal xem chi tiết */}
+      {/* Modal xem chi tiết */}
       <Modal
         title={
           <Space>
@@ -769,7 +727,6 @@ export default function SubjectsAdmin() {
           </div>
         ) : selectedSubject ? (
           <div>
-            {/* Thông tin môn học */}
             <Card style={{ marginBottom: 16 }}>
               <Descriptions bordered column={2} size="small">
                 <Descriptions.Item label="Mã môn học" span={1}>
@@ -787,11 +744,11 @@ export default function SubjectsAdmin() {
                 </Descriptions.Item>
                 <Descriptions.Item label="Số chương">
                   <Badge
-                      count={selectedSubject?.chapters?.length || 0}
+                    count={selectedSubject?.chapters?.length || 0}
                     showZero
                     color="cyan"
-                    />
-                  </Descriptions.Item>
+                  />
+                </Descriptions.Item>
                 <Descriptions.Item label="Số câu hỏi">
                   <Badge
                     count={selectedSubject._count?.questions || 0}
@@ -801,35 +758,37 @@ export default function SubjectsAdmin() {
                 </Descriptions.Item>
                 <Descriptions.Item label="Ngày tạo">
                   {selectedSubject.createdAt
-                    ? dayjs(selectedSubject.createdAt).format(
-                      "DD/MM/YYYY HH:mm"
-                    )
+                    ? dayjs(selectedSubject.createdAt).format("DD/MM/YYYY HH:mm")
                     : "—"}
                 </Descriptions.Item>
                 <Descriptions.Item label="Cập nhật">
                   {selectedSubject.updatedAt
-                    ? dayjs(selectedSubject.updatedAt).format(
-                      "DD/MM/YYYY HH:mm"
-                    )
+                    ? dayjs(selectedSubject.updatedAt).format("DD/MM/YYYY HH:mm")
                     : "—"}
                 </Descriptions.Item>
               </Descriptions>
             </Card>
 
-            {/* Danh sách chương */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <Title level={5}>
-                  <FolderOpenOutlined /> Danh sách chương ({chapters.length})
-                </Title>
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  size="small"
-                  onClick={handleCreateChapter}
-                >
-                  Thêm chương
-                </Button>
-              </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 12,
+              }}
+            >
+              <Title level={5}>
+                <FolderOpenOutlined /> Danh sách chương ({chapters.length})
+              </Title>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                size="small"
+                onClick={handleCreateChapter}
+              >
+                Thêm chương
+              </Button>
+            </div>
 
             {chapters.length === 0 ? (
               <Empty description="Chưa có chương nào" />
@@ -847,7 +806,14 @@ export default function SubjectsAdmin() {
                   <Panel
                     key={chapter.id}
                     header={
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          width: "100%",
+                        }}
+                      >
                         <Space>
                           <Tag color="purple">{chapter.chapterCode}</Tag>
                           <strong>{chapter.chapterName}</strong>
@@ -913,8 +879,7 @@ export default function SubjectsAdmin() {
                     ) : chapterQuestions[chapter.id] ? (
                       <>
                         <Title level={5} style={{ marginTop: 16 }}>
-                          Danh sách câu hỏi (
-                          {chapterQuestions[chapter.id].length})
+                          Danh sách câu hỏi ({chapterQuestions[chapter.id].length})
                         </Title>
                         {chapterQuestions[chapter.id].length === 0 ? (
                           <Empty
@@ -932,13 +897,12 @@ export default function SubjectsAdmin() {
                                 title: "ID",
                                 dataIndex: "id",
                                 key: "id",
-                                width: "8%",
+                                width: 60,
                               },
                               {
                                 title: "Nội dung",
                                 dataIndex: "content",
                                 key: "content",
-                                width: "45%",
                                 ellipsis: true,
                                 render: (text: string) => (
                                   <Tooltip title={text}>
@@ -956,21 +920,21 @@ export default function SubjectsAdmin() {
                                 title: "Loại",
                                 dataIndex: "type",
                                 key: "type",
-                                width: "15%",
+                                width: 120,
                                 render: renderQuestionTypeTag,
                               },
                               {
                                 title: "Độ khó",
                                 dataIndex: "difficulty",
                                 key: "difficulty",
-                                width: "12%",
+                                width: 110,
                                 render: renderDifficultyTag,
                               },
                               {
                                 title: "Điểm",
                                 dataIndex: "points",
                                 key: "points",
-                                width: "10%",
+                                width: 80,
                                 align: "center" as const,
                                 render: (points: number) => (
                                   <Tag color="orange">{points}</Tag>
@@ -980,9 +944,8 @@ export default function SubjectsAdmin() {
                                 title: "Ngày tạo",
                                 dataIndex: "createdAt",
                                 key: "createdAt",
-                                width: "12%",
-                                render: (v: string) =>
-                                  dayjs(v).format("DD/MM/YYYY"),
+                                width: 100,
+                                render: (v: string) => dayjs(v).format("DD/MM/YYYY"),
                               },
                             ]}
                           />
@@ -996,6 +959,7 @@ export default function SubjectsAdmin() {
           </div>
         ) : null}
       </Modal>
+
       {/* Modal thêm/sửa Chapter */}
       <Modal
         title={
@@ -1069,18 +1033,10 @@ export default function SubjectsAdmin() {
             name="order"
             rules={[
               { required: true, message: "Vui lòng nhập thứ tự" },
-              {
-                type: "number",
-                min: 0,
-                message: "Thứ tự phải >= 0"
-              },
+              { type: "number", min: 0, message: "Thứ tự phải >= 0" },
             ]}
           >
-            <InputNumber
-              min={0}
-              placeholder="0"
-              style={{ width: "100%" }}
-            />
+            <InputNumber min={0} placeholder="0" style={{ width: "100%" }} />
           </Form.Item>
 
           {editingChapter && editingChapter._count && (

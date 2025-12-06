@@ -67,6 +67,7 @@ type Assignment = {
   allowLateSubmission?: boolean;
   isPublic?: boolean;
   createdAt?: string;
+  chapterId: number;
   updatedAt?: string;
 };
 
@@ -146,7 +147,8 @@ export default function AssignmentsTeacherOut() {
   const [questionSubjects, setQuestionSubjects] = useState<QuestionSubject[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | undefined>();
-  const [selectedChapterId, setSelectedChapterId] = useState<number | undefined>();
+  // changed to support multiple chapters selection
+  const [selectedChapterIds, setSelectedChapterIds] = useState<number[]>([]);
   const [selectedDifficulty, setSelectedDifficulty] = useState<string | undefined>();
   const [selectedType, setSelectedType] = useState<string | undefined>();
 
@@ -172,19 +174,23 @@ export default function AssignmentsTeacherOut() {
     fetchQuestionSubjects();
   }, []);
 
+  // fetch questions when modal is open or filters change (support multiple chapters)
   useEffect(() => {
     if (modalOpen && userId) {
       fetchQuestionsMineAndPublic();
     }
-  }, [selectedSubjectId, selectedChapterId, selectedDifficulty, selectedType, modalOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSubjectId, selectedChapterIds, selectedDifficulty, selectedType, modalOpen]);
 
   useEffect(() => {
     if (selectedSubjectId) {
       fetchChaptersBySubject(selectedSubjectId);
     } else {
       setChapters([]);
-      setSelectedChapterId(undefined);
+      setSelectedChapterIds([]);
+      form.setFieldsValue({ chapterIds: [] });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSubjectId]);
 
   const calculateTotalPoints = () => {
@@ -278,6 +284,8 @@ export default function AssignmentsTeacherOut() {
     }
   }
 
+  // fetch questions of current user and public ones.
+  // now supports selectedChapterIds (multiple)
   async function fetchQuestionsMineAndPublic() {
     if (!userId) {
       toast.error("Không tìm thấy thông tin người dùng");
@@ -289,7 +297,8 @@ export default function AssignmentsTeacherOut() {
       const params: any = { page: 1, limit: 1000 };
 
       if (selectedSubjectId) params.subjectId = selectedSubjectId;
-      if (selectedChapterId) params.chapterId = selectedChapterId;
+      // backend might expect a CSV list; we send chapterIds as comma-separated list
+      if (selectedChapterIds && selectedChapterIds.length) params.chapterIds = selectedChapterIds.join(',');
       if (selectedDifficulty) params.difficulty = selectedDifficulty;
       if (selectedType) params.type = selectedType;
 
@@ -344,6 +353,8 @@ export default function AssignmentsTeacherOut() {
 
       const uniqueCode = uuidv4();
 
+      // preserve backward compatibility: include both chapterIds array and single chapterId (first)
+      const chapterIdsFromForm: number[] | undefined = values.chapterIds && values.chapterIds.length ? values.chapterIds : (values.chapterId ? [values.chapterId] : undefined);
       const payload = {
         ...(values.sectionId ? { sectionId: Number(values.sectionId) } : {}),
         title: values.title.trim(),
@@ -361,7 +372,10 @@ export default function AssignmentsTeacherOut() {
         createdBy: userId,
         originalAssignmentId: uniqueCode,
         subjectId: values.subjectId,
-        chapterId: values.chapterId,
+        // new field: chapterIds (array)
+        chapterIds: chapterIdsFromForm,
+        // keep chapterId (first) for backward compatibility if backend expects it
+        chapterId: chapterIdsFromForm && chapterIdsFromForm.length ? chapterIdsFromForm[0] : undefined,
       };
 
       console.log("Submitting assignment with payload:", payload);
@@ -475,10 +489,21 @@ export default function AssignmentsTeacherOut() {
   const openCreateEditModal = async (assignment?: Assignment) => {
     if (assignment) {
       setEditing(assignment);
+      // if backend only stored single chapterId so we convert it to array
       form.setFieldsValue({
         ...assignment,
         dueDate: assignment.dueDate ? dayjs(assignment.dueDate) : null,
+        chapterIds: (assignment as any).chapterIds ? (assignment as any).chapterIds : (assignment.chapterId?[assignment.chapterId] : []),
       });
+
+      // set selectedSubjectId and chapter ids for fetching chapters/questions
+      if ((assignment as any).subjectId) {
+        setSelectedSubjectId((assignment as any).subjectId);
+        // fetch chapters of subject
+        await fetchChaptersBySubject((assignment as any).subjectId);
+      }
+      const initialChapterIds: number[] = (assignment as any).chapterIds ? (assignment as any).chapterIds : (assignment.chapterId ? [assignment.chapterId] : []);
+      setSelectedChapterIds(initialChapterIds);
 
       setLoadingQuestions(true);
       try {
@@ -514,6 +539,7 @@ export default function AssignmentsTeacherOut() {
       form.resetFields();
       setAssignedQuestionIds([]);
       setTempSelectedQuestionIds([]);
+      setSelectedChapterIds([]);
     }
     resetFilters();
     setModalOpen(true);
@@ -702,10 +728,11 @@ export default function AssignmentsTeacherOut() {
 
   const resetFilters = () => {
     setSelectedSubjectId(undefined);
-    setSelectedChapterId(undefined);
+    setSelectedChapterIds([]);
     setSelectedDifficulty(undefined);
     setSelectedType(undefined);
     setQuestionKeyword("");
+    form.setFieldsValue({ chapterIds: [] });
   };
 
   const renderDifficultyTag = (difficulty?: string) => {
@@ -1073,8 +1100,8 @@ export default function AssignmentsTeacherOut() {
       )}
 
 
-      {/* Modal thêm/sửa - Tiếp theo ở phần 2 */}
       {/* Modal thêm/sửa */}
+      {/* 🎯 Modal thêm/sửa - RESPONSIVE */}
       <Modal
         title={editing ? "Sửa thông tin bài tập" : "Thêm bài tập mới"}
         open={modalOpen}
@@ -1091,7 +1118,8 @@ export default function AssignmentsTeacherOut() {
           disabled: !isPointsValid()
         }}
         cancelText="Hủy"
-        width={1400}
+        width="95%"  // ✅ Đổi từ 1400 sang 95%
+        style={{ maxWidth: 1400 }}  // ✅ Thêm maxWidth
         centered
         bodyStyle={{
           maxHeight: "75vh",
@@ -1099,14 +1127,15 @@ export default function AssignmentsTeacherOut() {
           overflowX: "hidden",
         }}
       >
-        <Row gutter={24}>
-          <Col span={10}>
+        <Row gutter={[24, 16]}>  {/* ✅ Thêm responsive gutter */}
+          {/* ✅ Form bên trái - responsive */}
+          <Col xs={24} lg={10}>  {/* ✅ Đổi từ span={10} sang xs={24} lg={10} */}
             <Title level={5} style={{ marginBottom: 12 }}>Thông tin bài tập</Title>
 
             <Form
               form={form}
               layout="vertical"
-              className="[&_.ant-form-item]:mb-3"
+              className="[&_. ant-form-item]:mb-3"
             >
               <Form.Item
                 label="Tiêu đề"
@@ -1114,7 +1143,7 @@ export default function AssignmentsTeacherOut() {
                 rules={[{ required: true }]}
                 className="mb-3"
               >
-                <Input placeholder="VD: Bài tập OOP" className="!py-1.5 !px-2" />
+                <Input placeholder="VD: Bài tập OOP" className="! py-1.5 !px-2" />
               </Form.Item>
 
               <Form.Item label="Mô tả" name="description" className="mb-3">
@@ -1131,7 +1160,8 @@ export default function AssignmentsTeacherOut() {
                   placeholder="Chọn môn học"
                   onChange={(value) => {
                     setSelectedSubjectId(value);
-                    form.setFieldsValue({ chapterId: undefined });
+                    setSelectedChapterIds([]);
+                    form.setFieldsValue({ chapterIds: [] });
                     fetchChaptersBySubject(value);
                   }}
                 >
@@ -1145,13 +1175,19 @@ export default function AssignmentsTeacherOut() {
 
               <Form.Item
                 label="Chương"
-                name="chapterId"
+                name="chapterIds"
                 className="mb-3"
-                rules={[{ required: true, message: "Vui lòng chọn chương" }]}
+                rules={[{ required: true, message: "Vui lòng chọn ít nhất một chương" }]}
               >
                 <Select
-                  placeholder="Chọn chương"
+                  mode="multiple"
+                  placeholder="Chọn chương (có thể chọn nhiều)"
                   disabled={!selectedSubjectId}
+                  value={selectedChapterIds}
+                  onChange={(values: number[]) => {
+                    setSelectedChapterIds(values || []);
+                    form.setFieldsValue({ chapterIds: values || [] });
+                  }}
                 >
                   {chapters.map((c) => (
                     <Option key={c.id} value={c.id}>
@@ -1165,14 +1201,12 @@ export default function AssignmentsTeacherOut() {
                 label="Độ khó"
                 name="difficulty"
                 className="mb-3"
-                rules={[
-                  { required: true, message: "Vui lòng chọn độ khó" }
-                ]}
+                rules={[{ required: true, message: "Vui lòng chọn độ khó" }]}
               >
                 <Select placeholder="Chọn độ khó">
-                  <Option value="REMEDIAL">Dễ </Option>
-                  <Option value="NORMAL">Trung bình </Option>
-                  <Option value="ADVANCED">Khó </Option>
+                  <Option value="REMEDIAL">Dễ</Option>
+                  <Option value="NORMAL">Trung bình</Option>
+                  <Option value="ADVANCED">Khó</Option>
                 </Select>
               </Form.Item>
 
@@ -1184,25 +1218,34 @@ export default function AssignmentsTeacherOut() {
                 />
               </Form.Item>
 
-              <Divider className="!my-3">Cấu hình</Divider>
+              <Divider className="! my-3">Cấu hình</Divider>
 
-              <div className="grid grid-cols-2 gap-4">
-                <Form.Item label="Điểm tối đa" name="maxScore" className="mb-3">
-                  <Input type="number" className="!py-1.5 !px-2" />
-                </Form.Item>
-                <Form.Item label="Điểm đạt" name="passingScore" className="mb-3">
-                  <Input type="number" className="!py-1.5 !px-2" />
-                </Form.Item>
-              </div>
+              {/* ✅ Responsive grid */}
+              <Row gutter={[16, 0]}>
+                <Col xs={24} sm={12}>
+                  <Form.Item label="Điểm tối đa" name="maxScore" className="mb-3">
+                    <Input type="number" className="!py-1.5 !px-2" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item label="Điểm đạt" name="passingScore" className="mb-3">
+                    <Input type="number" className="!py-1. 5 !px-2" />
+                  </Form.Item>
+                </Col>
+              </Row>
 
-              <div className="grid grid-cols-2 gap-4">
-                <Form.Item label="Thời gian (phút)" name="timeLimit" className="mb-3">
-                  <Input type="number" className="!py-1.5 !px-2" />
-                </Form.Item>
-                <Form.Item label="Số lần nộp" name="maxAttempts" className="mb-3">
-                  <Input type="number" className="!py-1.5 !px-2" />
-                </Form.Item>
-              </div>
+              <Row gutter={[16, 0]}>
+                <Col xs={24} sm={12}>
+                  <Form.Item label="Thời gian (phút)" name="timeLimit" className="mb-3">
+                    <Input type="number" className="!py-1.5 !px-2" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item label="Số lần nộp" name="maxAttempts" className="mb-3">
+                    <Input type="number" className="!py-1.5 !px-2" />
+                  </Form.Item>
+                </Col>
+              </Row>
 
               <Form.Item name="shuffleQuestions" valuePropName="checked" className="mb-2">
                 <Checkbox>Xáo trộn câu hỏi</Checkbox>
@@ -1210,7 +1253,7 @@ export default function AssignmentsTeacherOut() {
               <Form.Item name="showAnswersAfterSubmit" valuePropName="checked" className="mb-2">
                 <Checkbox>Hiện đáp án sau khi nộp</Checkbox>
               </Form.Item>
-              <Form.Item name="allowLateSubmission" valuePropName="checked" className="mb-0">
+              <Form.Item name="allowLateSubmission" valuePropName="checked" className="mb-2">
                 <Checkbox>Cho phép nộp muộn</Checkbox>
               </Form.Item>
               <Form.Item
@@ -1229,11 +1272,11 @@ export default function AssignmentsTeacherOut() {
             </Form>
           </Col>
 
-          <Col span={14}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          {/* ✅ Questions bên phải - responsive */}
+          <Col xs={24} lg={14}>  {/* ✅ Đổi từ span={14} sang xs={24} lg={14} */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
               <Title level={5} style={{ margin: 0 }}>Câu hỏi (Của bạn + Public)</Title>
-              <Space>
-                {/* 🔥 Quick Add Button */}
+              <Space wrap>  {/* ✅ Thêm wrap */}
                 <Button
                   icon={<ThunderboltOutlined />}
                   size="small"
@@ -1241,22 +1284,24 @@ export default function AssignmentsTeacherOut() {
                   ghost
                   onClick={openQuickAddModal}
                 >
-                  Thêm câu hỏi nhanh
+                  <span className="hidden sm:inline">Thêm câu hỏi nhanh</span>
+                  <span className="inline sm:hidden">Nhanh</span>
                 </Button>
                 <Button
                   icon={<ClearOutlined />}
                   size="small"
                   onClick={resetFilters}
                 >
-                  Xóa bộ lọc
+                  <span className="hidden sm:inline">Xóa bộ lọc</span>
+                  <span className="inline sm:hidden">Xóa</span>
                 </Button>
               </Space>
             </div>
 
             <Card size="small" style={{ marginBottom: 12, backgroundColor: "#fafafa" }}>
               <Space direction="vertical" style={{ width: "100%" }} size="small">
-                <Row gutter={8}>
-                  <Col span={12}>
+                <Row gutter={[8, 8]}>  {/* ✅ Responsive gutter */}
+                  <Col xs={24} sm={12}>
                     <Text type="secondary" style={{ fontSize: 12 }}>Độ khó:</Text>
                     <Select
                       allowClear
@@ -1271,7 +1316,7 @@ export default function AssignmentsTeacherOut() {
                       <Option value="hard">Khó</Option>
                     </Select>
                   </Col>
-                  <Col span={12}>
+                  <Col xs={24} sm={12}>
                     <Text type="secondary" style={{ fontSize: 12 }}>Loại câu hỏi:</Text>
                     <Select
                       allowClear
@@ -1299,39 +1344,41 @@ export default function AssignmentsTeacherOut() {
               onChange={(e) => setQuestionKeyword(e.target.value)}
               style={{ marginBottom: 12 }}
               size="small"
+              autoComplete="off"
             />
 
             <Card size="small" style={{ marginBottom: 12 }}>
-              <Row gutter={16}>
-                <Col span={8}>
+              <Row gutter={[16, 8]}>  {/* ✅ Responsive gutter */}
+                <Col xs={8}>
                   <Statistic
                     title="Tổng số câu"
                     value={questions.length}
-                    valueStyle={{ fontSize: 20 }}
+                    valueStyle={{ fontSize: 16 }} 
                   />
                 </Col>
-                <Col span={8}>
+                <Col xs={8}>
                   <Statistic
                     title="Đã chọn"
                     value={tempSelectedQuestionIds.length}
-                    valueStyle={{ fontSize: 20, color: "#1890ff" }}
+                    valueStyle={{ fontSize: 16, color: "#1890ff" }}
                   />
                 </Col>
-                <Col span={8}>
+                <Col xs={8}>
                   <Statistic
                     title="Tổng điểm"
                     value={calculateTotalPoints()}
                     valueStyle={{
-                      fontSize: 20,
+                      fontSize: 16,
                       color: calculateTotalPoints() === Number(form.getFieldValue('maxScore') || 10)
                         ? "#52c41a"
                         : "#ff4d4f"
                     }}
-                    suffix={`/ ${form.getFieldValue('maxScore') || 10}`}
+                    suffix={`/${form.getFieldValue('maxScore') || 10}`}
                   />
                 </Col>
               </Row>
             </Card>
+
             <div
               style={{
                 maxHeight: 400,
@@ -1385,12 +1432,12 @@ export default function AssignmentsTeacherOut() {
                         />
                         <div style={{ flex: 1 }}>
                           <div
-                            style={{ fontWeight: 500, marginBottom: 4 }}
+                            style={{ fontWeight: 500, marginBottom: 4, fontSize: 13 }}
                             dangerouslySetInnerHTML={{
                               __html: q.content.substring(0, 100) + (q.content.length > 100 ? "..." : "")
                             }}
                           />
-                          <div style={{ fontSize: 12 }}>
+                          <div style={{ fontSize: 11, display: "flex", flexWrap: "wrap", gap: 4 }}>  {/* ✅ Giảm fontSize tags */}
                             {renderTypeTag(q.type)}
                             {renderDifficultyTag(q.difficulty)}
                             {q.points && <Tag color="green">{q.points} điểm</Tag>}
@@ -1421,12 +1468,12 @@ export default function AssignmentsTeacherOut() {
         </Row>
       </Modal>
 
-      {/* 🔥 Modal thêm câu hỏi nhanh (Quick Add) */}
+      {/* 🎯 Modal thêm câu hỏi nhanh (Quick Add) - RESPONSIVE */}
       <Modal
         title={
           <Space>
             <ThunderboltOutlined />
-            Thêm câu hỏi nhanh
+            <span>Thêm câu hỏi nhanh</span>
           </Space>
         }
         open={quickAddModalOpen}
@@ -1439,12 +1486,13 @@ export default function AssignmentsTeacherOut() {
         okText="Thêm câu hỏi"
         cancelText="Hủy"
         confirmLoading={addingQuestions}
-        width={800}
+        width="95%"  // ✅ Đổi từ 800 sang 95%
+        style={{ maxWidth: 800 }}  // ✅ Thêm maxWidth
         centered
       >
         <Alert
           message="Hướng dẫn"
-          description="Chọn môn học và cấu hình số lượng câu hỏi theo chương, độ khó và điểm. Hệ thống sẽ tự động chọn ngẫu nhiên các câu hỏi phù hợp từ câu hỏi của bạn và câu hỏi công khai."
+          description="Chọn môn học và cấu hình số lượng câu hỏi theo chương, độ khó và điểm.  Hệ thống sẽ tự động chọn ngẫu nhiên các câu hỏi phù hợp từ câu hỏi của bạn và câu hỏi công khai."
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
@@ -1479,27 +1527,24 @@ export default function AssignmentsTeacherOut() {
               <>
                 {fields.map(({ key, name, ...restField }) => (
                   <Card key={key} size="small" style={{ marginBottom: 12 }}>
-                    <Row gutter={16}>
-                      <Col span={24}>
-                        <Form.Item
-                          {...restField}
-                          name={[name, "chapterId"]}
-                          label="Chương"
-                          rules={[{ required: true }]}
-                        >
-                          <Select placeholder="Chọn chương">
-                            {quickAddChapters.map((c) => (
-                              <Option key={c.id} value={c.id}>
-                                {c.chapterCode} - {c.chapterName}
-                              </Option>
-                            ))}
-                          </Select>
-                        </Form.Item>
-                      </Col>
-                    </Row>
+                    <Form.Item
+                      {...restField}
+                      name={[name, "chapterId"]}
+                      label="Chương"
+                      rules={[{ required: true }]}
+                    >
+                      <Select placeholder="Chọn chương">
+                        {quickAddChapters.map((c) => (
+                          <Option key={c.id} value={c.id}>
+                            {c.chapterCode} - {c.chapterName}
+                          </Option>
+                        ))}
+                      </Select>
+                    </Form.Item>
 
-                    <Row gutter={8}>
-                      <Col span={8}>
+                    {/* ✅ Responsive grid cho độ khó */}
+                    <Row gutter={[8, 16]}>
+                      <Col xs={24} sm={8}>
                         <Text strong>Dễ:</Text>
                         <Form.Item {...restField} name={[name, "easy", "count"]} label="Số câu">
                           <InputNumber min={0} style={{ width: "100%" }} placeholder="0" />
@@ -1509,7 +1554,7 @@ export default function AssignmentsTeacherOut() {
                         </Form.Item>
                       </Col>
 
-                      <Col span={8}>
+                      <Col xs={24} sm={8}>
                         <Text strong>Trung bình:</Text>
                         <Form.Item {...restField} name={[name, "medium", "count"]} label="Số câu">
                           <InputNumber min={0} style={{ width: "100%" }} placeholder="0" />
@@ -1519,7 +1564,7 @@ export default function AssignmentsTeacherOut() {
                         </Form.Item>
                       </Col>
 
-                      <Col span={8}>
+                      <Col xs={24} sm={8}>
                         <Text strong>Khó:</Text>
                         <Form.Item {...restField} name={[name, "hard", "count"]} label="Số câu">
                           <InputNumber min={0} style={{ width: "100%" }} placeholder="0" />
@@ -1544,8 +1589,8 @@ export default function AssignmentsTeacherOut() {
           </Form.List>
         </Form>
       </Modal>
+      {/* other modals (autoGen, assignModal) left unchanged except they still work with chapterIds logic where applicable */}
 
-      {/* Modal tự động tạo câu hỏi */}
       <Modal
         title={
           <Space>
@@ -1662,7 +1707,6 @@ export default function AssignmentsTeacherOut() {
         </Form>
       </Modal>
 
-      {/* Modal gán lớp */}
       <Modal
         title={`Giao bài tập "${selectedAssignment?.title}" cho lớp`}
         open={assignModalOpen}

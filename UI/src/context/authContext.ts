@@ -58,22 +58,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     // ✅ Load user khi app khởi động
-    useEffect(() => {
-        instance
-            .get("/auths/me")
-            .then((res: any) => {
-                console.log("✅ User loaded from cookie:", res.data.user);
-                setUser(res.data.user);
-            })
-            .catch((err) => {
-                console.log(
-                    "⚠️ No valid session:",
-                    err.response?.data?.message
-                );
-                setUser(null);
-            })
-            .finally(() => setLoading(false));
-    }, []);
+   useEffect(() => {
+       const path = window.location.pathname;
+
+       const PUBLIC_PAGES = ["/diemdanh", "/join"];
+
+       // Nếu đang ở public pages => skip fetch /auths/me
+       if (PUBLIC_PAGES.includes(path)) {
+           console.log("⛔ Skip auth fetch on public page:", path);
+           setLoading(false);
+           return;
+       }
+
+       instance
+           .get("/auths/me", { withCredentials: true })
+           .then((res: any) => {
+               console.log("✅ User loaded from cookie:", res.data.user);
+               setUser(res.data.user);
+           })
+           .catch(() => {
+               console.log("⚠️ Invalid session");
+               setUser(null);
+           })
+           .finally(() => setLoading(false));
+   }, []);
 
     // ✅ Login và trả về user
     const login = async (
@@ -109,19 +117,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     };
 
     // ✅ Check permission
-   const hasPermission = (permission: string) => {
-       if (!user) return false;
+    const hasPermission = (permission: string) => {
+        if (!user) return false;
 
-       const perms = user.role?.permissions || [];
+        const perms = user.role?.permissions || [];
 
-       // Nếu có quyền "*" => mở toàn bộ
-       if (perms.some((p) => p.name === "*")) {
-           return true;
-       }
+        // Nếu có quyền "*" => mở toàn bộ
+        if (perms.some((p) => p.name === "*")) {
+            return true;
+        }
 
-       // Nếu có quyền đúng tên permission
-       return perms.some((p) => p.name === permission);
-   };
+        // Nếu có quyền đúng tên permission
+        return perms.some((p) => p.name === permission);
+    };
 
     return React.createElement(
         AuthContext.Provider,

@@ -1136,8 +1136,6 @@ export default function GradesTeacher() {
       {
         title: "STT",
         key: "stt",
-        width: 60,
-        fixed: "left",
         align: "center",
         render: (_: any, __: Student, index: number) => index + 1,
       },
@@ -1145,8 +1143,6 @@ export default function GradesTeacher() {
         title: "Mã SV",
         dataIndex: "studentCode",
         key: "studentCode",
-        width: 120,
-        fixed: "left",
         ellipsis: true,
         render: (text: string) => (
           <Tooltip title={text}>
@@ -1158,8 +1154,6 @@ export default function GradesTeacher() {
         title: "Họ và tên",
         dataIndex: ["user", "fullName"],
         key: "fullName",
-        width: 200,
-        fixed: "left",
         ellipsis: true,
         render: (text: string) => (
           <Tooltip title={text}>
@@ -1171,7 +1165,6 @@ export default function GradesTeacher() {
         title: "Email",
         dataIndex: ["user", "email"],
         key: "email",
-        width: 200,
         ellipsis: true,
         render: (text: string) => (
           <Tooltip title={text || '-'}>

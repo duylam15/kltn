@@ -127,12 +127,16 @@ async function getNonce(sessionId: number) {
 }
 
 async function getSignature(base: string) {
-  const res = await instance.post(`/attendance/sign`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ base }),
-  });
+  const res = await instance.post(
+    "/attendance/sign",
+    {
+      base,
+    },
+    {
+      withCredentials: true,
+    }
+  );
+
   const data = res.data;
   if (!data.success) throw new Error(data.message || "Không ký được payload");
   return data.signature as string;
@@ -205,11 +209,11 @@ export default function RollCallStudent() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(
+      const res = await instance.get(
         `/attendance/sections/${sectionId}/sessions`,
-        { credentials: "include" }
+        { withCredentials: true }
       );
-      const data = await res.json();
+      const data = res.data;
       if (data.success) setSessions(data.data);
       else setError(data.message || "Không thể tải danh sách điểm danh");
     } catch {
@@ -264,16 +268,10 @@ export default function RollCallStudent() {
           ].join("|");
           const payloadSig = await getSignature(base);
 
-          const res = await fetch(`/attendance/check-in`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Device-Screen": fields.screen,
-              "X-Device-TZ": fields.timezone,
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              sessionId: Number(sessionId),
+          const res = await instance.post(
+            "/attendance/check-in",
+            {
+              sessionId: +sessionId,
               studentCode,
               latitude,
               longitude,
@@ -281,10 +279,18 @@ export default function RollCallStudent() {
               deviceId,
               nonce,
               payloadSig,
-            }),
-          });
+            },
+            {
+              headers: {
+                "X-Device-Screen": fields.screen,
+                "X-Device-TZ": fields.timezone,
+              },
+              withCredentials: true,
+            }
+          );
 
-          const data = await res.json();
+
+          const data = res.data;
           if (data.success) {
             toast.success(
               `${data.message}` +
@@ -334,24 +340,8 @@ export default function RollCallStudent() {
   }
 
   return (
-    <div className="w-full min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30">
+    <div className="w-full min-h-screen ">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 ">
-        {/* Error Alert */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-xl flex items-start gap-3 shadow-sm animate-in slide-in-from-top-2">
-            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-red-800">{error}</p>
-            </div>
-            <button
-              onClick={() => setError("")}
-              className="text-red-400 hover:text-red-600 transition-colors"
-            >
-              <XCircle className="w-5 h-5" />
-            </button>
-          </div>
-        )}
-
         {/* Sessions Grid */}
         {sessions.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">
@@ -380,23 +370,32 @@ export default function RollCallStudent() {
               return (
                 <div
                   key={session.id}
-                  className={`bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border-2 w-[300px] ${att
+                  className={`
+    bg-white rounded-2xl shadow-md hover:shadow-xl 
+    transition-all duration-300 overflow-hidden border-2 
+    w-full
+    ${att
                       ? config?.border
                       : canCheckIn
                         ? "border-blue-200 hover:border-blue-400"
                         : "border-gray-200"
-                    } ${canCheckIn ? "hover:-translate-y-1" : ""}`}
+                    }
+    ${canCheckIn ? "hover:-translate-y-1" : ""}
+  `}
                 >
+
+
+
                   {/* Header Gradient */}
 
                   <div className="p-5 ">
                     <div className="flex items-center gap-3 mb-4">
                       <div
                         className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center ${att
-                            ? config?.bg
-                            : canCheckIn
-                              ? "bg-gradient-to-br from-blue-500 to-indigo-600"
-                              : "bg-gray-100"
+                          ? config?.bg
+                          : canCheckIn
+                            ? "bg-gradient-to-br from-blue-500 to-indigo-600"
+                            : "bg-gray-100"
                           }`}
                       >
                         {att && StatusIcon ? (
@@ -418,9 +417,6 @@ export default function RollCallStudent() {
                     <div className="space-y-2. 5 mb-4">
                       {session.expiresAt && (
                         <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <div className="w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center">
-                            <Timer className="w-4 h-4" />
-                          </div>
                           <span className="truncate">
                             Hết hạn: {fmtWhen(session.expiresAt)}
                           </span>
@@ -440,21 +436,6 @@ export default function RollCallStudent() {
                           <span className={`text-sm font-bold ${config?.color}`}>
                             {config?.text}
                           </span>
-                        </div>
-
-                        <div className="flex items-center justify-between text-xs text-gray-600 px-2">
-                          <div className="flex items-center gap-1. 5">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>
-                              {dayjs(att.checkedInAt).format("HH:mm:ss")}
-                            </span>
-                          </div>
-                          {att.distance !== null && (
-                            <div className="flex items-center gap-1.5">
-                              <MapPin className="w-3.5 h-3.5" />
-                              <span>{att.distance.toFixed(0)}m</span>
-                            </div>
-                          )}
                         </div>
                       </div>
                     ) : canCheckIn ? (

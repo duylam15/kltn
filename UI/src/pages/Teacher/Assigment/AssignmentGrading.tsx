@@ -141,13 +141,15 @@ export default function AssignmentGrading() {
 				`/assignments/${assignmentId}`
 			);
 
+			console.log(assignmentRes);
+
 			if (!assignmentRes.data.success) {
 				toast.error("Không tải được thông tin bài tập");
 				return;
 			}
 
 			const assignment = assignmentRes.data.data;
-
+			console.log("studentsstudentsstudentsstudentsstudents", students);
 			const allSubmissionsPromises = students.map(async (student) => {
 				try {
 					const res = await instance.get<{ success: boolean; data: Submission[] }>(
@@ -155,8 +157,19 @@ export default function AssignmentGrading() {
 					);
 
 					if (res.data.success && res.data.data) {
+						// 🔥 Ưu tiên submission có isFinal = true
 						const finalSubmission = res.data.data.find(sub => sub.isFinal === true);
-						return finalSubmission || null;
+
+						if (finalSubmission) {
+							return finalSubmission;
+						}
+
+						// 🔥 Nếu không có isFinal, lấy submission MỚI NHẤT
+						const sortedSubmissions = res.data.data.sort(
+							(a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
+						);
+
+						return sortedSubmissions[0] || null;
 					}
 					return null;
 				} catch (err) {
@@ -165,7 +178,9 @@ export default function AssignmentGrading() {
 				}
 			});
 
+
 			const allSubmissions = await Promise.all(allSubmissionsPromises);
+			console.log("allSubmissions:", allSubmissions);
 			const finalSubmissions = allSubmissions.filter(sub => sub !== null) as Submission[];
 
 			setSelectedAssignment({
@@ -215,6 +230,8 @@ export default function AssignmentGrading() {
 			const answersRes = await instance.get<{ success: boolean; data: any[] }>(
 				`/submission-answers/submission/${submissionId}`
 			);
+
+			console.log("aaaaa",submissionRes, answersRes);
 
 			const answersWithQuestions = await Promise.all(
 				(answersRes.data.data || []).map(async (answer: any) => {
@@ -281,7 +298,7 @@ export default function AssignmentGrading() {
 				`/submission-answers/${answerId}`,
 				{ score: newScore }
 			);
-
+console.log("res:", res);
 			if (res.data.success) {
 				toast.success("Đã cập nhật điểm câu trả lời");
 
@@ -315,6 +332,7 @@ export default function AssignmentGrading() {
 			toast.error("Không thể cập nhật điểm");
 		}
 	};
+	console.log(submissionDetail);
 
 	// 🔥 HÀM CHẠY LẠI CODE (Re-grade)
 	const handleReGradeCode = async (answerId: number, questionId: number) => {

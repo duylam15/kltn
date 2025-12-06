@@ -9,7 +9,8 @@ import {
   Tooltip,
   Form,
   DatePicker,
-  Space, InputNumber
+  Space, InputNumber,
+  Flex
 } from "antd";
 import {
   ReloadOutlined,
@@ -31,6 +32,7 @@ import toast from "react-hot-toast";
 import { useAuth } from "../../context/authContext";
 import { DynamicQr } from "../../pages/Teacher/DynamicQr";
 import instance from "../../utils/axiosInstance";
+import { FileX } from "lucide-react";
 
 
 type Session = {
@@ -474,6 +476,7 @@ export default function RollCall() {
     {
       title: "Hành động",
       key: "actions",
+      fixed: "right" as const,
       render: (_: any, record: Session) => (
         <div style={{ display: "flex", gap: 8 }}>
           <Tooltip title="Xem QR Code">
@@ -828,17 +831,14 @@ export default function RollCall() {
   if (loading) return <Spin tip="Đang tải..." />;
 
   return (
-    <div style={{ padding: 16 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 16,
-          marginTop: -16,
-        }}
+    <div >
+      <Flex
+        wrap="wrap"
+        gap={12}
+        className="flex-col sm:flex-row items-start sm:items-center w-full mb-4 -mt-4"
       >
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        {/* Stats - Left side */}
+        <Flex gap={8} wrap="wrap" className="w-full sm:w-auto mt-4">
           <div
             style={{
               display: "flex",
@@ -896,40 +896,73 @@ export default function RollCall() {
               </strong>
             </div>
           )}
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        </Flex>
+
+        {/* Actions - Right side */}
+        <Flex
+          gap={8}
+          wrap="wrap"
+          className="w-full sm:w-auto sm:ml-auto"
+        >
+          {/* Search */}
           <Input
             allowClear
             prefix={<SearchOutlined />}
             placeholder="Tìm theo tên/mã phiên..."
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            style={{ width: 200 }}
+            className="w-full sm:w-52"
+            size="small"
           />
-          <Button icon={<ReloadOutlined />} onClick={fetchSessions}>
-            Refresh
-          </Button>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setEditing(null);
-              createForm.resetFields();
-              setCreateModalOpen(true);
-            }}
-          >
-            Tạo phiên điểm danh
-          </Button>
-        </div>
-      </div>
 
-      <Table<Session>
-        dataSource={filteredSessions}
-        columns={columns}
-        rowKey="id"
-        bordered
-        pagination={{ pageSize: 10 }}
-      />
+          {/* Buttons */}
+          <Flex gap={8} wrap="wrap" className="w-full sm:w-auto">
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={fetchSessions}
+              size="small"
+              className="flex-1 sm:flex-none"
+            >
+              <span className="hidden sm:inline">Refresh</span>
+            </Button>
+
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setEditing(null);
+                createForm.resetFields();
+                setCreateModalOpen(true);
+              }}
+              size="small"
+              className="flex-1 sm:flex-none"
+            >
+              <span className="hidden md:inline">Tạo phiên điểm danh</span>
+              <span className="inline md:hidden">Tạo phiên</span>
+            </Button>
+          </Flex>
+        </Flex>
+      </Flex>
+
+      {/* 🎯 RESPONSIVE TABLE */}
+      <div style={{ overflowX: "auto" }}>
+        <Table<Session>
+          dataSource={filteredSessions}
+          columns={columns}
+          rowKey="id"
+          bordered
+          pagination={{
+            pageSize: 10,
+            showSizeChanger: true,
+            showTotal: (total) => `Tổng ${total} phiên`,
+            pageSizeOptions: ["10", "20", "50"],
+            position: ["bottomRight"],
+            style: { marginTop: 16 },
+          }}
+          scroll={{ x: 1200 }}
+          size="middle"
+        />
+      </div>
 
       {/* Modal QR */}
       <Modal

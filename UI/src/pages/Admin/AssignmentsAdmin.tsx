@@ -23,6 +23,7 @@ import {
 	Alert,
 	Drawer,
 	Grid,
+	Flex,
 } from "antd";
 import {
 	ReloadOutlined,
@@ -146,7 +147,7 @@ export default function AssignmentsAdmin() {
 		number[]
 	>([]);
 	const [loadingQuestions, setLoadingQuestions] = useState(false);
-	const [questionKeyword, setQuestionKeyword] = useState("");
+	const [questionKeyword, setQuestionKeyword] = useState("ddd");
 
 	const [questionSubjects, setQuestionSubjects] = useState<QuestionSubject[]>(
 		[]
@@ -655,12 +656,13 @@ export default function AssignmentsAdmin() {
 			dataIndex: "title",
 			key: "title",
 			render: (text: string) => <strong>{text}</strong>,
-			responsive: ["xs", "sm", "md", "lg", "xl"] as any,
+			width: 250,
 		},
 		{
 			title: "Loại",
 			dataIndex: "type",
 			key: "type",
+			width: 120,
 			render: (type: string) => {
 				const colors: Record<string, string> = {
 					exercise: "blue",
@@ -670,36 +672,35 @@ export default function AssignmentsAdmin() {
 				};
 				return <Tag color={colors[type]}>{type.toUpperCase()}</Tag>;
 			},
-			responsive: ["sm", "md", "lg", "xl"] as any,
 		},
 		{
 			title: "Điểm",
 			dataIndex: "maxScore",
 			key: "maxScore",
 			align: "center" as const,
-			responsive: ["md", "lg", "xl"] as any,
+			width: 80,
 		},
 		{
 			title: "Hạn nộp",
 			dataIndex: "dueDate",
 			key: "dueDate",
+			width: 180,
 			render: (v: string) =>
 				v ? dayjs(v).format("DD/MM/YYYY HH:mm") : <Tag>Không</Tag>,
-			responsive: ["lg", "xl"] as any,
 		},
 		{
 			title: "Ngày tạo",
 			dataIndex: "createdAt",
 			key: "createdAt",
+			width: 140,
 			render: (v: string) => (v ? dayjs(v).format("DD/MM/YYYY") : "—"),
-			responsive: ["xl"] as any,
 		},
 		{
 			title: "Hành động",
 			key: "actions",
 			align: "center" as const,
-			fixed: isMobile ? undefined : ("right" as const),
-			width: isMobile ? undefined : 180,
+			fixed: "right" as const,
+			width: 100,
 			render: (_: any, record: Assignment) => (
 				<Space size="small" wrap>
 					<Tooltip title="Sửa">
@@ -763,61 +764,80 @@ export default function AssignmentsAdmin() {
 	});
 
 	return (
-		<div className="p-3 ">
+		<div className="sm:px-3 h-auto sm:h-auto">
 			{/* Header */}
-			<div className="flex flex-col gap-4 mb-4 md:flex-row md:justify-between md:items-center">
-				<Title level={isMobile ? 4 : 3} className="! mb-0">
-					<div className="flex items-center gap-2">
+			{/* 🎯 RESPONSIVE HEADER */}
+			<Flex
+				wrap="wrap"
+				gap={12}
+				className="flex-col sm:flex-row items-start sm:items-center w-full pt-3 pb-5"
+			>
+				{/* Title Left */}
+				<Title level={isMobile ? 4 : 3} style={{ margin: 0 }}>
+					<Flex align="center" gap={8}>
 						<FileQuestion size={isMobile ? 20 : 24} />
 						<span>Quản lý Bài tập</span>
-					</div>
+					</Flex>
 				</Title>
 
-				<Space direction={isMobile ? "vertical" : "horizontal"} className="w-full md:w-auto">
+				{/* Action Right */}
+				<Flex
+					gap={8}
+					wrap="wrap"
+					className="w-full sm:w-auto sm:ml-auto"
+				>
+					{/* Search */}
 					<Input
 						allowClear
 						prefix={<SearchOutlined />}
-						placeholder={isMobile ? "Tìm kiếm..." : "Tìm theo tiêu đề, mô tả, loại... "}
+						placeholder={isMobile ? "Tìm kiếm..." : "Tìm theo tiêu đề, mô tả..."}
 						value={keyword}
 						onChange={(e) => setKeyword(e.target.value)}
-						className="w-full md:w-64 lg:w-96"
+						className="w-full sm:w-72"
 					/>
-					<Space>
+
+					{/* Buttons */}
+					<Flex gap={8} wrap="wrap">
 						<Button icon={<ReloadOutlined />} onClick={fetchAssignments}>
-							{!isMobile && "Làm mới"}
+							<span className="hidden sm:inline">Làm mới</span>
 						</Button>
 						<Button
 							type="primary"
 							icon={<PlusOutlined />}
 							onClick={() => openCreateEditModal()}
 						>
-							{isMobile ? "Thêm" : "Thêm bài tập"}
+							<span className="hidden sm:inline">Thêm bài tập</span>
+							<span className="inline sm:hidden">Thêm</span>
 						</Button>
-					</Space>
-				</Space>
-			</div>
+					</Flex>
+				</Flex>
+			</Flex>
 
 			{/* Table */}
 			{loading ? (
-				<div className="text-center py-16">
+				<div style={{ textAlign: "center", padding: 60 }}>
 					<Spin size="large" tip="Đang tải danh sách bài tập..." />
 				</div>
 			) : (
-				<Table<Assignment>
-					dataSource={filteredAssignments}
-					columns={columns}
-					rowKey="id"
-					bordered
-					scroll={{ x: isMobile ? 800 : undefined }}
-					pagination={{
-						pageSize: 10,
-						showSizeChanger: !isMobile,
-						showTotal: (total) => `Tổng ${total} bài tập`,
-						responsive: true,
-					}}
-					locale={{ emptyText: "Không có bài tập nào" }}
-					size={isMobile ? "small" : "middle"}
-				/>
+				<div style={{ overflowX: "auto" }}>
+					<Table<Assignment>
+						dataSource={filteredAssignments}
+						columns={columns}
+						rowKey="id"
+						bordered
+						scroll={{ x: 1200 }}
+						pagination={{
+							pageSize: 10,
+							showSizeChanger: true,
+							showTotal: (total) => `Tổng ${total} bài tập`,
+							pageSizeOptions: ["10", "20", "50"],
+							position: ["bottomRight"],
+							style: { marginTop: 16 },
+						}}
+						locale={{ emptyText: "Không có bài tập nào" }}
+						size={isMobile ? "small" : "middle"}
+					/>
+				</div>
 			)}
 
 			{/* Modal thêm/sửa */}
@@ -1421,6 +1441,8 @@ export default function AssignmentsAdmin() {
 								onChange={(e) => setQuestionKeyword(e.target.value)}
 								className="mb-3"
 								size="small"
+								autoComplete="off"
+
 							/>
 
 							<Card size="small" className="mb-3">
@@ -1476,8 +1498,8 @@ export default function AssignmentsAdmin() {
 											<label
 												key={q.id}
 												className={`block p-3 mb-2 border rounded cursor-pointer transition-all ${checked
-														? "bg-blue-50 border-blue-300"
-														: "border-gray-200 hover:bg-gray-50"
+													? "bg-blue-50 border-blue-300"
+													: "border-gray-200 hover:bg-gray-50"
 													}`}
 											>
 												<div className="flex items-start gap-2">
@@ -1701,8 +1723,8 @@ export default function AssignmentsAdmin() {
 								<label
 									key={s.id}
 									className={`flex items-center gap-2 cursor-pointer p-3 border rounded transition-all ${checked
-											? "bg-blue-50 border-blue-300"
-											: "border-gray-200 hover:bg-gray-50"
+										? "bg-blue-50 border-blue-300"
+										: "border-gray-200 hover:bg-gray-50"
 										}`}
 								>
 									<input

@@ -17,6 +17,7 @@ import {
 	Card,
 	Divider,
 	message,
+	Flex,
 } from "antd";
 import {
 	PlusOutlined,
@@ -1024,7 +1025,7 @@ export default function StudentList() {
 		{
 			title: "Hành động",
 			key: "actions",
-			width: 140,
+			width: 100,
 			fixed: "right" as const,
 			render: (_: any, record: Enrollment) => (
 				<div style={{ display: "flex", gap: 8 }}>
@@ -1105,35 +1106,16 @@ export default function StudentList() {
 	if (loading) return <Spin tip="Đang tải..." style={{ display: "flex", justifyContent: "center", marginTop: "20%" }} />;
 
 	return (
-		<div style={{ padding: 16 }}>
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					alignItems: "center",
-					marginBottom: 16,
-					marginTop: -16,
-				}}
-			>
-				<div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-					<div
-						style={{
-							display: "flex",
-							alignItems: "center",
-							gap: 6,
-							fontSize: 12,
-							color: "#000",
-							border: "1px solid #ddd",
-							borderRadius: 6,
-							padding: "6px 10px",
-							background: "#fff",
-						}}
-					>
-						<UserOutlined style={{ fontSize: 14, color: "#1890ff" }} />
-						<span>Tổng SV:</span>
-						<strong>{stats.totalStudents}</strong>
-					</div>
-					{stats.studentsWithoutGroup > 0 && (
+		<div >
+			<div className="sm:px-4 px-2">
+				{/* 🎯 RESPONSIVE HEADER */}
+				<Flex
+					wrap="wrap"
+					gap={12}
+					className="flex-col sm:flex-row items-start sm:items-center w-full mb-4"
+				>
+					{/* Stats - Left side */}
+					<Flex gap={8} wrap="wrap" className="w-full sm:w-auto">
 						<div
 							style={{
 								display: "flex",
@@ -1147,65 +1129,125 @@ export default function StudentList() {
 								background: "#fff",
 							}}
 						>
-							<WarningOutlined style={{ fontSize: 14, color: "#ff4d4f" }} />
-							<span>Chưa có nhóm:</span>
-							<strong style={{ color: "#ff4d4f" }}>
-								{stats.studentsWithoutGroup}
-							</strong>
+							<UserOutlined style={{ fontSize: 14, color: "#1890ff" }} />
+							<span>Tổng SV:</span>
+							<strong>{stats.totalStudents}</strong>
 						</div>
-					)}
-				</div>
-				<div style={{ display: "flex", justifyItems: "flex-end", gap: 8 }}>
-					<Input
-						allowClear
-						prefix={<SearchOutlined />}
-						placeholder="Tìm sinh viên"
-						value={keyword}
-						onChange={(e) => setKeyword(e.target.value)}
-						style={{ width: 200 }}
+
+						{stats.studentsWithoutGroup > 0 && (
+							<div
+								style={{
+									display: "flex",
+									alignItems: "center",
+									gap: 6,
+									fontSize: 12,
+									color: "#000",
+									border: "1px solid #ddd",
+									borderRadius: 6,
+									padding: "6px 10px",
+									background: "#fff",
+								}}
+							>
+								<WarningOutlined style={{ fontSize: 14, color: "#ff4d4f" }} />
+								<span>Chưa có nhóm:</span>
+								<strong style={{ color: "#ff4d4f" }}>
+									{stats.studentsWithoutGroup}
+								</strong>
+							</div>
+						)}
+					</Flex>
+
+					{/* Actions - Right side */}
+					<Flex
+						gap={8}
+						wrap="wrap"
+						className="w-full sm:w-auto sm:ml-auto"
+					>
+						{/* Search */}
+						<Input
+							allowClear
+							prefix={<SearchOutlined />}
+							placeholder="Tìm sinh viên"
+							value={keyword}
+							onChange={(e) => setKeyword(e.target.value)}
+							className="w-full sm:w-48"
+							size="small"
+						/>
+
+						{/* Buttons */}
+						<Flex gap={8} wrap="wrap" className="w-full sm:w-auto">
+							<Button
+								icon={<ReloadOutlined />}
+								onClick={refresh}
+								size="small"
+								className="flex-1 sm:flex-none"
+							>
+								<span className="hidden sm:inline">Refresh</span>
+							</Button>
+
+							<Button
+								type="default"
+								icon={<QrcodeOutlined />}
+								onClick={() => {
+									inviteForm.setFieldsValue({ defaultPassword: "123456" });
+									setInviteModalOpen(true);
+								}}
+								size="small"
+								className="flex-1 sm:flex-none"
+							>
+								<span className="hidden sm:inline">Mã mời</span>
+								<span className="inline sm:hidden">Mời</span>
+							</Button>
+
+							<Button
+								type="default"
+								icon={<UploadOutlined />}
+								onClick={() => setImportModalOpen(true)}
+								size="small"
+								className="flex-1 sm:flex-none"
+							>
+								<span className="hidden md:inline">Import Excel</span>
+								<span className="inline md:hidden">Import</span>
+							</Button>
+
+							<Button
+								type="primary"
+								icon={<PlusOutlined />}
+								onClick={() => {
+									setEditing(null);
+									addForm.resetFields();
+									setAddModalOpen(true);
+								}}
+								size="small"
+								className="flex-1 sm:flex-none"
+							>
+								<span className="hidden sm:inline">Thêm sinh viên</span>
+								<span className="inline sm:hidden">Thêm</span>
+							</Button>
+						</Flex>
+					</Flex>
+				</Flex>
+
+				{/* 🎯 RESPONSIVE TABLE */}
+				<div style={{ overflowX: "auto" }}>
+					<Table<Enrollment>
+						dataSource={filteredEnrollments}
+						columns={columns}
+						rowKey="id"
+						bordered
+						pagination={{
+							pageSize: 10,
+							showSizeChanger: true,
+							showTotal: (total) => `Tổng ${total} sinh viên`,
+							pageSizeOptions: ["10", "20", "50"],
+							position: ["bottomRight"],
+							style: { marginTop: 16 },
+						}}
+						scroll={{ x: 1200 }}
+						size="middle"
 					/>
-					<Button icon={<ReloadOutlined />} onClick={refresh}>
-						Refresh
-					</Button>
-					<Button
-						type="default"
-						icon={<QrcodeOutlined />}
-						onClick={() => {
-							inviteForm.setFieldsValue({ defaultPassword: "123456" });
-							setInviteModalOpen(true);
-						}}
-					>
-						Mã mời
-					</Button>
-					<Button
-						type="default"
-						icon={<UploadOutlined />}
-						onClick={() => setImportModalOpen(true)}
-					>
-						Import Excel
-					</Button>
-					<Button
-						type="primary"
-						icon={<PlusOutlined />}
-						onClick={() => {
-							setEditing(null);
-							addForm.resetFields();
-							setAddModalOpen(true);
-						}}
-					>
-						Thêm sinh viên
-					</Button>
 				</div>
 			</div>
-
-			<Table<Enrollment>
-				dataSource={filteredEnrollments}
-				columns={columns}
-				rowKey="id"
-				bordered
-				pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (total) => `Tổng ${total} sinh viên` }}
-				scroll={{ x: 1200 }}
-			/>
 
 			{/* Modal thêm sinh viên */}
 			<Modal
@@ -1438,6 +1480,11 @@ export default function StudentList() {
 				onCancel={handleCloseInviteModal}
 				footer={null}
 				width={700}
+				bodyStyle={{
+					maxHeight: "70vh",
+					overflowY: "auto",
+					overflowX: "hidden",
+				}}
 			>
 				{!inviteCode ? (
 					<div>
@@ -1491,12 +1538,13 @@ export default function StudentList() {
 						/>
 
 						<Card title="Mã QR Code" size="small">
-							<div style={{ textAlign: "center", padding: "20px 0" }} id="qr-code-container">
+							<div style={{ textAlign: "center", padding: "20px 0" }} className="flex items-center justify-center" id="qr-code-container">
 								<QRCodeSVG
 									value={`${window.location.origin}/join?code=${inviteCode.code}&section=${sectionId}&pwd=${inviteCode.defaultPassword}`}
 									size={256}
 									level="H"
-									includeMargin
+										includeMargin
+										
 								/>
 							</div>
 							<Button
@@ -1554,7 +1602,14 @@ export default function StudentList() {
 					</Space>
 				)}
 			</Modal>
-			<Modal title="Import danh sách sinh viên từ Excel" open={importModalOpen} onCancel={handleCloseImportModal} footer={[<Button key="download" icon={<DownloadOutlined />} onClick={downloadTemplate}> Tải file mẫu
+			<Modal title="Import danh sách sinh viên từ Excel" open={importModalOpen}
+				centered
+				bodyStyle={{
+					maxHeight: "70vh",
+					overflowY: "auto",
+					overflowX: "hidden",
+				}}
+				onCancel={handleCloseImportModal} footer={[<Button key="download" icon={<DownloadOutlined />} onClick={downloadTemplate}> Tải file mẫu
 			</Button>,
 				<Button key="cancel" onClick={handleCloseImportModal}> Đóng </Button>, <Button key="import" type="primary" loading={importLoading} disabled={importData.length === 0} onClick={handleImport} > Import {importData.length > 0 && `(${importData.length} SV)`} </Button>,]} width={1000} > <Space direction="vertical" style={{ width: "100%" }} size="large">
 					<Alert message="Hướng dẫn" description={<ul style={{ marginBottom: 0, paddingLeft: 20 }}> <li>Tải file mẫu và điền thông tin sinh viên theo định dạng</li> <li> File Excel phải chứa các cột: <strong>Mã SV</strong>, <strong>Họ lót</strong>, <strong>Tên</strong>, <strong>Email</strong>, <strong>Điện thoại</strong>, <strong>Mã lớp</strong>, <strong>Tên lớp</strong> </li> <li><strong>Nếu sinh viên đã có tài khoản:</strong> Chỉ thêm vào lớp, không tạo tài khoản mới</li> <li><strong>Nếu sinh viên chưa có tài khoản:</strong> Tạo tài khoản mới và thêm vào lớp</li> <li>Sinh viên đã có trong lớp sẽ được bỏ qua</li> <li>Số điện thoại phải có định dạng: 10-11 số, bắt đầu bằng 0 (VD: 0901234567)</li> <li>Mật khẩu mặc định cho tài khoản mới: <strong>123456</strong></li> 

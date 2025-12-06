@@ -131,21 +131,21 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
     return !!m.link || (m.filePath && /^https?:\/\//i.test(m.filePath));
   };
 
-  // Lấy icon từ /public dựa vào file type
+  // Lấy icon từ  dựa vào file type
   const getFileIconPath = (m: Material) => {
-    if (isExternalLink(m)) return "/public/link.png";
+    if (isExternalLink(m)) return "/link.png";
 
     const mt = (m.fileType || "").toLowerCase();
     const fn = (m.fileName || "").toLowerCase();
 
-    if (mt.includes("pdf") || fn.endsWith(".pdf")) return "/public/pdf.png";
-    if (mt.includes("word") || /\.(doc|docx)$/i.test(fn)) return "/public/word.png";
-    if (mt.includes("powerpoint") || /\.(ppt|pptx)$/i.test(fn)) return "/public/powerpoint.png";
-    if (mt.includes("excel") || /\.(xls|xlsx)$/i.test(fn)) return "/public/excel.png";
-    if (mt.startsWith("image/") || /\.(png|jpg|jpeg|gif)$/i.test(fn)) return "/public/image.png";
-    if (mt.startsWith("video/") || /\.(mp4|mkv|avi)$/i.test(fn)) return "/public/video.png";
-    if (mt.startsWith("audio/") || /\.(mp3|wav)$/i.test(fn)) return "/public/audio.png";
-    return "/public/file.png";
+    if (mt.includes("pdf") || fn.endsWith(".pdf")) return "/pdf.png";
+    if (mt.includes("word") || /\.(doc|docx)$/i.test(fn)) return "/word.png";
+    if (mt.includes("powerpoint") || /\.(ppt|pptx)$/i.test(fn)) return "/powerpoint.png";
+    if (mt.includes("excel") || /\.(xls|xlsx)$/i.test(fn)) return "/excel.png";
+    if (mt.startsWith("image/") || /\.(png|jpg|jpeg|gif)$/i.test(fn)) return "/image.png";
+    if (mt.startsWith("video/") || /\.(mp4|mkv|avi)$/i.test(fn)) return "/video.png";
+    if (mt.startsWith("audio/") || /\.(mp3|wav)$/i.test(fn)) return "/audio.png";
+    return "/file.png";
   };
 
   const getFileTypeLabel = (m: Material) => {
@@ -195,7 +195,7 @@ export default function MaterialsStudent({ sectionId: propId }: { sectionId?: nu
                 className="w-10 h-10 object-contain"
                 onError={(e) => {
                   // Fallback to default icon if image not found
-                  e.currentTarget.src = "/public/file.png";
+                  e.currentTarget.src = "/file.png";
                 }}
               />
             </div>

@@ -11,6 +11,7 @@ import {
 	Form,
 	Popconfirm,
 	Select,
+	Flex,
 } from "antd";
 import {
 	ReloadOutlined,
@@ -192,6 +193,7 @@ export default function TeachersAdmin() {
 			title: "Hành động",
 			key: "actions",
 			align: "center" as const,
+			fixed: "right" as const,
 			render: (_: any, record: Teacher) => (
 				<div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
 					<Tooltip title="Sửa">
@@ -250,61 +252,82 @@ export default function TeachersAdmin() {
 	);
 
 	return (
-		<div className="pl-3 pr-3">
-			<div style={{
-				display: "flex",
-				justifyContent: "space-between",
-				alignItems: "center",
-			}}>
-				<Title level={3} className="mt-2">
-					<div className="flex items-center gap-2">
-						<div className=""><GraduationCap /></div> Quản lý Giảng viên
-					</div>
+		<div className="sm:px-3 h-auto sm:h-auto">
+			{/* 🎯 RESPONSIVE HEADER */}
+			
+			<Flex
+				wrap="wrap"
+				gap={12}
+				className="flex-col sm:flex-row items-start sm:items-center w-full pt-3 pb-5"
+			>
+				{/* Title Left */}
+				<Title level={3} style={{ margin: 0 }}>
+					<Flex align="center" gap={8}>
+						<GraduationCap />
+						<span>Quản lý Giảng viên</span>
+					</Flex>
 				</Title>
-				<div style={{ display: "flex", gap: 8 }}>
 
-				<Input
-					allowClear
-					prefix={<SearchOutlined />}
-					placeholder="Tìm theo mã GV, tên, email, khoa, chức vụ..."
-					value={keyword}
-					onChange={(e) => setKeyword(e.target.value)}
-					style={{ width: 450 }}
-				/>
-					<Button icon={<ReloadOutlined />} onClick={fetchTeachers}>
-						Làm mới
-					</Button>
-					<Button
-						type="primary"
-						icon={<PlusOutlined />}
-						onClick={() => {
-							setEditing(null);
-							form.resetFields();
-							setModalOpen(true);
-						}}
-					>
-						Thêm giảng viên
-					</Button>
-				</div>
-			</div>
+				{/* Action Right */}
+				<Flex
+					gap={8}
+					wrap="wrap"
+					className="w-full sm:w-auto sm:ml-auto"
+				>
+					{/* Search */}
+					<Input
+						allowClear
+						prefix={<SearchOutlined />}
+						placeholder="Tìm theo mã GV, tên, email..."
+						value={keyword}
+						onChange={(e) => setKeyword(e.target.value)}
+						className="w-full sm:w-80"
+					/>
+
+					{/* Buttons */}
+					<Flex gap={8} wrap="wrap">
+						<Button icon={<ReloadOutlined />} onClick={fetchTeachers}>
+							<span className="hidden sm:inline">Làm mới</span>
+						</Button>
+						<Button
+							type="primary"
+							icon={<PlusOutlined />}
+							onClick={() => {
+								setEditing(null);
+								form.resetFields();
+								setModalOpen(true);
+							}}
+						>
+							<span className="hidden sm:inline">Thêm giảng viên</span>
+							<span className="inline sm:hidden">Thêm</span>
+						</Button>
+					</Flex>
+				</Flex>
+			</Flex>
 
 			{loading ? (
 				<div style={{ textAlign: "center", padding: 60 }}>
 					<Spin size="large" tip="Đang tải danh sách giảng viên..." />
 				</div>
 			) : (
-				<Table<Teacher>
-					dataSource={filteredTeachers}
-					columns={columns}
-					rowKey="id"
-					bordered
-					pagination={{
-						pageSize: 10,
-						showSizeChanger: true,
-						showTotal: (total) => `Tổng ${total} giảng viên`,
-					}}
-					locale={{ emptyText: "Không có giảng viên nào" }}
-				/>
+				<div style={{ overflowX: "auto" }}>
+					<Table<Teacher>
+						dataSource={filteredTeachers}
+						columns={columns}
+						rowKey="id"
+						bordered
+						pagination={{
+							pageSize: 10,
+							showSizeChanger: true,
+							showTotal: (total) => `Tổng ${total} giảng viên`,
+							pageSizeOptions: ["10", "20", "50"],
+							position: ["bottomRight"],
+							style: { marginTop: 16 },
+						}}
+						locale={{ emptyText: "Không có giảng viên nào" }}
+						scroll={{ x: 1200 }}
+					/>
+				</div>
 			)}
 
 			{/* Modal thêm/sửa */}
@@ -320,7 +343,7 @@ export default function TeachersAdmin() {
 				cancelText="Hủy"
 				width={600}
 				centered
-				bodyStyle={{ maxHeight: "70vh", overflowY: "auto", overflowX: "hidden" }}   
+				bodyStyle={{ maxHeight: "70vh", overflowY: "auto", overflowX: "hidden" }}
 			>
 				<Form form={form} layout="vertical">
 					<Form.Item

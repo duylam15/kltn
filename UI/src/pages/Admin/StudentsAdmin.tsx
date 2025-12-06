@@ -11,6 +11,8 @@ import {
   Form,
   Popconfirm,
   Select,
+  Flex,
+  Space,  // ✅ Thêm Space
 } from "antd";
 import {
   ReloadOutlined,
@@ -108,9 +110,9 @@ export default function StudentsAdmin() {
       const values = await form.validateFields();
       const payload = {
         studentCode: values.studentCode.trim(),
-        password: "123456", // hoặc cho nhập từ form
-        fullName: values.fullName, // thêm field vào form
-        email: values.email,       // thêm field vào form
+        password: "123456",
+        fullName: values.fullName,
+        email: values.email,
         className: values.className?.trim() || null,
         major: values.major?.trim() || null,
         academicYear: values.academicYear || null,
@@ -141,6 +143,7 @@ export default function StudentsAdmin() {
       title: "MSSV",
       dataIndex: "studentCode",
       key: "studentCode",
+      width: 120,  // ✅ Thêm width
       sorter: (a: Student, b: Student) =>
         a.studentCode.localeCompare(b.studentCode),
       render: (text: string) => <strong>{text}</strong>,
@@ -148,6 +151,7 @@ export default function StudentsAdmin() {
     {
       title: "Họ tên",
       key: "fullName",
+      width: 180,  // ✅ Thêm width
       sorter: (a: Student, b: Student) =>
         (a.user?.fullName || "").localeCompare(b.user?.fullName || ""),
       render: (_: any, record: Student) => record.user?.fullName || "—",
@@ -155,12 +159,14 @@ export default function StudentsAdmin() {
     {
       title: "Email",
       key: "email",
+      width: 220,  // ✅ Thêm width
       render: (_: any, record: Student) => record.user?.email || "—",
     },
     {
       title: "Lớp",
       dataIndex: "className",
       key: "className",
+      width: 120,  // ✅ Thêm width
       sorter: (a: Student, b: Student) =>
         (a.className || "").localeCompare(b.className || ""),
       render: (text: string) => text || <Tag color="default">Chưa có</Tag>,
@@ -169,6 +175,7 @@ export default function StudentsAdmin() {
       title: "Ngành",
       dataIndex: "major",
       key: "major",
+      width: 180,  // ✅ Thêm width
       sorter: (a: Student, b: Student) =>
         (a.major || "").localeCompare(b.major || ""),
       render: (text: string) => text || <Tag color="default">Chưa có</Tag>,
@@ -178,6 +185,7 @@ export default function StudentsAdmin() {
       dataIndex: "enrollmentYear",
       key: "enrollmentYear",
       align: "center" as const,
+      width: 120,  // ✅ Thêm width
       sorter: (a: Student, b: Student) =>
         (a.enrollmentYear || 0) - (b.enrollmentYear || 0),
       render: (year: number) => year || "—",
@@ -186,6 +194,7 @@ export default function StudentsAdmin() {
       title: "Ngày tạo",
       dataIndex: "createdAt",
       key: "createdAt",
+      width: 150,  // ✅ Thêm width
       sorter: (a: Student, b: Student) =>
         new Date(a.createdAt || 0).getTime() -
         new Date(b.createdAt || 0).getTime(),
@@ -195,8 +204,10 @@ export default function StudentsAdmin() {
       title: "Hành động",
       key: "actions",
       align: "center" as const,
+      width: 120,  // ✅ Thêm width
+      fixed: "right" as const,  // ✅ Thêm fixed
       render: (_: any, record: Student) => (
-        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+        <Space size="small">  {/* ✅ Đổi từ div sang Space */}
           <Tooltip title="Sửa">
             <Button
               icon={<EditOutlined />}
@@ -206,6 +217,8 @@ export default function StudentsAdmin() {
                 form.setFieldsValue({
                   userId: record.userId,
                   studentCode: record.studentCode,
+                  fullName: record.user?.fullName,  // ✅ Thêm
+                  email: record.user?.email,        // ✅ Thêm
                   className: record.className,
                   major: record.major,
                   enrollmentYear: record.enrollmentYear,
@@ -226,7 +239,7 @@ export default function StudentsAdmin() {
               <Button danger size="small" icon={<DeleteOutlined />} />
             </Popconfirm>
           </Tooltip>
-        </div>
+        </Space>
       ),
     },
   ];
@@ -251,61 +264,81 @@ export default function StudentsAdmin() {
   );
 
   return (
-    <div className="pl-3 pr-3">
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-      }}>
-        
-        <Title level={3} className="mt-2">
-          <div className="flex items-center gap-2">
-            <div className="mt-1"><Users /></div> Quản lý Sinh viên
-          </div>
+    <div className="sm:px-3 h-auto sm:h-auto">  {/* ✅ Đổi từ 1800px sang 1100px */}
+      {/* 🎯 RESPONSIVE HEADER */}
+      <Flex
+        wrap="wrap"
+        gap={12}
+        className="flex-col sm:flex-row items-start sm:items-center w-full pt-3 pb-5"
+      >
+        {/* Title Left */}
+        <Title level={3} style={{ margin: 0 }}>
+          <Flex align="center" gap={8}>
+            <Users />
+            <span>Quản lý Sinh viên</span>
+          </Flex>
         </Title>
-        <div style={{ display: "flex", gap: 8 }}>
-        <Input
-          allowClear
-          prefix={<SearchOutlined />}
-          placeholder="Tìm theo MSSV, tên, email, lớp, ngành..."
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          style={{ width: 400 }}
-        />
-          <Button icon={<ReloadOutlined />} onClick={fetchStudents}>
-            Làm mới
-          </Button>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setEditing(null);
-              form.resetFields();
-              setModalOpen(true);
-            }}
-          >
-            Thêm sinh viên
-          </Button>
-        </div>
-      </div>
+
+        {/* Action Right */}
+        <Flex
+          gap={8}
+          wrap="wrap"
+          className="w-full sm:w-auto sm:ml-auto"
+        >
+          {/* Search */}
+          <Input
+            allowClear
+            prefix={<SearchOutlined />}
+            placeholder="Tìm theo MSSV, tên, email..."
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            className="w-full sm:w-80"
+          />
+
+          {/* Buttons */}
+          <Flex gap={8} wrap="wrap">
+            <Button icon={<ReloadOutlined />} onClick={fetchStudents}>
+              <span className="hidden sm:inline">Làm mới</span>
+            </Button>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setEditing(null);
+                form.resetFields();
+                setModalOpen(true);
+              }}
+            >
+              <span className="hidden sm:inline">Thêm sinh viên</span>
+              <span className="inline sm:hidden">Thêm</span>
+            </Button>
+          </Flex>
+        </Flex>
+      </Flex>
 
       {loading ? (
         <div style={{ textAlign: "center", padding: 60 }}>
           <Spin size="large" tip="Đang tải danh sách sinh viên..." />
         </div>
       ) : (
-        <Table<Student>
-          dataSource={filteredStudents}
-          columns={columns}
-          rowKey="id"
-          bordered
-          pagination={{
-            pageSize: 10,
-            showSizeChanger: true,
-            showTotal: (total) => `Tổng ${total} sinh viên`,
-          }}
-          locale={{ emptyText: "Không có sinh viên nào" }}
-        />
+        <div style={{ overflowX: "auto" }}>  {/* ✅ Thêm wrapper div */}
+          <Table<Student>
+            dataSource={filteredStudents}
+            columns={columns}
+            rowKey="id"
+            bordered
+            pagination={{
+              pageSize: 10,
+              showSizeChanger: true,
+              showTotal: (total) => `Tổng ${total} sinh viên`,
+              pageSizeOptions: ["10", "20", "50"],  // ✅ Thêm
+              position: ["bottomRight"],            // ✅ Thêm
+              style: { marginTop: 16 },             // ✅ Thêm
+            }}
+            locale={{ emptyText: "Không có sinh viên nào" }}
+            scroll={{ x: 1200 }}
+          />
+        </div>
       )}
 
       {/* Modal thêm/sửa */}
@@ -321,7 +354,7 @@ export default function StudentsAdmin() {
         cancelText="Hủy"
         width={600}
         centered
-        bodyStyle={{ maxHeight: "70vh", overflowY: "auto", overflowX: "hidden" }}   
+        bodyStyle={{ maxHeight: "70vh", overflowY: "auto", overflowX: "hidden" }}
       >
         <Form form={form} layout="vertical">
           <Form.Item
@@ -368,7 +401,6 @@ export default function StudentsAdmin() {
           </Form.Item>
         </Form>
       </Modal>
-
     </div>
   );
 }

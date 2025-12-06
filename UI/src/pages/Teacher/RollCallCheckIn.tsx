@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { User, CheckCircle } from "lucide-react";
 import instance from "../../utils/axiosInstance";
 
+
 function getOrCreateDeviceId(): string {
   if (typeof window === "undefined") return "";
   try {
@@ -129,60 +130,75 @@ export default function RollCallCheckIn() {
   };
 
   return (
-    <div className="min-h-screen grid place-items-center bg-gradient-to-br from-indigo-50 to-white p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border p-6">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-indigo-700">Điểm danh</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            Nhập mã sinh viên và cho phép truy cập vị trí để điểm danh.
-          </p>
-          {sessionId && (
-            <p className="text-[11px] text-gray-400 mt-1">
-              Mã buổi: <span className="font-mono">{sessionId}</span>
+    <div
+      className="min-h-screen w-full bg-cover bg-center bg-no-repeat relative flex items-center justify-center"
+      style={{ backgroundImage: "url('/bgsgu3.jpg')" }}
+    >
+      {/* Overlay mờ */}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+
+      {/* Content */}
+      <div className="relative w-full max-w-md">
+        <div className="bg-white/90 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/40 p-6">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-bold text-indigo-700">Điểm danh</h1>
+            <p className="text-gray-600 text-sm mt-1">
+              Nhập mã sinh viên và cho phép truy cập vị trí để điểm danh
             </p>
-          )}
-        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="text-red-600 text-sm text-center bg-red-50 py-2 px-3 rounded-lg">
-              {error}
-            </div>
-          )}
-          {successMsg && (
-            <div className="text-green-600 text-sm text-center bg-green-50 py-2 px-3 rounded-lg flex items-center justify-center gap-1">
-              <CheckCircle className="h-4 w-4" /> {successMsg}
-            </div>
-          )}
-
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Mã số sinh viên</label>
-            <div className="relative">
-              <User className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={studentCode}
-                onChange={(e) => setStudentCode(e.target.value)}
-                required
-                className="w-full rounded-xl border pl-10 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="VD: SV100"
-              />
-            </div>
+            {sessionId && (
+              <p className="text-[11px] text-gray-400 mt-1">
+                Mã buổi: <span className="font-mono">{sessionId}</span>
+              </p>
+            )}
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 mt-3 text-white py-2.5 hover:bg-indigo-700 disabled:opacity-50"
-          >
-            {loading ? <span>Đang điểm danh...</span> : "Xác nhận điểm danh"}
-          </button>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="text-red-600 text-sm text-center bg-red-50 py-2 px-3 rounded-lg flex items-center justify-center gap-1">
+                {error}
+              </div>
+            )}
+            {successMsg && (
+              <div className="text-green-600 text-sm text-center bg-green-50 py-2 px-3 rounded-lg flex items-center justify-center gap-1">
+                <CheckCircle className="h-4 w-4" /> {successMsg}
+              </div>
+            )}
 
-          <p className="text-[11px] text-gray-400 text-center mt-1">
-            Hệ thống sẽ sử dụng vị trí & thiết bị của bạn để chống gian lận
-            điểm danh.
-          </p>
-        </form>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-700">
+                Mã số sinh viên
+              </label>
+              <div className="relative">
+                <User className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={studentCode}
+                  onChange={(e) => setStudentCode(e.target.value)}
+                  required
+                  className="w-full rounded-xl border pl-10 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                  placeholder="VD: SV100"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-3 hover:from-blue-700 hover:to-indigo-800 disabled:opacity-50"
+            >
+              {loading ? (
+                <span>Đang điểm danh...</span>
+              ) : (
+                "Xác nhận điểm danh"
+              )}
+            </button>
+
+            <p className="text-[11px] text-gray-400 text-center mt-1">
+              Hệ thống sử dụng GPS và thiết bị để chống gian lận.
+            </p>
+          </form>
+        </div>
       </div>
     </div>
   );

@@ -70,6 +70,7 @@ import instance from "../utils/axiosInstance";
 import ProfilePage from "../pages/Profile/ProfilePage";
 import AssignmentManagement from "../pages/Teacher/Assigment/AssignmentManagement";
 import AssignmentGrading from "../pages/Teacher/Assigment/AssignmentGrading";
+import AlwaysPublicRoute from "./AlwaysPublicRoute";
 // Helper function để check auth và redirect
 const checkAuthAndRedirect = async () => {
   try {
@@ -113,14 +114,16 @@ export const router = createBrowserRouter([
   },
   {
     path: "/diemdanh",
-    element: <RollCallCheckIn />,
+    element: (
+        <RollCallCheckIn />
+    ),
   },
-
   {
     path: "/join",
-    element: <JoinClassByInvite />
+    element: (
+        <JoinClassByInvite />
+    ),
   },
-
 
   // ========== Student Routes ==========
   {
@@ -148,7 +151,7 @@ export const router = createBrowserRouter([
           { path: "chat", element: <Chat /> },
         ],
       },
-      {path: "profile", element: <ProfilePage />},
+      { path: "profile", element: <ProfilePage /> },
     ],
   },
 
@@ -187,7 +190,7 @@ export const router = createBrowserRouter([
                 element: <AssignmentGrading />, // File 2: Bảng điểm và lịch sử nộp bài
               },
             ],
-          },          { path: "grades", element: <GradesTeacher /> },
+          }, { path: "grades", element: <GradesTeacher /> },
         ],
       },
       { path: "materials", element: <MaterialsTeacher /> },
@@ -242,7 +245,7 @@ export const router = createBrowserRouter([
           const { default: RequirePermission } = await import("./RequirePermission");
           return {
             element: (
-                <Students />
+              <Students />
             ),
           };
         },

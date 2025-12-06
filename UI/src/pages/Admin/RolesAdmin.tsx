@@ -13,6 +13,8 @@ import {
 	Popconfirm,
 	Select,
 	Divider,
+	Flex,  // ✅ Thêm
+	Space,  // ✅ Thêm
 } from "antd";
 import {
 	ReloadOutlined,
@@ -39,7 +41,6 @@ type Permission = {
 	createdAt: string;
 };
 
-// Cập nhật type Role để reflect đúng cấu trúc API
 type RolePermission = {
 	roleId: number;
 	permissionId: number;
@@ -156,7 +157,7 @@ export default function RolesAdmin() {
 
 	// Custom state for permission selection
 	const [selectedPermissions, setSelectedPermissions] = useState<number[]>([]);
-	const { hasPermission } = useAuth(); // ✅ thêm dòng này
+	const { hasPermission } = useAuth();
 
 	useEffect(() => {
 		fetchRoles();
@@ -213,8 +214,7 @@ export default function RolesAdmin() {
 
 			if (editing) {
 				const res = await instance.put(`/roles/${editing.id}`, payload);
-				toast.success('Successfully created!');
-
+				toast.success('Successfully created! ');
 				console.log(res);
 			} else {
 				await instance.post(`/roles`, payload);
@@ -230,8 +230,6 @@ export default function RolesAdmin() {
 			toast.error("❌ Không thể lưu vai trò");
 		}
 	};
-
-
 
 	// Group permissions by groupName
 	const groupedPermissions = permissions.reduce((acc, permission) => {
@@ -255,10 +253,8 @@ export default function RolesAdmin() {
 	// Handle group selection
 	const handleGroupSelectAll = (groupPermissionIds: number[], checked: boolean) => {
 		if (checked) {
-			// Add all group permissions
 			setSelectedPermissions(prev => [...new Set([...prev, ...groupPermissionIds])]);
 		} else {
-			// Remove all group permissions
 			setSelectedPermissions(prev => prev.filter(id => !groupPermissionIds.includes(id)));
 		}
 	};
@@ -278,6 +274,7 @@ export default function RolesAdmin() {
 			title: "Tên vai trò",
 			dataIndex: "name",
 			key: "name",
+			width: 150,  // ✅ Thêm width
 			sorter: (a: Role, b: Role) => a.name.localeCompare(b.name),
 			render: (text: string) => <strong>{text}</strong>,
 		},
@@ -285,6 +282,7 @@ export default function RolesAdmin() {
 			title: "Mô tả",
 			dataIndex: "description",
 			key: "description",
+			width: 300,  // ✅ Thêm width
 			sorter: (a: Role, b: Role) => (a.description || "").localeCompare(b.description || ""),
 			render: (text: string) => text || <Tag color="default">Chưa có mô tả</Tag>,
 		},
@@ -292,6 +290,7 @@ export default function RolesAdmin() {
 			title: "Số quyền",
 			key: "permissionsCount",
 			align: "center" as const,
+			width: 120,  // ✅ Thêm width
 			sorter: (a: Role, b: Role) =>
 				(a.permissions?.length || 0) - (b.permissions?.length || 0),
 			render: (_: any, record: Role) => (
@@ -302,6 +301,7 @@ export default function RolesAdmin() {
 			title: "Ngày tạo",
 			dataIndex: "createdAt",
 			key: "createdAt",
+			width: 150,  // ✅ Thêm width
 			sorter: (a: Role, b: Role) =>
 				new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(),
 			render: (v: string) => (v ? dayjs(v).format("DD/MM/YYYY HH:mm") : "—"),
@@ -309,8 +309,11 @@ export default function RolesAdmin() {
 		{
 			title: "Hành động",
 			key: "actions",
+			align: "center" as const,
+			width: 150,  // ✅ Thêm width
+			fixed: "right" as const,  // ✅ Thêm fixed
 			render: (_: any, record: Role) => (
-				<div style={{ display: "flex", gap: 8 }}>
+				<Space size="small">  {/* ✅ Đổi từ div sang Space */}
 					<Tooltip title="Xem quyền">
 						<Button
 							icon={<KeyOutlined />}
@@ -323,21 +326,19 @@ export default function RolesAdmin() {
 					</Tooltip>
 					{hasPermission("role:update") && (
 						<Tooltip title="Sửa">
-							<Tooltip title="Sửa">
-								<Button
-									icon={<EditOutlined />}
-									size="small"
-									onClick={() => {
-										setEditing(record);
-										form.setFieldsValue({
-											...record,
-										});
-										const currentPermissionIds = record.permissions?.map(p => p.permission.id) || [];
-										setSelectedPermissions(currentPermissionIds);
-										setModalOpen(true);
-									}}
-								/>
-							</Tooltip>
+							<Button
+								icon={<EditOutlined />}
+								size="small"
+								onClick={() => {
+									setEditing(record);
+									form.setFieldsValue({
+										...record,
+									});
+									const currentPermissionIds = record.permissions?.map(p => p.permission.id) || [];
+									setSelectedPermissions(currentPermissionIds);
+									setModalOpen(true);
+								}}
+							/>
 						</Tooltip>
 					)}
 					{hasPermission("role:delete") && (
@@ -354,7 +355,7 @@ export default function RolesAdmin() {
 							</Popconfirm>
 						</Tooltip>
 					)}
-				</div>
+				</Space>
 			),
 		},
 	];
@@ -367,57 +368,84 @@ export default function RolesAdmin() {
 	);
 
 	return (
-		<div className="pl-3 pr-3">
-			<div style={{
-				display: "flex",
-				justifyContent: "space-between",
-				alignItems: "center",
-			}}>
-				<Title level={3} className="mt-2">
-					<div className="flex items-center gap-2">
-						<div className=""><User /></div> Quản lý Vai trò
-					</div>
+		<div className="sm:px-3 h-[1100px] sm:h-auto">  {/* ✅ Đổi className */}
+			{/* 🎯 RESPONSIVE HEADER */}
+			<Flex
+				wrap="wrap"
+				gap={12}
+				className="flex-col sm:flex-row items-start sm:items-center w-full pt-3 pb-5"
+			>
+				{/* Title Left */}
+				<Title level={3} style={{ margin: 0 }}>
+					<Flex align="center" gap={8}>
+						<User />
+						<span>Quản lý Vai trò</span>
+					</Flex>
 				</Title>
-				<div style={{ display: "flex", gap: 8 }}>
+
+				{/* Action Right */}
+				<Flex
+					gap={8}
+					wrap="wrap"
+					className="w-full sm:w-auto sm:ml-auto"
+				>
+					{/* Search */}
 					<Input
 						allowClear
 						prefix={<SearchOutlined />}
-						placeholder="Tìm theo tên vai trò/mô tả..."
+						placeholder="Tìm theo tên vai trò..."
 						value={keyword}
 						onChange={(e) => setKeyword(e.target.value)}
-						style={{ width: 280 }}
+						className="w-full sm:w-72"
 					/>
-					<Button icon={<ReloadOutlined />} onClick={fetchRoles}>
-						Refresh
-					</Button>
-					{hasPermission("role:create") && (
-						<Button
-							type="primary"
-							icon={<PlusOutlined />}
-							onClick={() => {
-								setEditing(null);
-								form.resetFields();
-								setSelectedPermissions([]);
-								setModalOpen(true);
-							}}
-						>
-							Thêm vai trò
-						</Button>
-					)}
 
-				</div>
-			</div>
+					{/* Buttons */}
+					<Flex gap={8} wrap="wrap">
+						<Button icon={<ReloadOutlined />} onClick={fetchRoles}>
+							<span className="hidden sm:inline">Refresh</span>
+						</Button>
+						{hasPermission("role:create") && (
+							<Button
+								type="primary"
+								icon={<PlusOutlined />}
+								onClick={() => {
+									setEditing(null);
+									form.resetFields();
+									setSelectedPermissions([]);
+									setModalOpen(true);
+								}}
+							>
+								<span className="hidden sm:inline">Thêm vai trò</span>
+								<span className="inline sm:hidden">Thêm</span>
+							</Button>
+						)}
+					</Flex>
+				</Flex>
+			</Flex>
 
 			{loading ? (
-				<Spin tip="Đang tải..." />
+				<div style={{ textAlign: "center", padding: 60 }}>
+					<Spin size="large" tip="Đang tải..." />
+				</div>
 			) : (
-				<Table<Role>
-					dataSource={filteredRoles}
-					columns={columns}
-					rowKey="id"
-					bordered
-					pagination={{ pageSize: 10 }}
-				/>
+				<div style={{ overflowX: "auto" }}>  {/* ✅ Thêm wrapper */}
+					<Table<Role>
+						dataSource={filteredRoles}
+						columns={columns}
+						rowKey="id"
+						bordered
+						pagination={{
+							pageSize: 10,
+							showSizeChanger: true,
+							showTotal: (total) => `Tổng ${total} vai trò`,
+							pageSizeOptions: ["10", "20", "50"],
+							position: ["bottomRight"],
+							style: { marginTop: 16 },
+						}}
+						locale={{ emptyText: "Không có vai trò nào" }}
+						scroll={{ x: 1000 }} 
+					/>
+				</div>
 			)}
 
 			{/* Modal chi tiết quyền */}
@@ -462,6 +490,7 @@ export default function RolesAdmin() {
 				)}
 			</Modal>
 
+			{/* Modal thêm/sửa */}
 			<Modal
 				title={editing ? "Sửa vai trò" : "Thêm vai trò"}
 				open={modalOpen}
@@ -471,9 +500,9 @@ export default function RolesAdmin() {
 				}}
 				onOk={handleSubmit}
 				okText={editing ? "Lưu" : "Tạo mới"}
-				width="80%"     // chiếm 100% màn hình
+				width="80%"
 				centered
-				bodyStyle={{ maxHeight: "80vh", overflowY: "hidden", overflowX: "hidden" }}   
+				bodyStyle={{ maxHeight: "80vh", overflowY: "hidden", overflowX: "hidden" }}
 			>
 				<Form
 					form={form}
@@ -585,7 +614,7 @@ export default function RolesAdmin() {
 													))}
 												</div>
 
-												{groupIndex !==
+												{groupIndex! ==
 													Object.keys(groupedPermissions).length - 1 && (
 														<Divider style={{ margin: "20px 0" }} />
 													)}

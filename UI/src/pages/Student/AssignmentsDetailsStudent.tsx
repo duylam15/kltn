@@ -8,11 +8,14 @@ import {
 	Power,
 	Send,
 	AlertTriangle,
+	Menu,
+	X,
 } from "lucide-react";
 import instance from "../../utils/axiosInstance";
 
 dayjs.locale("vi");
 
+// ==================== TYPES ====================
 type QuestionType = "multiple_choice" | "essay" | "coding" | "true_false";
 type AssignmentType = "exercise" | "quiz" | "project" | "exam";
 
@@ -93,17 +96,17 @@ interface CodeSubmissionResult {
 	testResults: TestResult[];
 }
 
+// ==================== COMPONENT ====================
 export default function AssignmentsDetailsStudent() {
 	const { assignmentId } = useParams();
 	const navigate = useNavigate();
 	const { user } = useAuth();
 
+	// States
 	const [assignment, setAssignment] = useState<Assignment | null>(null);
 	const [displayQuestions, setDisplayQuestions] = useState<Question[]>([]);
 	const [answers, setAnswers] = useState<Map<number, Answer>>(new Map());
-	const [codeResults, setCodeResults] = useState<Map<number, CodeSubmissionResult>>(
-		new Map()
-	);
+	const [codeResults, setCodeResults] = useState<Map<number, CodeSubmissionResult>>(new Map());
 	const [loading, setLoading] = useState(true);
 	const [submitting, setSubmitting] = useState(false);
 	const [testingCode, setTestingCode] = useState<Set<number>>(new Set());
@@ -111,7 +114,11 @@ export default function AssignmentsDetailsStudent() {
 	const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
 	const [isLateSubmission, setIsLateSubmission] = useState(false);
 
-	// 🔥 Sử dụng useRef để tránh stale closure
+	// ✅ Mobile states
+	const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+	const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+	// Refs
 	const answersRef = useRef(answers);
 	const submittingRef = useRef(submitting);
 
@@ -119,7 +126,19 @@ export default function AssignmentsDetailsStudent() {
 	const path = window.location.pathname;
 	const sectionId = Number(path.split("/")[3]);
 
-	// 🔥 Cập nhật ref mỗi khi answers thay đổi
+	// ✅ Handle resize
+	useEffect(() => {
+		const handleResize = () => {
+			const mobile = window.innerWidth < 768;
+			setIsMobile(mobile);
+			if (!mobile) setIsMobileMenuOpen(false);
+		};
+
+		window.addEventListener('resize', handleResize);
+		return () => window.removeEventListener('resize', handleResize);
+	}, []);
+
+	// Update refs
 	useEffect(() => {
 		answersRef.current = answers;
 	}, [answers]);
@@ -128,37 +147,31 @@ export default function AssignmentsDetailsStudent() {
 		submittingRef.current = submitting;
 	}, [submitting]);
 
+	// Fetch assignment
 	useEffect(() => {
 		if (assignmentId) {
 			fetchAssignmentDetails();
 		}
 	}, [assignmentId]);
 
-	// 🔥 TIMER EFFECT - Đã sửa lại hoàn toàn
+	// Timer effect
 	useEffect(() => {
-		if (timeRemaining === null || timeRemaining <= 0) {
-			return;
-		}
+		if (timeRemaining === null || timeRemaining <= 0) return;
 
 		const timer = setInterval(() => {
 			setTimeRemaining((prev) => {
 				if (prev === null || prev <= 1) {
 					clearInterval(timer);
-					// 🔥 Gọi submit với delay nhỏ để đảm bảo state đã update
 					setTimeout(() => {
-						if (!submittingRef.current) {
-							handleAutoSubmit();
-						}
+						if (!submittingRef.current) handleAutoSubmit();
 					}, 100);
 					return 0;
 				}
 
-				// 🔥 Cảnh báo khi còn 5 phút
 				if (prev === 300) {
 					alert("⚠️ CHÚ Ý: Còn 5 phút!  Hãy kiểm tra và chuẩn bị nộp bài.");
 				}
 
-				// 🔥 Cảnh báo khi còn 1 phút
 				if (prev === 60) {
 					alert("🚨 KHẨN CẤP: Còn 1 phút! Bài sẽ được nộp tự động khi hết giờ.");
 				}
@@ -170,22 +183,20 @@ export default function AssignmentsDetailsStudent() {
 		return () => clearInterval(timer);
 	}, [timeRemaining]);
 
+	// ==================== API FUNCTIONS ====================
 	const fetchAssignmentDetails = async () => {
 		setLoading(true);
 		try {
-			const assignmentRes = await instance.get(
-				`/assignments/${assignmentId}`,
-			);
+			const assignmentRes = await instance.get(`/assignments/${assignmentId}`);
 			const assignmentData = await assignmentRes.data;
+
 			if (!assignmentData.success) {
 				setError("Không thể tải thông tin bài tập");
 				setLoading(false);
 				return;
 			}
 
-			const questionsRes = await instance.get(
-				`/questions`,
-			);
+			const questionsRes = await instance.get(`/questions?limit=10000`);
 			const questionsData = await questionsRes.data;
 
 			if (!questionsData.success) {
@@ -196,7 +207,6 @@ export default function AssignmentsDetailsStudent() {
 
 			const assignmentQuestions = assignmentData.data.questions || [];
 			const allQuestions = questionsData.data || [];
-
 			const questionIds = assignmentQuestions.map((q: any) => q.questionId);
 			const questionsMap = new Map(allQuestions.map((q: Question) => [q.id, q]));
 
@@ -213,15 +223,11 @@ export default function AssignmentsDetailsStudent() {
 							{ withCredentials: true }
 						);
 						const testCasesData = await testCasesRes.data;
-
 						if (testCasesData.success) {
 							question.testCases = testCasesData.data || [];
 						}
 					} catch (err) {
-						console.error(
-							`Error fetching test cases for question ${question.id}:`,
-							err
-						);
+						console.error(`Error fetching test cases for question ${question.id}:`, err);
 					}
 				}
 			}
@@ -233,12 +239,10 @@ export default function AssignmentsDetailsStudent() {
 
 			setAssignment(assignmentObj);
 
-			// 🔥 Tự động bắt đầu bài tập và khởi động timer
 			if (assignmentObj.timeLimit) {
 				setTimeRemaining(assignmentObj.timeLimit * 60);
 			}
 
-			// 🔥 Tự động xáo trộn câu hỏi nếu cần
 			if (assignmentObj.shuffleQuestions) {
 				const shuffled = shuffleArray(fullQuestions);
 				setDisplayQuestions(shuffled);
@@ -246,7 +250,6 @@ export default function AssignmentsDetailsStudent() {
 				setDisplayQuestions(fullQuestions);
 			}
 
-			// 🔥 Kiểm tra nộp muộn
 			if (assignmentObj.dueDate) {
 				const now = dayjs();
 				const dueDate = dayjs(assignmentObj.dueDate);
@@ -255,13 +258,10 @@ export default function AssignmentsDetailsStudent() {
 				}
 			}
 
-			// 🔥 Gọi API start assignment ngầm
 			try {
 				await instance.post(
 					`/assignments/${assignmentId}/start`,
-					{
-						studentId: studentId,
-					},
+					{ studentId: studentId },
 					{ withCredentials: true }
 				);
 			} catch (err) {
@@ -284,6 +284,7 @@ export default function AssignmentsDetailsStudent() {
 		return shuffled;
 	};
 
+	// ==================== ANSWER HANDLERS ====================
 	const handleAnswerChange = (questionId: number, answer: Partial<Answer>) => {
 		setAnswers((prev) => {
 			const newAnswers = new Map(prev);
@@ -314,7 +315,7 @@ export default function AssignmentsDetailsStudent() {
 		handleAnswerChange(questionId, { selectedChoices });
 	};
 
-	
+	// ==================== CODE TEST ====================
 	const handleTestCode = async (questionId: number) => {
 		const answer = answers.get(questionId);
 
@@ -326,8 +327,6 @@ export default function AssignmentsDetailsStudent() {
 		setTestingCode((prev) => new Set(prev).add(questionId));
 
 		try {
-			console.log("📤 Submitting code...");
-
 			const submitRes = await instance.post(
 				`/assignments/${assignmentId}/submit-code`,
 				{
@@ -349,24 +348,18 @@ export default function AssignmentsDetailsStudent() {
 			const answerId = submitData.data.answer?.id || submitData.data.id;
 
 			if (!answerId) {
-				console.error("❌ No answerId in response:", submitData);
 				alert("❌ Không nhận được ID câu trả lời");
 				return;
 			}
 
-			console.log("✅ Answer ID:", answerId);
-
-			// 🔥 ĐỢI LÂU HƠN TRƯỚC KHI BẮT ĐẦU POLL
-			await new Promise((resolve) => setTimeout(resolve, 2000)); // 2 giây thay vì 1 giây
+			await new Promise((resolve) => setTimeout(resolve, 2000));
 
 			let attempts = 0;
-			const maxAttempts = 120; // 🔥 TĂNG LÊN 120 lần (60 giây)
+			const maxAttempts = 120;
 			const pollInterval = 500;
 
 			const pollResult = async (): Promise<any> => {
 				attempts++;
-
-				console.log(`🔄 Polling attempt ${attempts}`); // 🔥 THÊM LOG
 
 				if (attempts > maxAttempts) {
 					throw new Error("⏰ Timeout: Quá thời gian chờ kết quả (60 giây)");
@@ -379,15 +372,12 @@ export default function AssignmentsDetailsStudent() {
 
 				const resultData = await resultRes.data;
 
-				console.log(`🔄 Polling attempt ${attempts} Result:`, resultData); // 🔥 THÊM LOG
-
 				if (!resultData.success) {
 					throw new Error(resultData.message || "Không lấy được kết quả");
 				}
 
 				const status = resultData.data.judgeStatus;
 
-				// 🔥 THÊM "running" VÀO ĐIỀU KIỆN TIẾP TỤC POLL
 				if (status === "queued" || status === "judging" || status === "running") {
 					await new Promise((resolve) => setTimeout(resolve, pollInterval));
 					return pollResult();
@@ -406,14 +396,12 @@ export default function AssignmentsDetailsStudent() {
 
 			const result = await pollResult();
 
-			// 🔥 LƯU KẾT QUẢ VÀO codeResults
 			setCodeResults((prev) => {
 				const newResults = new Map(prev);
 				newResults.set(questionId, result);
 				return newResults;
 			});
 
-			// 🔥 CẬP NHẬT ĐIỂM SỐ VÀO answers STATE
 			setAnswers((prev) => {
 				const newAnswers = new Map(prev);
 				const existingAnswer = newAnswers.get(questionId) || { questionId };
@@ -447,53 +435,19 @@ export default function AssignmentsDetailsStudent() {
 				return newSet;
 			});
 		}
-	};	
+	};
 
+	// ==================== SUBMIT ====================
 	const handleSubmit = async (isAutoSubmit: boolean = false) => {
-		// 🔥 Ngăn submit trùng lặp
-		if (submitting) {
-			console.log("⚠️ Đang submit, bỏ qua request mới");
-			return;
-		}
+		if (submitting) return;
 
 		if (!isAutoSubmit && isLateSubmission && !assignment?.allowLateSubmission) {
 			alert("⚠️ Bài tập đã hết hạn nộp và không cho phép nộp muộn!");
 			return;
 		}
 
-		// 🔥 Sử dụng ref để lấy answers mới nhất
 		const currentAnswers = answersRef.current;
 		const answersArray = Array.from(currentAnswers.values());
-		console.log("📦 === SUBMIT DEBUG ===");
-		console.log("Total answers:", answersArray.length);
-		answersArray.forEach((ans, index) => {
-			const question = displayQuestions.find(q => q.id === ans.questionId);
-			console.log(`\nAnswer ${index + 1}:`, {
-				questionId: ans.questionId,
-				questionType: question?.type,
-				questionContent: question?.content?.substring(0, 50) + '...',
-
-				// 🔥 LOG NỘI DUNG ĐẦY ĐỦ
-				essayAnswer: ans.essayAnswer,
-				codeAnswer: ans.codeAnswer,
-				language: ans.language,
-				selectedChoices: ans.selectedChoices,
-
-				// Metadata
-				hasEssay: !!ans.essayAnswer,
-				essayLength: ans.essayAnswer?.length || 0,
-				hasCode: !!ans.codeAnswer,
-				codeLength: ans.codeAnswer?.length || 0,
-				hasLanguage: !!ans.language,
-			});
-		});
-		console.log("\n📤 FULL PAYLOAD:");
-		console.log(JSON.stringify({
-			studentId,
-			answers: answersArray,
-		}, null, 2));
-		console.log("======================\n");
-
 
 		if (!isAutoSubmit) {
 			const unansweredQuestions = displayQuestions.filter((q) => !currentAnswers.has(q.id));
@@ -509,8 +463,6 @@ export default function AssignmentsDetailsStudent() {
 		setSubmitting(true);
 
 		try {
-			console.log(`🔥 ${isAutoSubmit ? 'Auto-' : ''}Submitting với ${answersArray.length} câu trả lời`);
-
 			const payload = {
 				studentId,
 				answers: answersArray,
@@ -521,23 +473,13 @@ export default function AssignmentsDetailsStudent() {
 				payload,
 				{ withCredentials: true }
 			);
-				
 
-			let data: any;
-			try {
-				data = await res.data;
-			} catch {
-				throw new Error("Không đọc được phản hồi từ server");
-			}
-
-			if (!res) {
-				throw new Error(data?.message || `Lỗi HTTP ${res.status}`);
-			}
+			const data = await res.data;
 
 			if (data.success) {
 				const message = isAutoSubmit
 					? `✅ Đã tự động nộp bài do hết thời gian!\n\nSố câu đã làm: ${answersArray.length}/${displayQuestions.length}`
-					: "✅ Nộp bài thành công!";
+					: "✅ Nộp bài thành công! ";
 
 				if (assignment?.showAnswersAfterSubmit) {
 					alert(message + "\n\nBạn sẽ xem kết quả chi tiết.");
@@ -563,7 +505,6 @@ export default function AssignmentsDetailsStudent() {
 			setError(msg);
 			alert(`❌ ${msg}`);
 
-			// 🔥 Nếu auto-submit lỗi vẫn redirect về danh sách
 			if (isAutoSubmit) {
 				setTimeout(() => {
 					navigate(`/student/courses/${sectionId}/assignments`);
@@ -574,7 +515,6 @@ export default function AssignmentsDetailsStudent() {
 		}
 	};
 
-	// 🔥 Hàm auto-submit - chỉ gọi handleSubmit với flag
 	const handleAutoSubmit = () => {
 		console.log("⏰ HẾT GIỜ!  Tự động nộp bài.. .");
 		handleSubmit(true);
@@ -588,6 +528,7 @@ export default function AssignmentsDetailsStudent() {
 		navigate(`/student/courses/${sectionId}/assignments`);
 	};
 
+	// ==================== UTILS ====================
 	const formatTime = (seconds: number) => {
 		const hours = Math.floor(seconds / 3600);
 		const minutes = Math.floor((seconds % 3600) / 60);
@@ -598,35 +539,33 @@ export default function AssignmentsDetailsStudent() {
 			.padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 	};
 
-	const getAnsweredCount = () => {
-		return answers.size;
-	};
+	const getAnsweredCount = () => answers.size;
 
 	const scrollToQuestion = (index: number) => {
 		const element = document.getElementById(`question-${index}`);
 		if (element) {
 			element.scrollIntoView({ behavior: "smooth", block: "center" });
 		}
+		if (isMobile) {
+			setIsMobileMenuOpen(false);
+		}
 	};
 
+	// ==================== RENDER FUNCTIONS ====================
 	const renderTestResults = (questionId: number) => {
 		const result = codeResults.get(questionId);
 		if (!result) return null;
 
 		return (
-			<div className="mt-4 p-4 bg-gray-50 rounded border">
-				<div className="flex items-center justify-between mb-3">
-					<h4 className="font-medium text-gray-900">Kết quả Test</h4>
-					<div className="flex items-center gap-2">
-						<span
-							className={`text-lg font-bold ${result.score === result.maxScore
-								? "text-green-600"
-								: "text-orange-600"
-								}`}
-						>
-							{result.score} / {result.maxScore} điểm
-						</span>
-					</div>
+			<div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-gray-50 rounded border">
+				<div className="flex items-center justify-between mb-2 sm:mb-3">
+					<h4 className="text-sm sm:text-base font-medium text-gray-900">Kết quả Test</h4>
+					<span
+						className={`text-base sm:text-lg font-bold ${result.score === result.maxScore ? "text-green-600" : "text-orange-600"
+							}`}
+					>
+						{result.score} / {result.maxScore} điểm
+					</span>
 				</div>
 
 				{result.testResults && result.testResults.length > 0 && (
@@ -634,18 +573,14 @@ export default function AssignmentsDetailsStudent() {
 						{result.testResults.map((test, index) => (
 							<div
 								key={test.id}
-								className={`p-3 rounded text-sm ${test.status === "ok"
-									? "bg-green-50 border border-green-200"
-									: "bg-red-50 border border-red-200"
+								className={`p-2 sm:p-3 rounded text-xs sm:text-sm ${test.status === "ok"
+										? "bg-green-50 border border-green-200"
+										: "bg-red-50 border border-red-200"
 									}`}
 							>
 								<div className="flex justify-between items-center">
 									<span className="font-medium">Test {index + 1}</span>
-									<span
-										className={
-											test.status === "ok" ? "text-green-600" : "text-red-600"
-										}
-									>
+									<span className={test.status === "ok" ? "text-green-600" : "text-red-600"}>
 										{test.status === "ok" ? "✓ Passed" : "✗ Failed"}
 									</span>
 								</div>
@@ -666,30 +601,28 @@ export default function AssignmentsDetailsStudent() {
 			<div
 				key={question.id}
 				id={`question-${index}`}
-				className="bg-white rounded-lg border shadow-sm p-6 scroll-mt-24"
+				className="bg-white rounded-lg border shadow-sm p-4 sm:p-6 scroll-mt-24"
 			>
-				<div className="mb-4">
-					<h3 className="text-lg font-bold text-gray-900 mb-3">
+				<div className="mb-3 sm:mb-4">
+					<h3 className="text-base sm:text-lg font-bold text-gray-900 mb-2 sm:mb-3">
 						{index + 1}. {question.content}
 					</h3>
 				</div>
 
 				<div>
 					{question.type === "multiple_choice" && question.choices && (
-						<div className="space-y-3">
+						<div className="space-y-2 sm:space-y-3">
 							{question.choices
 								.sort((a, b) => a.order - b.order)
 								.map((choice, idx) => {
 									const label = String.fromCharCode(65 + idx);
-									const isSelected =
-										answer?.selectedChoices?.includes(choice.id) || false;
-									const hasMultipleCorrect =
-										question.choices!.filter((c) => c.isCorrect).length > 1;
+									const isSelected = answer?.selectedChoices?.includes(choice.id) || false;
+									const hasMultipleCorrect = question.choices!.filter((c) => c.isCorrect).length > 1;
 
 									return (
 										<label
 											key={choice.id}
-											className="flex items-start gap-3 cursor-pointer group"
+											className="flex items-start gap-2 sm:gap-3 cursor-pointer group"
 										>
 											<div className="flex-shrink-0 mt-0.5">
 												<input
@@ -697,31 +630,23 @@ export default function AssignmentsDetailsStudent() {
 													name={`question-${question.id}`}
 													checked={isSelected}
 													onChange={() =>
-														handleMultipleChoiceChange(
-															question.id,
-															choice.id,
-															hasMultipleCorrect
-														)
+														handleMultipleChoiceChange(question.id, choice.id, hasMultipleCorrect)
 													}
 													className="hidden"
 												/>
 												<div
-													className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${isSelected
-														? "bg-blue-600 border-blue-600"
-														: "border-gray-300 group-hover:border-blue-400"
+													className={`w-5 h-5 sm:w-6 sm:h-6 rounded-md border-2 flex items-center justify-center transition-all ${isSelected
+															? "bg-blue-600 border-blue-600"
+															: "border-gray-300 group-hover:border-blue-400"
 														}`}
 												>
 													{isSelected && (
-														<span className="text-white text-sm font-bold">
-															✓
-														</span>
+														<span className="text-white text-xs sm:text-sm font-bold">✓</span>
 													)}
 												</div>
 											</div>
-											<div className="flex-1">
-												<span className="font-bold text-gray-900 mr-2">
-													{label}.
-												</span>
+											<div className="flex-1 text-sm sm:text-base">
+												<span className="font-bold text-gray-900 mr-1 sm:mr-2">{label}. </span>
 												<span className="text-gray-700">{choice.content}</span>
 											</div>
 										</label>
@@ -731,49 +656,42 @@ export default function AssignmentsDetailsStudent() {
 					)}
 
 					{question.type === "true_false" && (
-						<div className="space-y-3">
+						<div className="space-y-2 sm:space-y-3">
 							{[
 								{ id: 1, content: "Đúng", value: true },
 								{ id: 2, content: "Sai", value: false },
 							].map((option, idx) => {
 								const label = String.fromCharCode(65 + idx);
-								const isSelected =
-									answer?.selectedChoices?.includes(option.id) || false;
+								const isSelected = answer?.selectedChoices?.includes(option.id) || false;
 
 								return (
 									<label
 										key={option.id}
-										className="flex items-start gap-3 cursor-pointer group"
+										className="flex items-start gap-2 sm:gap-3 cursor-pointer group"
 									>
-										<div className="flex-shrink-0 mt-0. 5">
+										<div className="flex-shrink-0 mt-0.5">
 											<input
 												type="radio"
 												name={`question-${question.id}`}
 												checked={isSelected}
 												onChange={() =>
-													handleAnswerChange(question.id, {
-														selectedChoices: [option.id],
-													})
+													handleAnswerChange(question.id, { selectedChoices: [option.id] })
 												}
 												className="hidden"
 											/>
 											<div
-												className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${isSelected
-													? "bg-blue-600 border-blue-600"
-													: "border-gray-300 group-hover:border-blue-400"
+												className={`w-5 h-5 sm:w-6 sm:h-6 rounded-md border-2 flex items-center justify-center transition-all ${isSelected
+														? "bg-blue-600 border-blue-600"
+														: "border-gray-300 group-hover:border-blue-400"
 													}`}
 											>
 												{isSelected && (
-													<span className="text-white text-sm font-bold">
-														✓
-													</span>
+													<span className="text-white text-xs sm:text-sm font-bold">✓</span>
 												)}
 											</div>
 										</div>
-										<div className="flex-1">
-											<span className="font-bold text-gray-900 mr-2">
-												{label}.
-											</span>
+										<div className="flex-1 text-sm sm:text-base">
+											<span className="font-bold text-gray-900 mr-1 sm:mr-2">{label}.</span>
 											<span className="text-gray-700">{option.content}</span>
 										</div>
 									</label>
@@ -787,12 +705,10 @@ export default function AssignmentsDetailsStudent() {
 							<textarea
 								value={answer?.essayAnswer || ""}
 								onChange={(e) =>
-									handleAnswerChange(question.id, {
-										essayAnswer: e.target.value,
-									})
+									handleAnswerChange(question.id, { essayAnswer: e.target.value })
 								}
 								placeholder="Nhập câu trả lời của bạn..."
-								className="w-full min-h-[200px] p-4 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+								className="w-full min-h-[150px] sm:min-h-[200px] p-3 sm:p-4 text-sm sm:text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
 							/>
 							<p className="text-xs text-gray-500 mt-2">
 								{answer?.essayAnswer?.length || 0} ký tự
@@ -802,15 +718,13 @@ export default function AssignmentsDetailsStudent() {
 
 					{question.type === "coding" && (
 						<div>
-							<div className="mb-3 flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+							<div className="mb-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between bg-gray-50 p-3 rounded-lg gap-2">
 								<select
 									value={answer?.language || "javascript"}
 									onChange={(e) =>
-										handleAnswerChange(question.id, {
-											language: e.target.value,
-										})
+										handleAnswerChange(question.id, { language: e.target.value })
 									}
-									className="px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 bg-white"
+									className="w-full sm:w-auto px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 bg-white"
 								>
 									<option value="javascript">JavaScript</option>
 									<option value="python">Python</option>
@@ -824,7 +738,7 @@ export default function AssignmentsDetailsStudent() {
 								<button
 									onClick={() => handleTestCode(question.id)}
 									disabled={isTesting || !answer?.codeAnswer}
-									className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium disabled:bg-gray-400 transition-colors"
+									className="w-full sm:w-auto px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium disabled:bg-gray-400 transition-colors"
 								>
 									{isTesting ? "Testing..." : "🧪 Test Code"}
 								</button>
@@ -833,12 +747,10 @@ export default function AssignmentsDetailsStudent() {
 							<textarea
 								value={answer?.codeAnswer || ""}
 								onChange={(e) =>
-									handleAnswerChange(question.id, {
-										codeAnswer: e.target.value,
-									})
+									handleAnswerChange(question.id, { codeAnswer: e.target.value })
 								}
 								placeholder="// Nhập code của bạn..."
-								className="w-full min-h-[300px] p-4 border-2 border-gray-200 rounded-lg font-mono text-sm focus:outline-none focus:border-blue-500 bg-gray-900 text-green-400"
+								className="w-full min-h-[250px] sm:min-h-[300px] p-3 sm:p-4 border-2 border-gray-200 rounded-lg font-mono text-xs sm:text-sm focus:outline-none focus:border-blue-500 bg-gray-900 text-green-400"
 								spellCheck={false}
 							/>
 
@@ -848,8 +760,8 @@ export default function AssignmentsDetailsStudent() {
 				</div>
 
 				{isAnswered && (question.type === "multiple_choice" || question.type === "true_false") && (
-					<div className="mt-4 p-4 bg-blue-50 border-l-4 border-blue-600 rounded-r">
-						<p className="text-sm font-medium text-blue-900">
+					<div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-blue-50 border-l-4 border-blue-600 rounded-r">
+						<p className="text-xs sm:text-sm font-medium text-blue-900">
 							Đáp án của bạn:{" "}
 							<span className="font-bold">
 								{answer?.selectedChoices
@@ -857,9 +769,7 @@ export default function AssignmentsDetailsStudent() {
 										const idx = question.choices
 											?.sort((a, b) => a.order - b.order)
 											.findIndex((c) => c.id === id);
-										return idx !== undefined
-											? String.fromCharCode(65 + idx)
-											: "";
+										return idx !== undefined ? String.fromCharCode(65 + idx) : "";
 									})
 									.join(", ")}
 							</span>
@@ -870,12 +780,13 @@ export default function AssignmentsDetailsStudent() {
 		);
 	};
 
+	// ==================== LOADING & EMPTY STATES ====================
 	if (loading) {
 		return (
-			<div className="w-full min-h-screen bg-white flex items-center justify-center">
+			<div className="w-full min-h-screen bg-white flex items-center justify-center p-4">
 				<div className="text-center">
-					<div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mb-4"></div>
-					<p className="text-gray-600 font-medium">Đang tải bài tập...</p>
+					<div className="inline-block animate-spin rounded-full h-12 w-12 sm:h-16 sm:w-16 border-b-4 border-blue-600 mb-4"></div>
+					<p className="text-gray-600 font-medium text-sm sm:text-base">Đang tải bài tập...</p>
 				</div>
 			</div>
 		);
@@ -884,17 +795,17 @@ export default function AssignmentsDetailsStudent() {
 	if (!assignment || !assignment.questions || assignment.questions.length === 0) {
 		return (
 			<div className="w-full min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-				<div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full text-center">
-					<div className="text-6xl mb-4">📭</div>
-					<h2 className="text-2xl font-bold text-gray-900 mb-2">
+				<div className="bg-white rounded-xl shadow-lg p-6 sm:p-8 max-w-md w-full text-center">
+					<div className="text-4xl sm:text-6xl mb-4">📭</div>
+					<h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
 						Không tìm thấy bài tập
 					</h2>
-					<p className="text-gray-600 mb-6">
+					<p className="text-sm sm:text-base text-gray-600 mb-6">
 						Bài tập này chưa có câu hỏi hoặc không tồn tại
 					</p>
 					<button
 						onClick={handleExit}
-						className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+						className="w-full sm:w-auto px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
 					>
 						← Quay lại danh sách
 					</button>
@@ -903,81 +814,110 @@ export default function AssignmentsDetailsStudent() {
 		);
 	}
 
+	// ==================== MAIN RENDER ====================
 	return (
-		<div className="w-full min-h-screen bg-gray-100 flex flex-col">
+		<div className="w-full min-h-screen flex flex-col">
+			{/* Late Submission Warning */}
 			{isLateSubmission && assignment.allowLateSubmission && (
-				<div className="bg-red-600 text-white px-6 py-3 text-center font-semibold flex items-center justify-center gap-2">
-					<AlertTriangle className="w-5 h-5" />
-					CẢNH BÁO: Bạn đang nộp muộn!  Hạn nộp đã qua vào{" "}
-					{dayjs(assignment.dueDate).format("DD/MM/YYYY HH:mm")}
+				<div className="bg-red-600 text-white px-3 sm:px-6 py-2 sm:py-3 text-center text-xs sm:text-sm font-semibold flex items-center justify-center gap-2">
+					<AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+					<span className="line-clamp-2 sm:line-clamp-1">
+						CẢNH BÁO: Bạn đang nộp muộn!  Hạn nộp: {dayjs(assignment.dueDate).format("DD/MM/YYYY HH:mm")}
+					</span>
 				</div>
 			)}
 
-			<div className="bg-white border-b shadow-sm sticky top-0 z-30">
-				<div className="max-w-screen-2xl mx-auto px-6 py-4">
-					<div className="flex items-center justify-between">
+			{/* Header */}
+			<div className="bg-white border-b shadow-sm sticky x z-30">
+				<div className="max-w-screen-2xl mx-auto px-3 sm:px-6 py-4 sm:py-4">
+					<div className="flex items-center justify-between gap-2">
+						{/* Exit Button */}
 						<button
 							onClick={handleExit}
-							className="flex items-center gap-2 px-5 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors shadow-md"
+							className="flex items-center gap-1 sm:gap-2 px-2 sm:px-5 py-1.5 sm:py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs sm:text-base font-semibold transition-colors"
 						>
-							<Power className="w-5 h-5 " />
-							THOÁT
+							<Power className="w-4 h-4 sm:w-5 sm:h-5" />
+							<span className="hidden sm:inline">THOÁT</span>
 						</button>
 
-						<div className="flex-1 text-center px-4">
-							<h1 className="text-xl font-bold text-gray-900">
+						{/* Title - Hidden on mobile */}
+						<div className="hidden md:flex flex-1 text-center px-4">
+							<h1 className="text-base lg:text-xl font-bold text-gray-900 truncate w-full">
 								{assignment.title}
 							</h1>
 						</div>
 
-						<div className="flex items-center gap-4">
+						{/* Right Actions */}
+						<div className="flex items-center gap-2">
+							{/* Timer */}
 							{timeRemaining !== null && (
 								<div
-									className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-mono text-xl font-bold shadow-md ${timeRemaining < 300
-										? "bg-red-100 text-red-700 animate-pulse"
-										: "bg-blue-100 text-blue-700"
+									className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-5 py-1 sm:py-2. 5 rounded-lg font-mono text-sm sm:text-xl font-bold ${timeRemaining < 300
+											? "bg-red-100 text-red-700 animate-pulse"
+											: "bg-blue-100 text-blue-700"
 										}`}
 								>
-									<Clock className="w-5 h-5" />
-									{formatTime(timeRemaining)}
+									<Clock className="w-3 h-3 sm:w-5 sm:h-5" />
+									<span className="hidden sm:inline">{formatTime(timeRemaining)}</span>
+									<span className="inline sm:hidden">
+										{Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
+									</span>
 								</div>
 							)}
 
+							{/* Submit Button */}
 							<button
 								onClick={() => handleSubmit(false)}
 								disabled={submitting}
-								className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition-colors disabled:bg-gray-400 shadow-md"
+								className="flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-1.5 sm:py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs sm:text-base font-bold transition-colors disabled:bg-gray-400"
 							>
-								<Send className="w-5 h-5" />
-								NỘP BÀI
+								<Send className="w-3 h-3 sm:w-5 sm:h-5" />
+								<span className="hidden sm:inline">NỘP BÀI</span>
+								<span className="inline sm:hidden">NỘP</span>
+							</button>
+
+							{/* Mobile Menu Toggle */}
+							<button
+								onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+								className="md:hidden p-2 bg-gray-100 rounded-lg"
+							>
+								{isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
 							</button>
 						</div>
+					</div>
+
+					{/* Mobile Title */}
+					<div className="md:hidden mt-2 text-center">
+						<h1 className="text-sm font-bold text-gray-900 line-clamp-2">
+							{assignment.title}
+						</h1>
 					</div>
 				</div>
 			</div>
 
-			<div className="flex-1 max-w-screen-2xl mx-auto w-full px-6 py-6">
-				<div className="flex gap-6">
-					<div className="flex-1 space-y-5 overflow-y-auto max-h-[calc(100vh-140px)]">
+			{/* Main Content */}
+			<div className="flex-1 max-w-screen-2xl mx-auto w-full px-3 sm:px-6 py-3 sm:py-6">
+				<div className="flex gap-3 sm:gap-6 relative">
+					{/* Questions Column */}
+					<div className={`flex-1 space-y-3 sm:space-y-5 ${isMobile ? 'pb-20' : ''}`}>
 						{error && (
-							<div className="p-4 bg-red-50 border-2 border-red-200 rounded-lg flex items-start gap-3">
-								<AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-								<span className="text-red-700 font-medium">{error}</span>
+							<div className="p-3 sm:p-4 bg-red-50 border-2 border-red-200 rounded-lg flex items-start gap-2 sm:gap-3">
+								<AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 flex-shrink-0 mt-0.5" />
+								<span className="text-xs sm:text-sm text-red-700 font-medium">{error}</span>
 							</div>
 						)}
 
-						{displayQuestions.map((question, index) =>
-							renderQuestion(question, index)
-						)}
+						{displayQuestions.map((question, index) => renderQuestion(question, index))}
 					</div>
 
-					<div className="w-64 flex-shrink-0">
-						<div className="bg-white rounded-lg shadow-lg p-5 sticky top-24">
-							<h3 className="font-bold text-gray-900 text-center mb-4 text-lg">
+					{/* Desktop Sidebar */}
+					<div className="hidden md:block w-56 lg:w-64 flex-shrink-0">
+						<div className="bg-white rounded-lg shadow-lg p-4 lg:p-5 sticky top-24">
+							<h3 className="font-bold text-gray-900 text-center mb-3 lg:mb-4 text-base lg:text-lg">
 								Danh sách câu hỏi
 							</h3>
 
-							<div className="grid grid-cols-5 gap-2 mb-6">
+							<div className="grid grid-cols-5 gap-1. 5 lg:gap-2 mb-4 lg:mb-6">
 								{displayQuestions.map((question, index) => {
 									const isAnswered = answers.has(question.id);
 
@@ -985,9 +925,9 @@ export default function AssignmentsDetailsStudent() {
 										<button
 											key={question.id}
 											onClick={() => scrollToQuestion(index)}
-											className={`aspect-square flex items-center justify-center rounded-lg font-bold text-sm border-2 transition-all hover:scale-110 ${isAnswered
-												? "bg-blue-600 text-white border-blue-700 shadow-md"
-												: "bg-white text-gray-700 border-gray-300 hover:border-blue-400"
+											className={`aspect-square flex items-center justify-center rounded-lg font-bold text-xs lg:text-sm border-2 transition-all hover:scale-110 ${isAnswered
+													? "bg-blue-600 text-white border-blue-700 shadow-md"
+													: "bg-white text-gray-700 border-gray-300 hover:border-blue-400"
 												}`}
 										>
 											{index + 1}
@@ -996,45 +936,131 @@ export default function AssignmentsDetailsStudent() {
 								})}
 							</div>
 
-							<div className="border-t pt-4">
-								<div className="flex items-center justify-between text-sm mb-2">
+							<div className="border-t pt-3 lg:pt-4">
+								<div className="flex items-center justify-between text-xs lg:text-sm mb-2">
 									<span className="text-gray-600">Đã làm:</span>
 									<span className="font-bold text-blue-600">
 										{getAnsweredCount()} / {displayQuestions.length}
 									</span>
 								</div>
 
-								<div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden">
+								<div className="w-full bg-gray-200 h-2. 5 lg:h-3 rounded-full overflow-hidden">
 									<div
-										className="h-3 bg-blue-600 transition-all duration-300"
+										className="h-full bg-blue-600 transition-all duration-300"
 										style={{
-											width: `${Math.round(
-												(getAnsweredCount() / displayQuestions.length) * 100
-											)}%`,
+											width: `${Math.round((getAnsweredCount() / displayQuestions.length) * 100)}%`,
 										}}
 									/>
 								</div>
 
-								<div className="text-center text-sm font-bold text-blue-600 mt-2">
-									{Math.round(
-										(getAnsweredCount() / displayQuestions.length) * 100
-									)}
-									%
+								<div className="text-center text-xs lg:text-sm font-bold text-blue-600 mt-2">
+									{Math.round((getAnsweredCount() / displayQuestions.length) * 100)}%
 								</div>
 							</div>
 
-							<div className="mt-6 space-y-2 text-sm border-t pt-4">
+							<div className="mt-4 lg:mt-6 space-y-2 text-xs lg:text-sm border-t pt-3 lg:pt-4">
 								<div className="flex items-center gap-2">
-									<div className="w-6 h-6 bg-blue-600 rounded-lg"></div>
+									<div className="w-5 h-5 lg:w-6 lg:h-6 bg-blue-600 rounded-lg"></div>
 									<span className="text-gray-700">Đã trả lời</span>
 								</div>
 								<div className="flex items-center gap-2">
-									<div className="w-6 h-6 bg-white border-2 border-gray-300 rounded-lg"></div>
+									<div className="w-5 h-5 lg:w-6 lg:h-6 bg-white border-2 border-gray-300 rounded-lg"></div>
 									<span className="text-gray-700">Chưa trả lời</span>
 								</div>
 							</div>
 						</div>
 					</div>
+
+					{/* Mobile Bottom Sheet */}
+					{isMobile && (
+						<>
+							{/* Backdrop */}
+							{isMobileMenuOpen && (
+								<div
+									className="fixed inset-0 bg-black bg-opacity-50 z-40"
+									onClick={() => setIsMobileMenuOpen(false)}
+								/>
+							)}
+
+							{/* Bottom Sheet */}
+							<div
+								className={`fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-50 transition-transform duration-300 ${isMobileMenuOpen ? 'translate-y-0' : 'translate-y-full'
+									}`}
+								style={{ maxHeight: '70vh' }}
+							>
+								<div className="p-4 overflow-y-auto max-h-[70vh]">
+									{/* Handle */}
+									<div className="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-4"></div>
+
+									<h3 className="font-bold text-gray-900 text-center mb-4">
+										Danh sách câu hỏi
+									</h3>
+
+									<div className="grid grid-cols-5 gap-2 mb-4">
+										{displayQuestions.map((question, index) => {
+											const isAnswered = answers.has(question.id);
+
+											return (
+												<button
+													key={question.id}
+													onClick={() => scrollToQuestion(index)}
+													className={`aspect-square flex items-center justify-center rounded-lg font-bold text-sm border-2 transition-all ${isAnswered
+															? "bg-blue-600 text-white border-blue-700"
+															: "bg-white text-gray-700 border-gray-300"
+														}`}
+												>
+													{index + 1}
+												</button>
+											);
+										})}
+									</div>
+
+									<div className="border-t pt-4">
+										<div className="flex items-center justify-between text-sm mb-2">
+											<span className="text-gray-600">Đã làm:</span>
+											<span className="font-bold text-blue-600">
+												{getAnsweredCount()} / {displayQuestions.length}
+											</span>
+										</div>
+
+										<div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden">
+											<div
+												className="h-full bg-blue-600 transition-all duration-300"
+												style={{
+													width: `${Math.round((getAnsweredCount() / displayQuestions.length) * 100)}%`,
+												}}
+											/>
+										</div>
+
+										<div className="text-center text-sm font-bold text-blue-600 mt-2">
+											{Math.round((getAnsweredCount() / displayQuestions.length) * 100)}%
+										</div>
+									</div>
+
+									<div className="mt-4 space-y-2 text-sm border-t pt-4">
+										<div className="flex items-center gap-2">
+											<div className="w-6 h-6 bg-blue-600 rounded-lg"></div>
+											<span className="text-gray-700">Đã trả lời</span>
+										</div>
+										<div className="flex items-center gap-2">
+											<div className="w-6 h-6 bg-white border-2 border-gray-300 rounded-lg"></div>
+											<span className="text-gray-700">Chưa trả lời</span>
+										</div>
+									</div>
+								</div>
+							</div>
+
+							{/* Mobile Floating Menu Button */}
+							{!isMobileMenuOpen && (
+								<button
+									onClick={() => setIsMobileMenuOpen(true)}
+									className="fixed bottom-4 right-4 bg-blue-600 text-white p-4 rounded-full shadow-2xl z-30 active:scale-95 transition-transform"
+								>
+									<Menu className="w-6 h-6" />
+								</button>
+							)}
+						</>
+					)}
 				</div>
 			</div>
 		</div>

@@ -18,6 +18,7 @@ import {
 	Row,
 	Col,
 	Space,
+	Flex,
 } from "antd";
 import {
 	ReloadOutlined,
@@ -440,7 +441,7 @@ export default function AssignmentManagement() {
 			title: "Hành động",
 			key: "actions",
 			align: "center" as const,
-			width: 220,
+			width: 180,
 			fixed: "right" as const,
 			render: (_: any, record: Assignment) => (
 				<div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
@@ -541,16 +542,13 @@ export default function AssignmentManagement() {
 
 	return (
 		<div style={{ padding: 16 }}>
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					alignItems: "center",
-					marginBottom: 16,
-					marginTop: -16,
-				}}
+			<Flex
+				wrap="wrap"
+				gap={12}
+				className="flex-col sm:flex-row items-start sm:items-center w-full mb-4 -mt-4"
 			>
-				<div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+				{/* Stats - Left side */}
+				<Flex gap={8} wrap="wrap" className="w-full sm:w-auto">
 					<div
 						style={{
 							display: "flex",
@@ -586,38 +584,70 @@ export default function AssignmentManagement() {
 						<span>Đang hiển thị:</span>
 						<strong style={{ color: "#52c41a" }}>{stats.visibleAssignments}</strong>
 					</div>
-				</div>
-				<div style={{ display: "flex", gap: 8 }}>
+				</Flex>
+
+				{/* Actions - Right side */}
+				<Flex
+					gap={8}
+					wrap="wrap"
+					className="w-full sm:w-auto sm:ml-auto"
+				>
+					{/* Search */}
 					<Input
 						allowClear
 						prefix={<SearchOutlined />}
-						placeholder="Tìm theo tiêu đề, mô tả, loại..."
+						placeholder="Tìm theo tiêu đề..."
 						value={keyword}
 						onChange={(e) => setKeyword(e.target.value)}
-						style={{ width: 200 }}
+						className="w-full sm:w-52"
+						size="small"
 					/>
-					<Button icon={<ReloadOutlined />} onClick={fetchData}>
-						Làm mới
-					</Button>
-					<Button
-						type="primary"
-						icon={<PlusOutlined />}
-						onClick={() => openCreateEditModal()}
-					>
-						Thêm bài tập
-					</Button>
-				</div>
-			</div>
 
-			<Table<Assignment>
-				dataSource={filteredAssignments}
-				columns={columns}
-				rowKey="id"
-				bordered
-				pagination={{ pageSize: 10, showSizeChanger: true }}
-				scroll={{ x: "max-content" }}
-				locale={{ emptyText: "Không có bài tập nào trong lớp này" }}
-			/>
+					{/* Buttons */}
+					<Flex gap={8} wrap="wrap" className="w-full sm:w-auto">
+						<Button
+							icon={<ReloadOutlined />}
+							onClick={fetchData}
+							size="small"
+							className="flex-1 sm:flex-none"
+						>
+							<span className="hidden sm:inline">Làm mới</span>
+						</Button>
+
+						<Button
+							type="primary"
+							icon={<PlusOutlined />}
+							onClick={() => openCreateEditModal()}
+							size="small"
+							className="flex-1 sm:flex-none"
+						>
+							<span className="hidden sm:inline">Thêm bài tập</span>
+							<span className="inline sm:hidden">Thêm</span>
+						</Button>
+					</Flex>
+				</Flex>
+			</Flex>
+
+			{/* 🎯 RESPONSIVE TABLE */}
+			<div style={{ overflowX: "auto" }}>
+				<Table<Assignment>
+					dataSource={filteredAssignments}
+					columns={columns}
+					rowKey="id"
+					bordered
+					pagination={{
+						pageSize: 10,
+						showSizeChanger: true,
+						showTotal: (total) => `Tổng ${total} bài tập`,
+						pageSizeOptions: ["10", "20", "50"],
+						position: ["bottomRight"],
+						style: { marginTop: 16 },
+					}}
+					scroll={{ x: 1200 }}
+					size="middle"
+					locale={{ emptyText: "Không có bài tập nào trong lớp này" }}
+				/>
+			</div>
 
 			{/* Modal thêm/sửa */}
 			<Modal

@@ -15,6 +15,7 @@ import {
 	Space,
 	Card,
 	Badge,
+	Flex,  // ✅ Thêm
 } from "antd";
 import {
 	ReloadOutlined,
@@ -124,7 +125,7 @@ export default function InstructorsAdmin() {
 	async function fetchInstructors() {
 		try {
 			setLoading(true);
-			const res = await instance.get<{ success: boolean; data:   SubjectInstructor[] }>(
+			const res = await instance.get<{ success: boolean; data: SubjectInstructor[] }>(
 				`/subject-instructors`
 			);
 			console.log(res.data);
@@ -331,6 +332,7 @@ export default function InstructorsAdmin() {
 		{
 			title: "Môn học",
 			key: "subject",
+			width: 200,  // ✅ Thêm width
 			render: (_: any, record: SubjectInstructor) => (
 				<div>
 					<div>
@@ -347,6 +349,7 @@ export default function InstructorsAdmin() {
 		{
 			title: "Giảng viên",
 			key: "teacher",
+			width: 220,  // ✅ Thêm width
 			render: (_: any, record: SubjectInstructor) => (
 				<div>
 					<div>
@@ -367,17 +370,20 @@ export default function InstructorsAdmin() {
 			title: "Khoa/Bộ môn",
 			dataIndex: ["teacher", "department"],
 			key: "department",
+			width: 150,  // ✅ Thêm width
 		},
 		{
 			title: "Chức vụ",
 			dataIndex: ["teacher", "position"],
 			key: "position",
+			width: 130,  // ✅ Thêm width
 			render: (text: string) => <Tag color="blue">{text}</Tag>,
 		},
 		{
 			title: "Chuyên môn",
 			dataIndex: ["teacher", "specialization"],
 			key: "specialization",
+			width: 150,  // ✅ Thêm width
 			render: (text: string) => (
 				<Tooltip title={text}>
 					<span style={{ fontSize: 12 }}>{text}</span>
@@ -388,6 +394,7 @@ export default function InstructorsAdmin() {
 			title: "Vai trò",
 			dataIndex: "role",
 			key: "role",
+			width: 110,  // ✅ Thêm width
 			render: (role: string) => {
 				const roleConfig: any = {
 					owner: { color: "green", text: "Chủ nhiệm" },
@@ -402,6 +409,7 @@ export default function InstructorsAdmin() {
 			title: "Trạng thái",
 			dataIndex: "isActive",
 			key: "isActive",
+			width: 130,  // ✅ Thêm width
 			render: (isActive: boolean) => (
 				<Badge
 					status={isActive ? "success" : "default"}
@@ -413,19 +421,22 @@ export default function InstructorsAdmin() {
 			title: "Ngày phân công",
 			dataIndex: "assignedAt",
 			key: "assignedAt",
+			width: 150,  // ✅ Thêm width
 			render: (v: string) => (v ? dayjs(v).format("DD/MM/YYYY HH:mm") : "—"),
 		},
 		{
 			title: "Hành động",
 			key: "actions",
 			align: "center" as const,
+			width: 100,  // ✅ Thêm width
+			fixed: "right" as const,  // ✅ Thêm fixed
 			render: (_: any, record: SubjectInstructor) => (
 				<Tooltip title="Xóa phân công">
 					<Popconfirm
 						title="Xóa phân công"
 						description={
 							<div>
-								<p>Bạn có chắc muốn xóa phân công này?</p>
+								<p>Bạn có chắc muốn xóa phân công này? </p>
 								<p style={{ color: "#ff4d4f", fontSize: 12 }}>
 									<InfoCircleOutlined /> Lưu ý: Giảng viên đang dạy lớp học của môn này sẽ không thể xóa
 								</p>
@@ -459,62 +470,80 @@ export default function InstructorsAdmin() {
 	});
 
 	return (
-		<div className="pl-3 pr-3">
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					alignItems: "center",
-					marginBottom: 16,
-				}}
+		<div className="sm:px-3 h-auto sm:h-auto">  {/* ✅ Đổi className */}
+			{/* 🎯 RESPONSIVE HEADER */}
+			<Flex
+				wrap="wrap"
+				gap={12}
+				className="flex-col sm:flex-row items-start sm:items-center w-full pt-3 pb-5"
 			>
-				<Title level={3} className="mt-2">
-					<div className="flex items-center gap-2">
-						<UserCog /> Quản lý phân công giảng viên
-					</div>
+				{/* Title Left */}
+				<Title level={3} style={{ margin: 0 }}>
+					<Flex align="center" gap={8}>
+						<UserCog />
+						<span>Quản lý phân công giảng viên</span>
+					</Flex>
 				</Title>
-				<div style={{ display: "flex", gap: 8 }}>
+
+				{/* Action Right */}
+				<Flex
+					gap={8}
+					wrap="wrap"
+					className="w-full sm:w-auto sm:ml-auto"
+				>
+					{/* Search */}
 					<Input
 						allowClear
 						prefix={<SearchOutlined />}
-						placeholder="Tìm theo môn học, giảng viên, mã môn..."
+						placeholder="Tìm theo môn học, giảng viên..."
 						value={keyword}
 						onChange={(e) => setKeyword(e.target.value)}
-						style={{ width: 400 }}
+						className="w-full sm:w-80"
 					/>
-					<Button icon={<ReloadOutlined />} onClick={fetchInstructors}>
-						Làm mới
-					</Button>
-					<Button
-						type="primary"
-						icon={<PlusOutlined />}
-						onClick={() => {
-							resetModal();
-							setModalOpen(true);
-						}}
-					>
-						Phân công
-					</Button>
-				</div>
-			</div>
+
+					{/* Buttons */}
+					<Flex gap={8} wrap="wrap">
+						<Button icon={<ReloadOutlined />} onClick={fetchInstructors}>
+							<span className="hidden sm:inline">Làm mới</span>
+						</Button>
+						<Button
+							type="primary"
+							icon={<PlusOutlined />}
+							onClick={() => {
+								resetModal();
+								setModalOpen(true);
+							}}
+						>
+							<span className="hidden sm:inline">Phân công</span>
+							<span className="inline sm:hidden">Thêm</span>
+						</Button>
+					</Flex>
+				</Flex>
+			</Flex>
 
 			{loading ? (
 				<div style={{ textAlign: "center", padding: 60 }}>
 					<Spin size="large" tip="Đang tải danh sách phân công..." />
 				</div>
 			) : (
-				<Table<SubjectInstructor>
-					dataSource={filteredInstructors}
-					columns={columns}
-					rowKey={(record) => `${record.subjectId}-${record.teacherId}`}
-					bordered
-					pagination={{
-						pageSize: 10,
-						showSizeChanger: true,
-						showTotal: (total) => `Tổng ${total} phân công`,
-					}}
-					locale={{ emptyText: "Không có phân công nào" }}
-				/>
+				<div style={{ overflowX: "auto" }}>  {/* ✅ Thêm wrapper */}
+					<Table<SubjectInstructor>
+						dataSource={filteredInstructors}
+						columns={columns}
+						rowKey={(record) => `${record.subjectId}-${record.teacherId}`}
+						bordered
+						pagination={{
+							pageSize: 10,
+							showSizeChanger: true,
+							showTotal: (total) => `Tổng ${total} phân công`,
+							pageSizeOptions: ["10", "20", "50"],  // ✅ Thêm
+							position: ["bottomRight"],            // ✅ Thêm
+							style: { marginTop: 16 },             // ✅ Thêm
+						}}
+						locale={{ emptyText: "Không có phân công nào" }}
+						scroll={{ x: 1500 }} 
+					/>
+				</div>
 			)}
 
 			{/* Modal thêm phân công */}

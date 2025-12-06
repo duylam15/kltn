@@ -11,6 +11,7 @@ import {
   Tooltip,
   Progress,
   Badge,
+  Flex,
 } from "antd";
 import {
   ReloadOutlined,
@@ -313,16 +314,13 @@ export default function AssignmentsStudent() {
   return (
     <div style={{ padding: 16 }}>
       {/* Statistics Bar - Giống GroupList */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 16,
-          marginTop: -16,
-        }}
+      <Flex
+        wrap="wrap"
+        gap={12}
+        className="flex-col sm:flex-row items-start sm:items-center w-full mb-4 -mt-4"
       >
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        {/* Stats - Left side */}
+        <Flex gap={8} wrap="wrap" className="w-full sm:w-auto">
           <div
             style={{
               display: "flex",
@@ -381,61 +379,64 @@ export default function AssignmentsStudent() {
               <strong style={{ color: "#ff4d4f" }}>{stats.overdue}</strong>
             </div>
           )}
-        </div>
+        </Flex>
 
-        <div style={{ display: "flex", gap: 8 }}>
+        {/* Actions - Right side */}
+        <Flex
+          gap={8}
+          wrap="wrap"
+          className="w-full sm:w-auto sm:ml-auto"
+        >
+          {/* Search */}
           <Input
             allowClear
             prefix={<SearchOutlined />}
             placeholder="Tìm kiếm bài tập..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ width: 200 }}
+            className="w-full sm:w-52"
+            size="small"
           />
-          <Select
-            value={filterStatus}
-            onChange={(value) => setFilterStatus(value)}
-            style={{ width: 150 }}
-          >
-            <Option value="all">Tất cả trạng thái</Option>
-            <Option value="not_started">Chưa làm</Option>
-            <Option value="in_progress">Đang làm</Option>
-            <Option value="completed">Hoàn thành</Option>
-            <Option value="overdue">Quá hạn</Option>
-          </Select>
-          <Select
-            value={filterType}
-            onChange={(value) => setFilterType(value)}
-            style={{ width: 120 }}
-          >
-            <Option value="all">Tất cả loại</Option>
-            <Option value="exercise">Bài tập</Option>
-            <Option value="quiz">Kiểm tra</Option>
-            <Option value="project">Dự án</Option>
-            <Option value="exam">Thi</Option>
-          </Select>
-          <Button icon={<ReloadOutlined />} onClick={fetchAssignments}>
-            Refresh
-          </Button>
-        </div>
-      </div>
 
-      {/* Error */}
-      {error && (
-        <div
-          style={{
-            marginBottom: 16,
-            padding: 12,
-            background: "#fff2f0",
-            border: "1px solid #ffccc7",
-            borderRadius: 4,
-            color: "#ff4d4f",
-            fontSize: 13,
-          }}
-        >
-          {error}
-        </div>
-      )}
+          {/* Filters */}
+          <Flex gap={8} wrap="wrap" className="w-full sm:w-auto">
+            <Select
+              value={filterStatus}
+              onChange={(value) => setFilterStatus(value)}
+              className="w-full sm:w-auto"
+              size="small"
+            >
+              <Option value="all">Tất cả trạng thái</Option>
+              <Option value="not_started">Chưa làm</Option>
+              <Option value="in_progress">Đang làm</Option>
+              <Option value="completed">Hoàn thành</Option>
+              <Option value="overdue">Quá hạn</Option>
+            </Select>
+
+            <Select
+              value={filterType}
+              onChange={(value) => setFilterType(value)}
+              className="w-full sm:w-auto"
+              size="small"
+            >
+              <Option value="all">Tất cả loại</Option>
+              <Option value="exercise">Bài tập</Option>
+              <Option value="quiz">Kiểm tra</Option>
+              <Option value="project">Dự án</Option>
+              <Option value="exam">Thi</Option>
+            </Select>
+
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={fetchAssignments}
+              size="small"
+              className="w-full sm:w-auto"
+            >
+              <span className="hidden sm:inline">Refresh</span>
+            </Button>
+          </Flex>
+        </Flex>
+      </Flex>
 
       {/* Assignments Grid */}
       {filteredAssignments.length === 0 ? (
