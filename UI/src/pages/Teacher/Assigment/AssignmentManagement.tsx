@@ -600,7 +600,7 @@ export default function AssignmentManagement() {
 						value={keyword}
 						onChange={(e) => setKeyword(e.target.value)}
 						className="w-full sm:w-52"
-						size="small"
+						size="middle"
 					/>
 
 					{/* Buttons */}
@@ -608,7 +608,7 @@ export default function AssignmentManagement() {
 						<Button
 							icon={<ReloadOutlined />}
 							onClick={fetchData}
-							size="small"
+							size="middle"
 							className="flex-1 sm:flex-none"
 						>
 							<span className="hidden sm:inline">Làm mới</span>
@@ -618,7 +618,7 @@ export default function AssignmentManagement() {
 							type="primary"
 							icon={<PlusOutlined />}
 							onClick={() => openCreateEditModal()}
-							size="small"
+							size="middle"
 							className="flex-1 sm:flex-none"
 						>
 							<span className="hidden sm:inline">Thêm bài tập</span>

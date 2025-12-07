@@ -51,6 +51,7 @@ interface Question {
 	content: string;
 	explanation: string | null;
 	points: number;
+	language: string;
 	order: number;
 	choices: QuestionChoice[];
 	testCases?: TestCase[];
@@ -406,10 +407,11 @@ export default function AssignmentsDetailsStudent() {
 				const newAnswers = new Map(prev);
 				const existingAnswer = newAnswers.get(questionId) || { questionId };
 				newAnswers.set(questionId, {
-					...existingAnswer,
+					...existingAnswer,           
 					score: result.score ?? 0,
 					maxScore: result.maxScore ?? 0,
 				});
+
 				return newAnswers;
 			});
 
@@ -439,34 +441,161 @@ export default function AssignmentsDetailsStudent() {
 
 	// ==================== SUBMIT ====================
 	const handleSubmit = async (isAutoSubmit: boolean = false) => {
-		if (submitting) return;
+		console.log("========== 🔥 SUBMIT START 🔥 ==========");
+
+		if (submitting) {
+			console.log("⛔ Đang submit rồi → RETURN");
+			return;
+		}
+
+		console.log("isAutoSubmit =", isAutoSubmit);
+		console.log("isLateSubmission =", isLateSubmission);
+		console.log("assignment.allowLateSubmission =", assignment?.allowLateSubmission);
 
 		if (!isAutoSubmit && isLateSubmission && !assignment?.allowLateSubmission) {
 			alert("⚠️ Bài tập đã hết hạn nộp và không cho phép nộp muộn!");
+			console.log("⛔ SUBMIT BLOCKED DO LATE");
 			return;
 		}
 
 		const currentAnswers = answersRef.current;
 		const answersArray = Array.from(currentAnswers.values());
 
+		console.log("📌 answersRef.current =", currentAnswers);
+		console.log("📌 answersArray =", answersArray);
+		console.log("📌 displayQuestions =", displayQuestions);
+
+		// Kiểm tra chưa trả lời
 		if (!isAutoSubmit) {
 			const unansweredQuestions = displayQuestions.filter((q) => !currentAnswers.has(q.id));
+			console.log("🔎 unansweredQuestions =", unansweredQuestions);
 
 			if (unansweredQuestions.length > 0) {
-				const confirm = window.confirm(
-					`Bạn còn ${unansweredQuestions.length} câu chưa trả lời.\nBạn có chắc muốn nộp bài? `
-				);
-				if (!confirm) return;
+				if (!window.confirm(
+					`Bạn còn ${unansweredQuestions.length} câu chưa trả lời.\nBạn có chắc muốn nộp bài?`
+				)) {
+					console.log("⛔ User CANCEL submit");
+					return;
+				}
 			}
 		}
 
 		setSubmitting(true);
+		console.log("🔄 setSubmitting(true)");
 
 		try {
+			// ===== STEP 1: Chấm code =====
+			console.log("========== 🧪 STEP 1: AUTO TEST CODING ==========");
+
+			for (const answerObj of answersArray) {
+				console.log("\n--------------------------------");
+				console.log("📍 Checking answerObj =", answerObj);
+
+				const question = displayQuestions.find(q => q.id === answerObj.questionId);
+				console.log("🔎 Found question =", question);
+
+				if (!question) {
+					console.log("⛔ QUESTION NOT FOUND, SKIP");
+					continue;
+				}
+
+				if (question.type !== "coding") {
+					console.log("⏩ Not coding → SKIP");
+					continue;
+				}
+
+				console.log("🔥 Coding question detected → RUN submit-code");
+
+				const code = answerObj.codeAnswer;
+				const lang = question.language;
+				console.log("💻 code =", code);
+				console.log("🔤 lang =", lang);
+
+				if (!code || !lang) {
+					console.log("⛔ Missing code or lang → SKIP");
+					continue;
+				}
+
+				// CALL submit-code
+				console.log("➡️ Calling API: POST /submit-code");
+				const submitRes = await instance.post(
+					`/assignments/${assignmentId}/submit-code`,
+					{
+						studentId,
+						questionId: question.id,
+						language: lang,
+						codeAnswer: code,
+					},
+					{ withCredentials: true }
+				);
+
+				const submitData = await submitRes.data;
+				console.log("📩 submitData =", submitData);
+
+				if (!submitData.success) {
+					console.log("⛔ submit-code failed, SKIP");
+					continue;
+				}
+
+				const answerId = submitData.data.answer?.id || submitData.data.id;
+				console.log("🆔 answerId =", answerId);
+
+				// Poll result
+				console.log("🔁 BEGIN POLLING STATUS...");
+				let attempts = 0;
+
+				const pollResult = async (): Promise<any> => {
+					attempts++;
+					console.log(`⏳ Poll attempt #${attempts}`);
+
+					const resultRes = await instance.get(
+						`/assignments/answer/${answerId}/status`,
+						{ withCredentials: true }
+					);
+
+					const resultData = await resultRes.data;
+					console.log("📥 poll resultData =", resultData);
+
+					if (!resultData.success) {
+						console.log("⛔ Poll returned fail → STOP");
+						return null;
+					}
+
+					const status = resultData.data.judgeStatus;
+					console.log("📊 Status =", status);
+
+					if (status === "queued" || status === "judging" || status === "running") {
+						await new Promise(resolve => setTimeout(resolve, 400));
+						return pollResult();
+					}
+
+					console.log("🏁 FINAL RESULT =", resultData.data);
+					return resultData.data;
+				};
+
+				const result = await pollResult();
+				console.log("🎯 FINAL result =", result);
+
+				if (!result) {
+					console.log("⛔ No result → SKIP");
+					continue;
+				}
+
+				// Update answerObj
+				if (result.score !== undefined) {
+					console.log("📝 Update answerObj.score");
+					answerObj.score = result.score;
+					answerObj.maxScore = result.maxScore;
+				}
+			}
+
+			console.log("========== 📦 STEP 2: SUBMIT ANSWERS ==========");
 			const payload = {
 				studentId,
 				answers: answersArray,
 			};
+
+			console.log("📦 payload =", payload);
 
 			const res = await instance.post(
 				`/assignments/${assignmentId}/submit`,
@@ -475,45 +604,50 @@ export default function AssignmentsDetailsStudent() {
 			);
 
 			const data = await res.data;
+			console.log("📨 response submit =", data);
 
-			if (data.success) {
-				const message = isAutoSubmit
-					? `✅ Đã tự động nộp bài do hết thời gian!\n\nSố câu đã làm: ${answersArray.length}/${displayQuestions.length}`
-					: "✅ Nộp bài thành công! ";
+			if (!data.success) {
+				console.log("⛔ submit failed:", data.message);
+				throw new Error(data.message);
+			}
 
-				if (assignment?.showAnswersAfterSubmit) {
-					alert(message + "\n\nBạn sẽ xem kết quả chi tiết.");
-					navigate(
-						`/student/courses/${sectionId}/assignments/${assignmentId}/score`,
-						{
-							state: {
-								...data.data,
-								showAnswersAfterSubmit: true,
-							},
-						}
-					);
-				} else {
-					alert(message);
-					navigate(`/student/courses/${sectionId}/assignments`);
-				}
+			console.log("🎉 FINAL SUBMIT SUCCESS");
+
+			const message = isAutoSubmit
+				? `⏰ Đã tự động nộp bài!\nSố câu đã làm: ${answersArray.length}/${displayQuestions.length}`
+				: "🎉 Nộp bài thành công!";
+
+			if (assignment?.showAnswersAfterSubmit) {
+				alert(message + "\nBạn sẽ xem kết quả chi tiết.");
+				console.log("➡️ Navigate to score page with data =", data.data);
+
+				navigate(
+					`/student/courses/${sectionId}/assignments/${assignmentId}/score`,
+					{
+						state: {
+							...data.data,
+							showAnswersAfterSubmit: true,
+							payload: payload,
+						},
+					}
+				);
 			} else {
-				throw new Error(data?.message || "Nộp bài thất bại");
+				alert(message);
+				console.log("➡️ Navigate to assignments list");
+				navigate(`/student/courses/${sectionId}/assignments`);
 			}
-		} catch (err: any) {
-			console.error("Error submitting:", err);
-			const msg = err?.message || "Lỗi khi nộp bài";
-			setError(msg);
-			alert(`❌ ${msg}`);
 
-			if (isAutoSubmit) {
-				setTimeout(() => {
-					navigate(`/student/courses/${sectionId}/assignments`);
-				}, 2000);
-			}
+		} catch (err: any) {
+			console.log("❌ ERROR CAUGHT =", err);
+			alert(`❌ ${err.message || "Lỗi nộp bài"}`);
 		} finally {
 			setSubmitting(false);
+			console.log("🔄 setSubmitting(false)");
+			console.log("========== 🏁 SUBMIT END 🏁 ==========\n\n");
 		}
 	};
+
+
 
 	const handleAutoSubmit = () => {
 		console.log("⏰ HẾT GIỜ!  Tự động nộp bài.. .");
@@ -718,7 +852,7 @@ export default function AssignmentsDetailsStudent() {
 
 					{question.type === "coding" && (
 						<div>
-							<div className="mb-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between bg-gray-50 p-3 rounded-lg gap-2">
+							{/* <div className="mb-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between bg-gray-50 p-3 rounded-lg gap-2">
 								<select
 									value={answer?.language || "javascript"}
 									onChange={(e) =>
@@ -742,7 +876,7 @@ export default function AssignmentsDetailsStudent() {
 								>
 									{isTesting ? "Testing..." : "🧪 Test Code"}
 								</button>
-							</div>
+							</div> */}
 
 							<textarea
 								value={answer?.codeAnswer || ""}

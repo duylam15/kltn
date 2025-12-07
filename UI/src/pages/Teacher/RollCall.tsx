@@ -726,63 +726,69 @@ export default function RollCall() {
                   size="small"
                   icon={<EyeOutlined />}
                   onClick={() => {
-                    Modal.info({
-                      title: "Chi tiết điểm danh",
-                      width: 600,
-                      content: (
-                        <div style={{ marginTop: 16 }}>
-                          <p>
-                            <strong>Sinh viên:</strong>{" "}
-                            {record.student.user.fullName}
-                          </p>
-                          <p>
-                            <strong>MSSV:</strong> {record.student.studentCode}
-                          </p>
-                          <p>
-                            <strong>Trạng thái:</strong>{" "}
-                            {getStatusTag(record.attendance?.status || "")}
-                          </p>
-                          <p>
-                            <strong>Thời gian:</strong>{" "}
-                            {dayjs(record.attendance?.checkedInAt).format(
-                              "HH:mm:ss DD/MM/YYYY"
-                            )}
-                          </p>
-                          {record.attendance?.distance !== undefined && (
-                            <p>
-                              <strong>Khoảng cách:</strong>{" "}
-                              {record.attendance?.distance?.toFixed(2)}m
-                            </p>
-                          )}
-                          {record.attendance?.ipAddress && (
-                            <p>
-                              <strong>IP:</strong>{" "}
-                              {record.attendance?.ipAddress}
-                            </p>
-                          )}
-                          {record.attendance?.deviceInfo && (
-                            <p>
-                              <strong>Thiết bị:</strong>{" "}
-                              {record.attendance?.deviceInfo}
-                            </p>
-                          )}
-                          {record.attendance?.score !== null &&
-                            record.attendance?.score !== undefined && (
-                              <p>
-                                <strong>Điểm:</strong>{" "}
-                                {record.attendance?.score}
-                              </p>
-                            )}
-                          {!record.attendance?.isValid && (
-                            <p style={{ color: "red" }}>
-                              <WarningOutlined /> <strong>Cảnh báo:</strong>{" "}
-                              Điểm danh có vấn đề
-                            </p>
-                          )}
-                        </div>
-                      ),
+                    const overlay = document.createElement("div");
+                    overlay.className = `
+    fixed inset-0 bg-black/50 z-[9999] 
+    flex items-center justify-center
+  `;
+
+                    const modal = document.createElement("div");
+                    modal.className = `
+    bg-white rounded-lg shadow-xl w-[90%] max-w-md p-4
+    animate-[popup_0.2s_ease-out]
+  `;
+
+                    modal.innerHTML = `
+    <h2 class="text-lg font-semibold mb-3">Chi tiết điểm danh</h2>
+    <p><strong>Sinh viên:</strong> ${record.student.user.fullName}</p>
+    <p><strong>MSSV:</strong> ${record.student.studentCode}</p>
+    <p><strong>Trạng thái:</strong> ${record.attendance?.status ?? "-"}</p>
+    <p><strong>Thời gian:</strong> ${dayjs(record.attendance?.checkedInAt).format("HH:mm:ss DD/MM/YYYY")}</p>
+    ${record.attendance?.distance !== undefined
+                        ? `<p><strong>Khoảng cách:</strong> ${record.attendance.distance}m</p>`
+                        : ""
+                      }
+    ${record.attendance?.ipAddress
+                        ? `<p><strong>IP:</strong> ${record.attendance.ipAddress}</p>`
+                        : ""
+                      }
+    ${record.attendance?.deviceInfo
+                        ? `<p><strong>Thiết bị:</strong> ${record.attendance.deviceInfo}</p>`
+                        : ""
+                      }
+    ${record.attendance?.score != null
+                        ? `<p><strong>Điểm:</strong> ${record.attendance.score}</p>`
+                        : ""
+                      }
+    ${!record.attendance?.isValid
+                        ? `<p class="text-red-500 font-medium">⚠ Điểm danh có vấn đề</p>`
+                        : ""
+                      }
+
+    <div class="mt-4 flex justify-end">
+      <button id="closeModal" 
+        class="bg-gray-200 hover:bg-gray-300 px-4 py-1 rounded">
+        Đóng
+      </button>
+    </div>
+  `;
+
+                    overlay.appendChild(modal);
+                    document.body.appendChild(overlay);
+
+                    overlay.addEventListener("click", () => {
+                      overlay.remove();
+                    });
+
+                    modal.addEventListener("click", (e) => {
+                      e.stopPropagation();
+                    });
+
+                    modal.querySelector("#closeModal").addEventListener("click", () => {
+                      overlay.remove();
                     });
                   }}
+
                 />
               </Tooltip>
             )}
@@ -835,10 +841,10 @@ export default function RollCall() {
       <Flex
         wrap="wrap"
         gap={12}
-        className="flex-col sm:flex-row items-start sm:items-center w-full mb-4 -mt-4"
+        className="flex-col sm:flex-row items-start sm:items-center w-full -mt-4"
       >
         {/* Stats - Left side */}
-        <Flex gap={8} wrap="wrap" className="w-full sm:w-auto mt-4">
+        <Flex gap={8} wrap="wrap" className="w-full sm:w-auto p-4">
           <div
             style={{
               display: "flex",
@@ -912,7 +918,7 @@ export default function RollCall() {
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             className="w-full sm:w-52"
-            size="small"
+            size="middle"
           />
 
           {/* Buttons */}
@@ -920,7 +926,7 @@ export default function RollCall() {
             <Button
               icon={<ReloadOutlined />}
               onClick={fetchSessions}
-              size="small"
+              size="middle"
               className="flex-1 sm:flex-none"
             >
               <span className="hidden sm:inline">Refresh</span>
@@ -934,7 +940,7 @@ export default function RollCall() {
                 createForm.resetFields();
                 setCreateModalOpen(true);
               }}
-              size="small"
+              size="middle"
               className="flex-1 sm:flex-none"
             >
               <span className="hidden md:inline">Tạo phiên điểm danh</span>
@@ -945,7 +951,7 @@ export default function RollCall() {
       </Flex>
 
       {/* 🎯 RESPONSIVE TABLE */}
-      <div style={{ overflowX: "auto" }}>
+      <div style={{ overflowX: "auto" }} className="pl-4">
         <Table<Session>
           dataSource={filteredSessions}
           columns={columns}

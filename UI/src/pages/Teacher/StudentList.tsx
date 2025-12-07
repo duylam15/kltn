@@ -1171,7 +1171,7 @@ export default function StudentList() {
 							value={keyword}
 							onChange={(e) => setKeyword(e.target.value)}
 							className="w-full sm:w-48"
-							size="small"
+							size="middle"
 						/>
 
 						{/* Buttons */}
@@ -1179,7 +1179,7 @@ export default function StudentList() {
 							<Button
 								icon={<ReloadOutlined />}
 								onClick={refresh}
-								size="small"
+								size="middle"
 								className="flex-1 sm:flex-none"
 							>
 								<span className="hidden sm:inline">Refresh</span>
@@ -1192,7 +1192,7 @@ export default function StudentList() {
 									inviteForm.setFieldsValue({ defaultPassword: "123456" });
 									setInviteModalOpen(true);
 								}}
-								size="small"
+								size="middle"
 								className="flex-1 sm:flex-none"
 							>
 								<span className="hidden sm:inline">Mã mời</span>
@@ -1203,7 +1203,7 @@ export default function StudentList() {
 								type="default"
 								icon={<UploadOutlined />}
 								onClick={() => setImportModalOpen(true)}
-								size="small"
+								size="middle"
 								className="flex-1 sm:flex-none"
 							>
 								<span className="hidden md:inline">Import Excel</span>
@@ -1218,7 +1218,7 @@ export default function StudentList() {
 									addForm.resetFields();
 									setAddModalOpen(true);
 								}}
-								size="small"
+								size="middle"
 								className="flex-1 sm:flex-none"
 							>
 								<span className="hidden sm:inline">Thêm sinh viên</span>

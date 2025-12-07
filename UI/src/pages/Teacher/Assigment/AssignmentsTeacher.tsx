@@ -1052,6 +1052,19 @@ export default function AssignmentTeacher() {
       ),
     },
     {
+      title: "Ngày tạo",
+      key: "createdAt",
+      align: "center" as const,
+      render: (_: any, record: Assignment) => (
+        <Switch
+          checkedChildren="Hiển thị"
+          unCheckedChildren="Ẩn"
+          checked={visibility[record.id] || false}
+          onChange={(checked) => handleToggleVisibility(record.id, checked)}
+        />
+      ),
+    },
+    {
       title: "Hành động",
       key: "actions",
       align: "center" as const,

@@ -50,6 +50,8 @@ interface Section {
 
 interface Submission {
   id: number;
+  assignmentId: number;
+  studentId: number;
   startedAt: string | null;
   completedAt: string | null;
   submittedAt: string | null;
@@ -60,6 +62,8 @@ interface Submission {
   gradedAt: string | null;
   answeredQuestions: number;
   progress: number;
+  attempt?: number;
+  isFinal?: boolean;
 }
 
 interface Assignment {
@@ -83,6 +87,7 @@ interface Assignment {
   totalQuestions: number;
   totalPoints: number;
   submission: Submission | null;
+  submissions?: Submission[];
   status: AssignmentStatus;
   isOverdue: boolean;
   isCompleted: boolean;
@@ -119,8 +124,29 @@ export default function AssignmentsStudent() {
   }, [sectionId, studentId]);
 
   useEffect(() => {
-    filterAssignments();
+    filterAndSortAssignments();
   }, [searchTerm, filterStatus, filterType, assignments]);
+
+  // 🔥 HÀM LẤY DANH SÁCH SUBMISSIONS CỦA STUDENT CHO ASSIGNMENT
+  const fetchSubmissionsForAssignment = async (assignmentId: number): Promise<Submission[]> => {
+    try {
+      const res = await instance.get<{ success: boolean; data: Submission[] }>(
+        `/assignments/${assignmentId}/student/${studentId}/submissions`
+      );
+
+      if (res.data.success && res.data.data) {
+        // Sắp xếp theo thời gian mới nhất
+        return res.data.data.sort(
+          (a, b) => new Date(b.submittedAt || b.startedAt || '').getTime() -
+            new Date(a.submittedAt || a.startedAt || '').getTime()
+        );
+      }
+      return [];
+    } catch (err) {
+      console.error(`Lỗi khi lấy submissions cho assignment ${assignmentId}:`, err);
+      return [];
+    }
+  };
 
   const fetchAssignments = async () => {
     setLoading(true);
@@ -132,8 +158,20 @@ export default function AssignmentsStudent() {
       const data: ApiResponse = await res.data;
 
       if (data.success) {
-        setAssignments(data.data);
-        setFilteredAssignments(data.data);
+        // 🔥 Lấy submissions cho từng assignment
+        const assignmentsWithSubmissions = await Promise.all(
+          data.data.map(async (assignment) => {
+            const submissions = await fetchSubmissionsForAssignment(assignment.id);
+            return {
+              ...assignment,
+              submissions: submissions,
+              submission: submissions.length > 0 ? submissions[0] : null, // Latest submission
+            };
+          })
+        );
+
+        setAssignments(assignmentsWithSubmissions);
+        setFilteredAssignments(assignmentsWithSubmissions);
       } else {
         setError("Không thể tải danh sách bài tập");
       }
@@ -144,9 +182,50 @@ export default function AssignmentsStudent() {
     }
   };
 
-  const filterAssignments = () => {
+  // 🔥 HÀM TÍNH SỐ LẦN LÀM BÀI CÒN LẠI
+  const getRemainingAttempts = (assignment: Assignment): number => {
+    if (assignment.maxAttempts === 0) return 999; // Không giới hạn
+
+    // Đếm số lần đã nộp bài (completed submissions)
+    const completedAttempts = assignment.submissions?.filter(
+      sub => sub.completedAt !== null
+    )?.length || 0;
+
+    return Math.max(0, assignment.maxAttempts - completedAttempts);
+  };
+
+  // 🔥 HÀM KIỂM TRA CÓ SUBMISSION ĐANG LÀM DỞ KHÔNG
+  const hasInProgressSubmission = (assignment: Assignment): boolean => {
+    return assignment.submissions?.some(
+      sub => sub.startedAt && !sub.completedAt
+    ) || false;
+  };
+
+  // 🔥 HÀM KIỂM TRA CÓ SUBMISSION ĐÃ HOÀN THÀNH KHÔNG
+  const hasCompletedSubmission = (assignment: Assignment): boolean => {
+    return assignment.submissions?.some(
+      sub => sub.completedAt !== null
+    ) || false;
+  };
+
+  // 🔥 HÀM KIỂM TRA CÓ THỂ LÀM (LẠI) BÀI KHÔNG
+  const canDoAssignment = (assignment: Assignment): boolean => {
+    const remainingAttempts = getRemainingAttempts(assignment);
+    return remainingAttempts > 0 && !assignment.isOverdue;
+  };
+
+  // 🔥 HÀM KIỂM TRA CÓ THỂ XEM LỊCH SỬ KHÔNG
+  // Điều kiện: Có submission VÀ bài tập cho phép xem đáp án sau khi nộp
+  const canViewHistory = (assignment: Assignment): boolean => {
+    const hasSubmissions = (assignment.submissions?.length || 0) > 0;
+    return hasSubmissions && assignment.showAnswersAfterSubmit === true;
+  };
+
+  // 🔥 SẮP XẾP: Chưa làm/còn lần làm lên trên, đã làm hết/hết hạn xuống dưới
+  const filterAndSortAssignments = () => {
     let filtered = [...assignments];
 
+    // Filter theo search
     if (searchTerm.trim()) {
       filtered = filtered.filter(
         (a) =>
@@ -155,13 +234,43 @@ export default function AssignmentsStudent() {
       );
     }
 
+    // Filter theo status
     if (filterStatus !== "all") {
       filtered = filtered.filter((a) => a.status === filterStatus);
     }
 
+    // Filter theo type
     if (filterType !== "all") {
       filtered = filtered.filter((a) => a.type === filterType);
     }
+
+    // 🔥 SẮP XẾP THEO ƯU TIÊN
+    filtered.sort((a, b) => {
+      const aRemaining = getRemainingAttempts(a);
+      const bRemaining = getRemainingAttempts(b);
+      const aCanDo = canDoAssignment(a);
+      const bCanDo = canDoAssignment(b);
+
+      // 1. Bài còn làm được lên trên
+      if (aCanDo && !bCanDo) return -1;
+      if (!aCanDo && bCanDo) return 1;
+
+      // 2. Trong cùng nhóm, chưa làm lên trước đã làm
+      const aHasCompleted = hasCompletedSubmission(a);
+      const bHasCompleted = hasCompletedSubmission(b);
+
+      if (!aHasCompleted && bHasCompleted) return -1;
+      if (aHasCompleted && !bHasCompleted) return 1;
+
+      // 3. Sắp xếp theo deadline (gần nhất lên trước)
+      if (a.dueDate && b.dueDate) {
+        return dayjs(a.dueDate).diff(dayjs(b.dueDate));
+      }
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+
+      return 0;
+    });
 
     setFilteredAssignments(filtered);
   };
@@ -212,92 +321,118 @@ export default function AssignmentsStudent() {
 
   const getStatistics = () => {
     const totalAssignments = assignments.length;
-    const completed = assignments.filter((a) => a.status === "completed").length;
-    const inProgress = assignments.filter((a) => a.status === "in_progress").length;
-    const overdue = assignments.filter((a) => a.status === "overdue").length;
+    const completed = assignments.filter((a) => {
+      const remaining = getRemainingAttempts(a);
+      return hasCompletedSubmission(a) && remaining === 0;
+    }).length;
+    const inProgress = assignments.filter((a) => hasInProgressSubmission(a)).length;
+    const overdue = assignments.filter((a) => a.isOverdue && !hasCompletedSubmission(a)).length;
 
     return { totalAssignments, completed, inProgress, overdue };
   };
 
-  // 🔥 Hàm xử lý click vào assignment
+  // 🔥 HÀM XỬ LÝ CLICK VÀO ASSIGNMENT
   const handleAssignmentClick = (assignment: Assignment, e: React.MouseEvent) => {
-    // Ngăn chặn event bubbling nếu click vào button
     if ((e.target as HTMLElement).closest('button')) {
       return;
     }
-
-    // Nếu có submission (đã từng làm bài), cho phép xem chi tiết/lịch sử
-    if (assignment.submission?.startedAt) {
-      navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`);
-    }
-    // Nếu chưa có submission và còn hạn, cho phép làm bài
-    else if (assignment.canSubmit) {
-      navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`);
-    }
-    // Nếu hết hạn và chưa làm, vẫn cho xem chi tiết
-    else {
-      navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`);
-    }
+    navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`);
   };
 
-  // 🔥 Hàm xác định button action và text
+  // 🔥 HÀM XÁC ĐỊNH BUTTON ACTION (CẢI THIỆN - CHỈ HIỂN THỊ XEM LỊCH SỬ KHI showAnswersAfterSubmit = true)
   const getActionButton = (assignment: Assignment) => {
-    // Trường hợp 1: Đã hoàn thành - Xem lịch sử
-    if (assignment.submission?.completedAt) {
-      return {
-        text: "Xem lịch sử",
-        icon: <HistoryOutlined />,
-        type: "default" as const,
-        onClick: () => navigate(`/student/courses/${sectionId}/assignments/${assignment.id}/history`),
-      };
-    }
+    const remainingAttempts = getRemainingAttempts(assignment);
+    const hasCompleted = hasCompletedSubmission(assignment);
+    const hasInProgress = hasInProgressSubmission(assignment);
+    const canDo = canDoAssignment(assignment);
+    const showHistory = canViewHistory(assignment); // 🔥 Kiểm tra điều kiện xem lịch sử
 
-    // Trường hợp 2: Đang làm - Tiếp tục
-    if (assignment.submission?.startedAt && !assignment.submission?.completedAt) {
-      if (assignment.canSubmit) {
-        return {
-          text: "Tiếp tục làm",
-          icon: <PlayCircleOutlined />,
-          type: "primary" as const,
-          onClick: () => navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`),
-        };
-      } else {
+    // Trường hợp 1: Đã làm hết số lần
+    if (remainingAttempts === 0 && hasCompleted) {
+      // 🔥 Nếu cho phép xem đáp án → Hiển thị "Xem lịch sử"
+      if (showHistory) {
         return {
           text: "Xem lịch sử",
           icon: <HistoryOutlined />,
           type: "default" as const,
           onClick: () => navigate(`/student/courses/${sectionId}/assignments/${assignment.id}/history`),
+          disabled: false,
         };
       }
+      // 🔥 Nếu KHÔNG cho phép xem đáp án → Hiển thị "Đã làm" (disabled)
+      return {
+        text: "Đã làm",
+        icon: <CheckOutlined />,
+        type: "default" as const,
+        onClick: () => { },
+        disabled: true,
+      };
     }
 
-    // Trường hợp 3: Chưa làm và còn hạn - Bắt đầu
-    if (assignment.canSubmit) {
+    // Trường hợp 2: Đã làm nhưng còn lần làm → Cho phép "Làm lại"
+    if (hasCompleted && canDo) {
+      return {
+        text: remainingAttempts === 999
+          ? "Làm lại"
+          : `Làm lại (${remainingAttempts} lần)`,
+        icon: <PlayCircleOutlined />,
+        type: "primary" as const,
+        onClick: () => navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`),
+        disabled: false,
+      };
+    }
+
+    // Trường hợp 3: Đang làm dở → Tiếp tục làm
+    if (hasInProgress && canDo) {
+      return {
+        text: "Tiếp tục làm",
+        icon: <PlayCircleOutlined />,
+        type: "primary" as const,
+        onClick: () => navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`),
+        disabled: false,
+      };
+    }
+
+    // Trường hợp 4: Chưa làm lần nào và còn hạn → Bắt đầu
+    if (!hasCompleted && !hasInProgress && canDo) {
       return {
         text: "Bắt đầu làm",
         icon: <PlayCircleOutlined />,
         type: "primary" as const,
         onClick: () => navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`),
+        disabled: false,
       };
     }
 
-    // Trường hợp 4: Hết hạn và chưa làm - Xem chi tiết
+    // Trường hợp 5: Hết hạn
     if (assignment.isOverdue) {
+      // 🔥 Nếu có submission và cho phép xem đáp án → Hiển thị "Xem lịch sử"
+      if (showHistory) {
+        return {
+          text: "Xem lịch sử",
+          icon: <HistoryOutlined />,
+          type: "default" as const,
+          onClick: () => navigate(`/student/courses/${sectionId}/assignments/${assignment.id}/history`),
+          disabled: false,
+        };
+      }
+      // 🔥 Nếu không → Hiển thị "Đã hết hạn" (disabled)
       return {
         text: "Đã hết hạn",
         icon: <WarningOutlined />,
         type: "default" as const,
-        onClick: () => navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`),
+        onClick: () => { },
         disabled: true,
       };
     }
 
-    // Default: Xem chi tiết
+    // Default
     return {
       text: "Xem chi tiết",
       icon: <FileTextOutlined />,
       type: "default" as const,
       onClick: () => navigate(`/student/courses/${sectionId}/assignments/${assignment.id}`),
+      disabled: false,
     };
   };
 
@@ -313,7 +448,7 @@ export default function AssignmentsStudent() {
 
   return (
     <div style={{ padding: 16 }}>
-      {/* Statistics Bar - Giống GroupList */}
+      {/* Statistics Bar */}
       <Flex
         wrap="wrap"
         gap={12}
@@ -359,6 +494,26 @@ export default function AssignmentsStudent() {
               / {stats.totalAssignments}
             </span>
           </div>
+
+          {stats.inProgress > 0 && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 12,
+                color: "#000",
+                border: "1px solid #ddd",
+                borderRadius: 6,
+                padding: "6px 10px",
+                background: "#fff",
+              }}
+            >
+              <ClockCircleOutlined style={{ fontSize: 14, color: "#1890ff" }} />
+              <span>Đang làm:</span>
+              <strong style={{ color: "#1890ff" }}>{stats.inProgress}</strong>
+            </div>
+          )}
 
           {stats.overdue > 0 && (
             <div
@@ -471,176 +626,185 @@ export default function AssignmentsStudent() {
               dayjs(assignment.dueDate).diff(dayjs(), "hour") < 24 &&
               dayjs(assignment.dueDate).diff(dayjs(), "hour") > 0;
             const actionButton = getActionButton(assignment);
+            const remainingAttempts = getRemainingAttempts(assignment);
 
             return (
               <Col key={assignment.id} xs={24} sm={12} md={8} lg={6} xl={6}>
-                <Badge.Ribbon
-                  text={isUrgent ? "🔥 Gấp" : statusConfig.text}
-                  color={isUrgent ? "red" : statusConfig.color}
+                <Card
+                  hoverable
+                  style={{
+                    borderRadius: 16,
+                    border: "1px solid #E8E8E8",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
+                    overflow: "hidden",
+                    transition: "all 0.3s ease",
+                    height: "100%",
+                  }}
+                  bodyStyle={{ padding: 0 }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-4px)";
+                    e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.12)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.06)";
+                  }}
                 >
-                  <Card
-                    hoverable
+                  {/* Type Badge */}
+                  <div
                     style={{
-                      borderRadius: 16,
-                      border: "1px solid #E8E8E8",
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
-                      overflow: "hidden",
-                      transition: "all 0.3s ease",
-                      height: "100%",
-                    }}
-                    bodyStyle={{ padding: 0 }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = "translateY(-4px)";
-                      e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.12)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "translateY(0)";
-                      e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.06)";
+                      background: typeConfig.bg,
+                      padding: "12px 16px",
+                      borderBottom: `3px solid ${typeConfig.color}`,
                     }}
                   >
-                    {/* Type Badge */}
-                    <div
-                      style={{
-                        background: typeConfig.bg,
-                        padding: "12px 16px",
-                        borderBottom: `3px solid ${typeConfig.color}`,
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 20 }}>{typeConfig.icon}</span>
-                        <span
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 600,
-                            color: typeConfig.color,
-                          }}
-                        >
-                          {getTypeText(assignment.type).toUpperCase()}
-                        </span>
-                      </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 20 }}>{typeConfig.icon}</span>
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: typeConfig.color,
+                        }}
+                      >
+                        {getTypeText(assignment.type).toUpperCase()}
+                      </span>
                     </div>
+                  </div>
 
-                    {/* Content */}
-                    <div style={{ padding: 16 }}>
-                      {/* Title */}
-                      <Tooltip title={assignment.title}>
-                        <h3
-                          style={{
-                            fontSize: 15,
-                            fontWeight: 600,
-                            color: "#2C3E50",
-                            marginBottom: 12,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {assignment.title}
-                        </h3>
-                      </Tooltip>
+                  {/* Content */}
+                  <div style={{ padding: 16 }}>
+                    {/* Title */}
+                    <Tooltip title={assignment.title}>
+                      <h3
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 600,
+                          color: "#2C3E50",
+                          marginBottom: 12,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {assignment.title}
+                      </h3>
+                    </Tooltip>
 
-                      {/* Meta Info */}
-                      <div style={{ marginBottom: 12 }}>
-                        <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                    {/* Meta Info */}
+                    <div style={{ marginBottom: 12 }}>
+                      <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                          <span style={{ color: "#95A5A6" }}>
+                            <FileTextOutlined /> Câu hỏi
+                          </span>
+                          <span style={{ fontWeight: 600, color: "#34495E" }}>
+                            {assignment.totalQuestions}
+                          </span>
+                        </div>
+
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                          <span style={{ color: "#95A5A6" }}>
+                            <FieldTimeOutlined /> Thời gian
+                          </span>
+                          <span style={{ fontWeight: 600, color: "#F39C12" }}>
+                            {assignment.timeLimit ? `${assignment.timeLimit} phút` : "Không giới hạn"}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                          <span style={{ color: "#95A5A6" }}>
+                            <CalendarOutlined /> Hạn nộp
+                          </span>
+                          <span
+                            style={{
+                              fontWeight: 600,
+                              color: assignment.isOverdue
+                                ? "#E74C3C"
+                                : isUrgent
+                                  ? "#E67E22"
+                                  : "#27AE60",
+                            }}
+                          >
+                            {formatDate(assignment.dueDate)}
+                          </span>
+                        </div>
+
+                        {/* 🔥 Hiển thị số lần làm còn lại */}
+                        {assignment.maxAttempts > 0 && (
                           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
                             <span style={{ color: "#95A5A6" }}>
-                              <FileTextOutlined /> Câu hỏi
-                            </span>
-                            <span style={{ fontWeight: 600, color: "#34495E" }}>
-                              {assignment.totalQuestions}
-                            </span>
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                            <span style={{ color: "#95A5A6" }}>
-                              <TrophyOutlined /> Điểm tối đa
-                            </span>
-                            <span style={{ fontWeight: 600, color: "#F39C12" }}>
-                              {assignment.totalPoints}
-                            </span>
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                            <span style={{ color: "#95A5A6" }}>
-                              <FieldTimeOutlined /> Thời gian làm bài
-                            </span>
-                            <span style={{ fontWeight: 600, color: "#F39C12" }}>
-                              {assignment.timeLimit ? `${assignment.timeLimit} phút` : "Không giới hạn"}
-                            </span>
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                            <span style={{ color: "#95A5A6" }}>
-                              <CalendarOutlined /> Hạn nộp
+                              <HistoryOutlined /> Số lần còn lại
                             </span>
                             <span
                               style={{
                                 fontWeight: 600,
-                                color: assignment.isOverdue
-                                  ? "#E74C3C"
-                                  : isUrgent
-                                    ? "#E67E22"
-                                    : "#27AE60",
+                                color: remainingAttempts === 0 ? "#E74C3C" : "#3498DB",
                               }}
                             >
-                              {formatDate(assignment.dueDate)}
+                              {remainingAttempts === 0
+                                ? "Đã hết"
+                                : `${remainingAttempts}/${assignment.maxAttempts}`}
                             </span>
                           </div>
-                        </Space>
-                      </div>
+                        )}
 
-                      {/* Progress Bar */}
-                      {assignment.submission?.progress ? (
-                        <div style={{ marginBottom: 12 }}>
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              marginBottom: 4,
-                              fontSize: 11,
-                              color: "#7F8C8D",
-                            }}
-                          >
-                            <span>Tiến độ</span>
-                            <span style={{ fontWeight: 600 }}>
-                              {assignment.submission.progress}%
-                            </span>
-                          </div>
-                          <Progress
-                            percent={assignment.submission.progress}
-                            size="small"
-                            strokeColor={{
-                              "0%": "#667eea",
-                              "100%": "#764ba2",
-                            }}
-                            showInfo={false}
-                          />
-                        </div>
-                      ) : null}
-
-                      {/* 🔥 Action Button - Đã update logic */}
-                      <Button
-                        type={actionButton.type}
-                        block
-                        icon={actionButton.icon}
-                        disabled={actionButton.disabled}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          actionButton.onClick();
-                        }}
-                        style={{
-                          borderRadius: 8,
-                          height: 38,
-                          fontWeight: 500,
-                          background:
-                            actionButton.type === "primary"
-                              ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-                              : undefined,
-                          border: "none",
-                        }}
-                      >
-                        {actionButton.text}
-                      </Button>
+                      </Space>
                     </div>
-                  </Card>
-                </Badge.Ribbon>
+
+                    {/* Progress Bar */}
+                    {assignment.submission?.progress ? (
+                      <div style={{ marginBottom: 12 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            marginBottom: 4,
+                            fontSize: 11,
+                            color: "#7F8C8D",
+                          }}
+                        >
+                          <span>Tiến độ</span>
+                          <span style={{ fontWeight: 600 }}>
+                            {assignment.submission.progress}%
+                          </span>
+                        </div>
+                        <Progress
+                          percent={assignment.submission.progress}
+                          size="small"
+                          strokeColor={{
+                            "0%": "#667eea",
+                            "100%": "#764ba2",
+                          }}
+                          showInfo={false}
+                        />
+                      </div>
+                    ) : null}
+
+                    {/* 🔥 Action Button */}
+                    <Button
+                      type={actionButton.type}
+                      block
+                      icon={actionButton.icon}
+                      disabled={actionButton.disabled}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        actionButton.onClick();
+                      }}
+                      style={{
+                        borderRadius: 8,
+                        height: 38,
+                        fontWeight: 500,
+                        background:
+                          actionButton.type === "primary"
+                            ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+                            : undefined,
+                        border: "none",
+                      }}
+                    >
+                      {actionButton.text}
+                    </Button>
+                  </div>
+                </Card>
               </Col>
             );
           })}

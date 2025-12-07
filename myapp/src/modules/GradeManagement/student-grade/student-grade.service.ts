@@ -1,6 +1,7 @@
 import { prisma } from "../../../prisma/client";
 import ApiError from "../../../utils/ApiError";
 
+
 export const listStudentGrades = async (params: {
     section_id: number;
     grade_column_id?: number;
@@ -55,6 +56,21 @@ export const listStudentGrades = async (params: {
                                 email: true,
                             },
                         },
+                        // 🔥 Lấy thông tin enrollment để có group
+                        enrollments: {
+                            where: {
+                                sectionId: params.section_id,
+                            },
+                            include: {
+                                group: {
+                                    select: {
+                                        id: true,
+                                        groupCode: true,
+                                        groupName: true,
+                                    },
+                                },
+                            },
+                        },
                     },
                 },
                 gradeColumn: {
@@ -81,7 +97,17 @@ export const listStudentGrades = async (params: {
         prisma.studentGrade.count({ where }),
     ]);
 
-    return { items, total };
+    // 🔥 Format lại data để trả về group
+    const formattedItems = items.map((item) => ({
+        ...item,
+        student: {
+            ...item.student,
+            group: item.student.enrollments[0]?.group || null,
+            enrollments: undefined, // Xóa enrollments khỏi response
+        },
+    }));
+
+    return { items: formattedItems, total };
 };
 
 export const getStudentGrade = async (params: {

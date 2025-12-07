@@ -59,6 +59,16 @@ type EnrollmentData = {
   status: string;
 };
 
+const headerColors = [
+  "linear-gradient(135deg, #4F8CF7, #3F6AC0)",
+  "linear-gradient(135deg, #E86D92, #B44767)",
+  "linear-gradient(135deg, #4FBF7C, #3A8F5C)",
+  "linear-gradient(135deg, #F5C15D, #D19C3A)",
+  "linear-gradient(135deg, #5FD4D5, #419C9C)",
+  "linear-gradient(135deg, #A88BF0, #7E5ABD)",
+];
+
+
 export default function Dashboard() {
   const [data, setData] = useState<EnrollmentData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -195,12 +205,14 @@ export default function Dashboard() {
 
       {/* Danh sách lớp học */}
       <Row gutter={[16, 16]} wrap>
-        {filteredData.map((enrollment) => {
+        {filteredData.map((enrollment, index) => {
           const section = enrollment.section;
           const scheduleText = Object.entries(section.schedule || {})
             .map(([day, time]) => `${day}: ${time}`)
             .join(", ");
 
+          const bgColor = headerColors[index % headerColors.length];
+          console.log(bgColor);
           return (
             <Col xs={24} sm={12} md={10} lg={8} key={section.id}>
               <Card
@@ -223,13 +235,16 @@ export default function Dashboard() {
                 }}
               >
                 {/* Header với màu nền */}
-                <div style={{
-                  height: 80,
-                  position: "relative",
-                  display: "flex",
-                  alignItems: "flex-end",
-                  padding: "16px",
-                }} className="bg-[#47689c]">
+                <div
+                  style={{
+                    height: 80,
+                    position: "relative",
+                    display: "flex",
+                    alignItems: "flex-end",
+                    padding: "16px",
+                    background: bgColor,
+                  }}
+                >
                   <div>
                     <Title level={5} style={{
                       margin: 0,

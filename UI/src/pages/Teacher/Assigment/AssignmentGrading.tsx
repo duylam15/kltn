@@ -15,6 +15,8 @@ import {
 	Popconfirm,
 	Divider,
 	Input,
+	Select,
+	Card,
 } from "antd";
 import {
 	HistoryOutlined,
@@ -27,6 +29,11 @@ import {
 	CheckCircleOutlined,
 	PlayCircleOutlined,
 	ReloadOutlined,
+	SearchOutlined,
+	FilterOutlined,
+	ClearOutlined,
+	CheckSquareOutlined,
+	TeamOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
@@ -35,6 +42,7 @@ import instance from "../../../utils/axiosInstance";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
+const { Option } = Select;
 
 type Submission = {
 	id: number;
@@ -84,6 +92,11 @@ export default function AssignmentGrading() {
 	const [loading, setLoading] = useState(true);
 	const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
 	const [students, setStudents] = useState<Student[]>([]);
+
+	// 🔥 State cho tìm kiếm và lọc
+	const [searchText, setSearchText] = useState("");
+	const [filterStatus, setFilterStatus] = useState<string>("all");
+	const [filterClass, setFilterClass] = useState<string>("all");
 
 	// Modal xem lịch sử nộp bài
 	const [submissionHistoryModalOpen, setSubmissionHistoryModalOpen] = useState(false);
@@ -178,7 +191,6 @@ export default function AssignmentGrading() {
 				}
 			});
 
-
 			const allSubmissions = await Promise.all(allSubmissionsPromises);
 			console.log("allSubmissions:", allSubmissions);
 			const finalSubmissions = allSubmissions.filter(sub => sub !== null) as Submission[];
@@ -231,7 +243,7 @@ export default function AssignmentGrading() {
 				`/submission-answers/submission/${submissionId}`
 			);
 
-			console.log("aaaaa",submissionRes, answersRes);
+			console.log("aaaaa", submissionRes, answersRes);
 
 			const answersWithQuestions = await Promise.all(
 				(answersRes.data.data || []).map(async (answer: any) => {
@@ -298,7 +310,7 @@ export default function AssignmentGrading() {
 				`/submission-answers/${answerId}`,
 				{ score: newScore }
 			);
-console.log("res:", res);
+			console.log("res:", res);
 			if (res.data.success) {
 				toast.success("Đã cập nhật điểm câu trả lời");
 
@@ -347,7 +359,7 @@ console.log("res:", res);
 			return;
 		}
 
-		// 🔥 LẤY LANGUAGE: Ưu tiên answer.language, nếu null thì lấy question.language
+		// 🔥 LẤY LANGUAGE: Ưu tiên answer. language, nếu null thì lấy question.language
 		const language = answer.language || question?.language;
 
 		if (!language) {
@@ -394,7 +406,7 @@ console.log("res:", res);
 
 			console.log("✅ New Answer ID:", newAnswerId);
 
-			toast.success("Đang chạy lại code.. .");
+			toast.success("Đang chạy lại code...");
 
 			// 🔥 ĐỢI LÂU HƠN TRƯỚC KHI BẮT ĐẦU POLL
 			await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -496,7 +508,6 @@ console.log("res:", res);
 		}
 	};
 
-
 	const handleSelectFinalSubmission = async (submissionId: number) => {
 		try {
 			const submission = selectedStudentSubmissions.find(s => s.id === submissionId);
@@ -534,10 +545,11 @@ console.log("res:", res);
 		}
 	};
 
+	// 🔥 HÀM LẤY DỮ LIỆU TABLE + LỌC + TÌM KIẾM
 	const getScoreTableData = () => {
 		if (!selectedAssignment) return [];
 
-		return students.map((student) => {
+		let data = students.map((student) => {
 			const studentSubmissions = selectedAssignment.submissions?.filter(
 				(sub) => sub.studentId === student.id
 			) || [];
@@ -566,6 +578,42 @@ console.log("res:", res);
 					: "not_submitted",
 			};
 		});
+
+		// 🔥 TÌM KIẾM
+		if (searchText.trim()) {
+			const search = searchText.toLowerCase().trim();
+			data = data.filter(item =>
+				item.studentCode.toLowerCase().includes(search) ||
+				item.fullName.toLowerCase().includes(search) ||
+				item.email.toLowerCase().includes(search) ||
+				item.className.toLowerCase().includes(search)
+			);
+		}
+
+		// 🔥 LỌC THEO TRẠNG THÁI
+		if (filterStatus !== "all") {
+			data = data.filter(item => item.status === filterStatus);
+		}
+
+		// 🔥 LỌC THEO LỚP
+		if (filterClass !== "all") {
+			data = data.filter(item => item.className === filterClass);
+		}
+
+		return data;
+	};
+
+	// 🔥 LẤY DANH SÁCH LỚP
+	const getClassList = () => {
+		const classes = new Set(students.map(s => s.className));
+		return Array.from(classes).sort();
+	};
+
+	// 🔥 HÀM XÓA BỘ LỌC
+	const handleClearFilters = () => {
+		setSearchText("");
+		setFilterStatus("all");
+		setFilterClass("all");
 	};
 
 	const scoreColumns = [
@@ -574,14 +622,12 @@ console.log("res:", res);
 			dataIndex: "studentCode",
 			key: "studentCode",
 			width: 120,
-			fixed: "left" as const,
 		},
 		{
 			title: "Họ và tên",
 			dataIndex: "fullName",
 			key: "fullName",
 			width: 200,
-			fixed: "left" as const,
 			render: (text: string) => <strong>{text}</strong>,
 		},
 		{
@@ -838,26 +884,213 @@ console.log("res:", res);
 		);
 	}
 
+	const tableData = getScoreTableData();
+
 	return (
 		<div style={{ padding: 16 }}>
-			<div style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-				<Title level={3}>
-					<FileTextOutlined style={{ marginRight: 8 }} />
-					{selectedAssignment?.title} - Bảng điểm
-				</Title>
-				<Button onClick={() => navigate(`/teacher/courses/${sectionId}/assignments`)}>
-					← Quay lại
-				</Button>
+			{/* ======= HEADER: MINI-STATS + BACK BUTTON ======= */}
+			<div
+				style={{
+					display: "flex",
+					justifyContent: "space-between",
+					alignItems: "flex-start",
+					flexWrap: "wrap",
+					marginBottom: 12,
+					gap: 12,
+					marginTop: -8,
+				}}
+			>
+				{/* MINI STATS */}
+				<div
+					className="header-mini-stats"
+					style={{
+						display: "flex",
+						gap: 8,
+						flexWrap: "wrap",
+						alignItems: "center",
+						flex: "1 1 auto",
+					}}
+				>
+					{/* 🔥 TÊN BÀI TẬP */}
+					<div
+						style={{
+							
+						}}
+					>
+						<FileTextOutlined style={{ fontSize: 14 }} />
+						<strong className="ml-2">
+							{selectedAssignment?.title}
+						</strong>
+					</div>
+
+					{/* Tổng SV */}
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 12,
+							border: "1px solid #ddd",
+							borderRadius: 6,
+							padding: "6px 10px",
+							background: "#fff",
+							whiteSpace: "nowrap",
+						}}
+					>
+						<TeamOutlined style={{ fontSize: 14, color: "#1890ff" }} />
+						<span>Tổng SV:</span>
+						<strong>{students.length}</strong>
+					</div>
+
+					{/* Đã nộp */}
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 12,
+							border: "1px solid #ddd",
+							borderRadius: 6,
+							padding: "6px 10px",
+							background: "#fff",
+							whiteSpace: "nowrap",
+						}}
+					>
+						<CheckCircleOutlined style={{ fontSize: 14, color: "#52c41a" }} />
+						<span>Đã nộp:</span>
+						<strong style={{ color: "#52c41a" }}>
+							{tableData.filter((d) => d.status !== "not_submitted").length}
+						</strong>
+					</div>
+
+					{/* Đã chấm */}
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 12,
+							border: "1px solid #ddd",
+							borderRadius: 6,
+							padding: "6px 10px",
+							background: "#fff",
+							whiteSpace: "nowrap",
+						}}
+					>
+						<CheckSquareOutlined style={{ fontSize: 14, color: "#1890ff" }} />
+						<span>Đã chấm:</span>
+						<strong style={{ color: "#1890ff" }}>
+							{tableData.filter((d) => d.status === "graded").length}
+						</strong>
+					</div>
+
+					{/* Hiển thị */}
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 12,
+							border: "1px solid #ddd",
+							borderRadius: 6,
+							padding: "6px 10px",
+							background: "#fff",
+							whiteSpace: "nowrap",
+						}}
+					>
+						<EyeOutlined style={{ fontSize: 14, color: "#fa8c16" }} />
+						<span>Hiển thị:</span>
+						<strong style={{ color: "#fa8c16" }}>{tableData.length}</strong>
+					</div>
+				</div>
+
+				{/* ACTIONS */}
+				<div
+					className="header-actions"
+					style={{
+						display: "flex",
+						gap: 8,
+						alignItems: "center",
+						flexWrap: "wrap",
+					}}
+				>
+					<Input
+						allowClear
+						prefix={<SearchOutlined />}
+						placeholder="Tìm kiếm..."
+						value={searchText}
+						onChange={(e) => setSearchText(e.target.value)}
+						style={{ width: 180 }}
+					/>
+
+					<Button onClick={() => navigate(`/teacher/courses/${sectionId}/assignments`)}>
+						← Quay lại
+					</Button>
+				</div>
 			</div>
 
+
+
+			{/* ===== FILTERS CARD ===== */}
+			<Card>
+				<Row gutter={[16, 16]}>
+					<Col xs={24} sm={24} md={8}>
+						<Input
+							placeholder="MSSV / tên / email / lớp..."
+							prefix={<SearchOutlined />}
+							value={searchText}
+							onChange={(e) => setSearchText(e.target.value)}
+							allowClear
+						/>
+					</Col>
+
+					<Col xs={24} sm={12} md={6}>
+						<Select
+							style={{ width: "100%" }}
+							placeholder="Trạng thái"
+							value={filterStatus}
+							onChange={(val) => setFilterStatus(val)}
+						>
+							<Option value="all">Tất cả trạng thái</Option>
+							<Option value="graded">Đã chấm</Option>
+							<Option value="submitted">Chưa chấm</Option>
+							<Option value="not_submitted">Chưa nộp</Option>
+						</Select>
+					</Col>
+
+					<Col xs={24} sm={12} md={6}>
+						<Select
+							style={{ width: "100%" }}
+							placeholder="Lọc lớp"
+							value={filterClass}
+							onChange={(val) => setFilterClass(val)}
+						>
+							<Option value="all">Tất cả lớp</Option>
+							{getClassList().map((className) => (
+								<Option key={className} value={className}>
+									{className}
+								</Option>
+							))}
+						</Select>
+					</Col>
+
+					<Col xs={24} sm={24} md={4}>
+						<Button icon={<ClearOutlined />} onClick={handleClearFilters} block>
+							Xóa bộ lọc
+						</Button>
+					</Col>
+				</Row>
+			</Card>
+
+
 			<Table
-				dataSource={getScoreTableData()}
+				dataSource={tableData}
 				columns={scoreColumns}
 				rowKey="key"
 				bordered
-				pagination={{ pageSize: 10 }}
+				pagination={{ pageSize: 10, showTotal: (total) => `Tổng ${total} học sinh` }}
 				scroll={{ x: 1200 }}
-				locale={{ emptyText: "Không có dữ liệu" }}
+				locale={{ emptyText: "Không tìm thấy kết quả" }}
 			/>
 
 			{/* Modal xem lịch sử nộp bài */}

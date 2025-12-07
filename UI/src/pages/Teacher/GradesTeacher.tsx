@@ -148,6 +148,9 @@ interface Student {
   id: number;
   userId: number;
   studentCode: string;
+  student: {
+    group:any
+  };
   user: {
     fullName: string;
     email: string | null;
@@ -253,12 +256,15 @@ export default function GradesTeacher() {
               id: grade.student.id,
               userId: grade.student.userId,
               studentCode: grade.student.studentCode,
+              student: grade.student,
               user: grade.student.user,
               studentGrades: [],
             } as any);
           }
           studentMap.get(studentId)!.studentGrades.push(grade);
         });
+
+        console.log("gradesDaxxxxxta"  , gradesData);
 
         setStudents(Array.from(studentMap.values()));
       }
@@ -903,6 +909,8 @@ export default function GradesTeacher() {
     }
   };
 
+  console.log(students);
+
   // ============================================================
   // FORM HELPERS - GIỮ NGUYÊN (phần còn lại)
   // ============================================================
@@ -1172,6 +1180,29 @@ export default function GradesTeacher() {
           </Tooltip>
         ),
       },
+      {
+        title: "Nhóm học tập",
+        key: "className",
+        ellipsis: true,
+        render: (_: any, student: Student) => {
+
+          console.log("🔍 DATA STUDENT ROW:", student);
+
+          return (
+            <Tooltip title={student.student.group?.groupName || '-'}>
+              <Text type="secondary">{student.student.group?.groupName || '-'}</Text>
+            </Tooltip>
+          );
+        },
+        sorter: (a: Student, b: Student) => {
+          const groupA = a.student.group?.groupName || '';
+          const groupB = b.student.group?.groupName || '';
+          return groupA.localeCompare(groupB);
+        }
+
+      },
+
+
     ];
 
     // ✅ SỬA: Sử dụng EditableCell component
@@ -1209,6 +1240,11 @@ export default function GradesTeacher() {
           />
         );
       },
+      sorter: (a: Student, b: Student) => {
+        const gradeA = a.studentGrades.find(g => g.gradeColumnId === col.id)?.score || 0;
+        const gradeB = b.studentGrades.find(g => g.gradeColumnId === col.id)?.score || 0;
+        return gradeA - gradeB;
+      }
     }));
 
     return [...fixedColumns, ...gradeColumnsConfig];
@@ -1264,10 +1300,12 @@ export default function GradesTeacher() {
   const filteredStudents = students.filter((student) => {
     if (!keyword) return true;
     const searchText = keyword.toLowerCase();
+    console.log(student);
     return (
       student.studentCode?.toLowerCase().includes(searchText) ||
       student.user.fullName?.toLowerCase().includes(searchText) ||
-      student.user.email?.toLowerCase().includes(searchText)
+      student.user.email?.toLowerCase().includes(searchText) ||
+      student.student.group?.groupName?.toLowerCase().includes(searchText)
     );
   });
 
@@ -1378,22 +1416,25 @@ export default function GradesTeacher() {
       </div>
 
       {/* Grade Table */}
-      <Table<Student>
-        dataSource={filteredStudents}
-        columns={getTableColumns()}
-        rowKey="id"
-        bordered
-        loading={loading}
-        scroll={{
-          y: 'calc(100vh - 420px)',
-          x: screens.lg ? undefined : "max-content",
-        }}
-        pagination={{
-          pageSize: 20,
-          showSizeChanger: true,
-          showTotal: (total) => `Tổng ${total} sinh viên`,
-        }}
-      />
+      <div className="h-full flex flex-col">
+        <Table<Student>
+          dataSource={filteredStudents}
+          columns={getTableColumns()}
+          rowKey="id"
+          bordered
+          loading={loading}
+          scroll={{
+            y: "100%",
+            x: screens.lg ? undefined : "max-content",
+          }}
+          pagination={{
+            pageSize: 20,
+            showSizeChanger: true,
+            showTotal: (total) => `Tổng ${total} sinh viên`,
+          }}
+        />
+      </div>
+
 
       {/* Dialog Create/Edit Column */}
       <Modal

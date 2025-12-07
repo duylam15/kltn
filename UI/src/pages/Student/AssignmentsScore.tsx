@@ -24,7 +24,24 @@ export default function AssignmentsScore() {
 	const [choicesMap, setChoicesMap] = useState<Map<number, Choice>>(new Map());
 	const [loadingChoices, setLoadingChoices] = useState(true);
 
-	const { submission, summary, answers, showAnswersAfterSubmit } = state;
+	const { submission, summary, answers, showAnswersAfterSubmit, payload } = state;
+
+	console.log("🏆 Score Page State:", payload);
+
+	// 🔥 Tạo Map để match score từ payload theo questionId
+	const payloadScoreMap = new Map<number, { score: number; maxScore: number }>();
+
+	if (payload?.answers && Array.isArray(payload.answers)) {
+		payload.answers.forEach((item: any) => {
+			// Chỉ lấy câu có codeAnswer và có score
+			if (item.codeAnswer && item.score !== undefined && item.maxScore !== undefined) {
+				payloadScoreMap.set(item.questionId, {
+					score: item.score,
+					maxScore: item.maxScore
+				});
+			}
+		});
+	}
 
 	// 🔥 Fetch tất cả choices khi component mount
 	useEffect(() => {
@@ -138,7 +155,7 @@ export default function AssignmentsScore() {
 
 					<button
 						onClick={() => navigate(`/student/courses/${sectionId}/assignments`)}
-						className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded transition"
+						className="w-full py-2. 5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded transition"
 					>
 						← Quay lại danh sách
 					</button>
@@ -186,7 +203,7 @@ export default function AssignmentsScore() {
 			.sort((a, b) => a.order - b.order);
 
 		const index = questionChoices.findIndex((c) => c.id === choiceId);
-		return index >= 0 ? String.fromCharCode(65 + index) : "?";
+		return index >= 0 ? String.fromCharCode(65 + index) : "? ";
 	};
 
 	// 🔥 Lấy nội dung choice
@@ -195,9 +212,27 @@ export default function AssignmentsScore() {
 		return choice?.content || `Đang tải...`;
 	};
 
-	// 🔥 Tính toán thống kê đúng
-	const correctCount = answers?.filter((a: any) => a.isCorrect).length || 0;
-	const totalCount = answers?.length || 0;
+	// 🔥 Tính toán lại thống kê với điểm từ payload
+	const answersWithUpdatedScores = answers?.map((ans: any) => {
+		const payloadScore = payloadScoreMap.get(ans.questionId);
+		if (payloadScore) {
+			return {
+				...ans,
+				score: payloadScore.score,
+				maxScore: payloadScore.maxScore,
+				isCorrect: payloadScore.score === payloadScore.maxScore
+			};
+		}
+		return ans;
+	}) || [];
+
+	// 🔥 Tính tổng điểm thực tế (cộng dồn từng câu)
+	const totalScore = answersWithUpdatedScores.reduce((sum: number, ans: any) => sum + (ans.score || 0), 0);
+	const totalMaxScore = answersWithUpdatedScores.reduce((sum: number, ans: any) => sum + (ans.maxScore || 0), 0);
+
+	// 🔥 Tính toán thống kê đúng dựa trên điểm đã cập nhật
+	const correctCount = answersWithUpdatedScores.filter((a: any) => a.isCorrect).length;
+	const totalCount = answersWithUpdatedScores.length;
 	const wrongCount = totalCount - correctCount;
 	const percentage = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
 
@@ -271,11 +306,11 @@ export default function AssignmentsScore() {
 
 				{/* Score Card */}
 				<div className="bg-white rounded-lg shadow p-6 mb-6">
-					{/* 🔥 Điểm số chính */}
+					{/* 🔥 Điểm số chính - TÍNH LẠI TỪ PAYLOAD */}
 					<div className="text-center mb-6 pb-6 border-b">
 						<p className="text-sm text-gray-600 mb-2">Điểm của bạn</p>
 						<p className="text-5xl font-bold text-blue-600">
-							{submission.score}
+							{totalScore.toFixed(1)}
 							<span className="text-2xl text-gray-400">/10</span>
 						</p>
 						<p className="text-sm text-gray-500 mt-3">
@@ -283,7 +318,7 @@ export default function AssignmentsScore() {
 						</p>
 					</div>
 
-					{/* 🔥 Thống kê 3 cột */}
+					{/* 🔥 Thống kê 3 cột - Đã cập nhật với payload */}
 					<div className="grid grid-cols-3 gap-4 mb-6">
 						<div className="text-center">
 							<p className="text-2xl font-bold text-green-600">{correctCount}</p>
@@ -414,112 +449,127 @@ export default function AssignmentsScore() {
 					</div>
 				) : (
 					<div className="space-y-3">
-						{answers?.map((ans: any, idx: number) => (
-							<div
-								key={ans.answerId}
-								className={`bg-white rounded-lg shadow p-4 border-l-4 ${ans.isCorrect ? "border-green-500" : "border-red-500"
-									}`}
-							>
-								{/* Header */}
-								<div className="flex items-start justify-between mb-3">
-									<div className="flex-1">
-										<div className="flex items-center gap-2 mb-1">
-											<span className="text-xs font-semibold text-gray-500">
-												Câu {idx + 1}
-											</span>
-											<span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-												{ans.questionType === "multiple_choice" && "Trắc nghiệm"}
-												{ans.questionType === "essay" && "Tự luận"}
-												{ans.questionType === "coding" && "Lập trình"}
-												{ans.questionType === "true_false" && "Đúng/Sai"}
-											</span>
-										</div>
-										<p className="text-sm font-medium text-gray-900">
-											{ans.questionContent}
-										</p>
-									</div>
-									<div className="flex items-center gap-2 ml-4">
-										{ans.isCorrect ? (
-											<CheckCircle className="w-5 h-5 text-green-600" />
-										) : (
-											<XCircle className="w-5 h-5 text-red-600" />
-										)}
-										<span className="text-sm font-bold text-gray-700">
-											{ans.score}/{ans.maxScore}
-										</span>
-									</div>
-								</div>
+						{answersWithUpdatedScores.map((ans: any, idx: number) => {
+							// 🔥 Kiểm tra xem câu này có trong payload không (nếu là câu code)
+							const payloadScore = payloadScoreMap.get(ans.questionId);
+							const displayScore = ans.score;
+							const displayMaxScore = ans.maxScore;
+							const isCorrect = ans.isCorrect;
 
-								{/* Câu trả lời */}
-								<div className="bg-gray-50 rounded p-3 mb-3">
-									<p className="text-xs font-semibold text-gray-600 mb-2">
-										Câu trả lời của bạn:
-									</p>
-
-									{/* 🔥 Trắc nghiệm */}
-									{ans.questionType === "multiple_choice" && ans.selectedChoices && (
-										<div className="space-y-1">
-											{ans.selectedChoices.map((choiceId: number) => {
-												const label = getChoiceLabel(choiceId, ans.questionId);
-												const content = getChoiceContent(choiceId);
-												return (
-													<div key={choiceId} className="text-sm text-gray-900">
-														<span className="font-bold">{label}.  </span> {content}
-													</div>
-												);
-											})}
-										</div>
-									)}
-
-									{/* Tự luận */}
-									{ans.questionType === "essay" && (
-										<p className="text-sm text-gray-900 whitespace-pre-wrap">
-											{ans.essayAnswer || "Không có câu trả lời"}
-										</p>
-									)}
-
-									{/* Lập trình */}
-									{ans.questionType === "coding" && (
-										<div>
-											<p className="text-xs text-gray-500 mb-2">
-												Ngôn ngữ: <span className="font-semibold">{ans.language}</span>
-											</p>
-											<pre className="text-xs bg-gray-900 text-green-400 p-3 rounded overflow-x-auto">
-												{ans.codeAnswer || "Không có code"}
-											</pre>
-											<p className="text-xs text-gray-500 mt-2">
-												Trạng thái: {ans.judgeStatus}
-											</p>
-										</div>
-									)}
-
-									{/* 🔥 Đúng/Sai */}
-									{ans.questionType === "true_false" && ans.selectedChoices && (
-										<p className="text-sm text-gray-900">
-											{ans.selectedChoices.includes(1) ? (
-												<span>
-													<span className="font-bold">A. </span> Đúng
+							return (
+								<div
+									key={ans.answerId}
+									className={`bg-white rounded-lg shadow p-4 border-l-4 ${isCorrect ? "border-green-500" : "border-red-500"}`}
+								>
+									{/* Header */}
+									<div className="flex items-start justify-between mb-3">
+										<div className="flex-1">
+											<div className="flex items-center gap-2 mb-1">
+												<span className="text-xs font-semibold text-gray-500">
+													Câu {idx + 1}
 												</span>
+												<span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
+													{ans.questionType === "multiple_choice" && "Trắc nghiệm"}
+													{ans.questionType === "essay" && "Tự luận"}
+													{ans.questionType === "coding" && "Lập trình"}
+													{ans.questionType === "true_false" && "Đúng/Sai"}
+												</span>
+												{/* 🔥 Badge nếu điểm lấy từ payload */}
+												{payloadScore && (
+													<span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-600 rounded">
+														✓ Đã chấm code
+													</span>
+												)}
+											</div>
+											<p className="text-sm font-medium text-gray-900">
+												{ans.questionContent}
+											</p>
+										</div>
+										<div className="flex items-center gap-2 ml-4">
+											{isCorrect ? (
+												<CheckCircle className="w-5 h-5 text-green-600" />
 											) : (
-												<span>
-													<span className="font-bold">B.</span> Sai
-												</span>
+												<XCircle className="w-5 h-5 text-red-600" />
 											)}
+											<span className="text-sm font-bold text-gray-700">
+												{displayScore}/{displayMaxScore}
+											</span>
+										</div>
+									</div>
+
+									{/* Câu trả lời */}
+									<div className="bg-gray-50 rounded p-3 mb-3">
+										<p className="text-xs font-semibold text-gray-600 mb-2">
+											Câu trả lời của bạn:
 										</p>
+
+										{/* 🔥 Trắc nghiệm */}
+										{ans.questionType === "multiple_choice" && ans.selectedChoices && (
+											<div className="space-y-1">
+												{ans.selectedChoices.map((choiceId: number) => {
+													const label = getChoiceLabel(choiceId, ans.questionId);
+													const content = getChoiceContent(choiceId);
+													return (
+														<div key={choiceId} className="text-sm text-gray-900">
+															<span className="font-bold">{label}.  </span> {content}
+														</div>
+													);
+												})}
+											</div>
+										)}
+
+										{/* Tự luận */}
+										{ans.questionType === "essay" && (
+											<p className="text-sm text-gray-900 whitespace-pre-wrap">
+												{ans.essayAnswer || "Không có câu trả lời"}
+											</p>
+										)}
+
+										{/* Lập trình */}
+										{ans.questionType === "coding" && (
+											<div>
+												<p className="text-xs text-gray-500 mb-2">
+													Ngôn ngữ: <span className="font-semibold">{ans.language}</span>
+												</p>
+												<pre className="text-xs bg-gray-900 text-green-400 p-3 rounded overflow-x-auto">
+													{ans.codeAnswer || "Không có code"}
+												</pre>
+												{ans.judgeStatus && (
+													<p className="text-xs text-gray-500 mt-2">
+														Trạng thái: {ans.judgeStatus}
+													</p>
+												)}
+											</div>
+										)}
+
+										{/* 🔥 Đúng/Sai */}
+										{ans.questionType === "true_false" && ans.selectedChoices && (
+											<p className="text-sm text-gray-900">
+												{ans.selectedChoices.includes(1) ? (
+													<span>
+														<span className="font-bold">A.  </span> Đúng
+													</span>
+												) : (
+													<span>
+														<span className="font-bold">B. </span> Sai
+													</span>
+												)}
+											</p>
+										)}
+									</div>
+
+									{/* Giải thích */}
+									{ans.explanation && (
+										<div className="bg-blue-50 border-l-2 border-blue-400 rounded p-3">
+											<p className="text-xs font-semibold text-blue-900 mb-1">
+												💡 Giải thích
+											</p>
+											<p className="text-xs text-blue-800">{ans.explanation}</p>
+										</div>
 									)}
 								</div>
-
-								{/* Giải thích */}
-								{ans.explanation && (
-									<div className="bg-blue-50 border-l-2 border-blue-400 rounded p-3">
-										<p className="text-xs font-semibold text-blue-900 mb-1">
-											💡 Giải thích
-										</p>
-										<p className="text-xs text-blue-800">{ans.explanation}</p>
-									</div>
-								)}
-							</div>
-						))}
+							);
+						})}
 					</div>
 				)}
 
