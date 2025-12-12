@@ -38,6 +38,7 @@ export async function getBestSubmissions(req: Request, res: Response) {
         });
     }
 }
+
 export async function submit(req: Request, res: Response) {
     try {
         // Lấy studentId từ body hoặc user đã đăng nhập

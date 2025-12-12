@@ -550,7 +550,7 @@ export default function AssignmentsStudent() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full sm:w-52"
-            size="small"
+            size="middle"
           />
 
           {/* Filters */}
@@ -559,7 +559,7 @@ export default function AssignmentsStudent() {
               value={filterStatus}
               onChange={(value) => setFilterStatus(value)}
               className="w-full sm:w-auto"
-              size="small"
+              size="middle"
             >
               <Option value="all">Tất cả trạng thái</Option>
               <Option value="not_started">Chưa làm</Option>
@@ -572,7 +572,7 @@ export default function AssignmentsStudent() {
               value={filterType}
               onChange={(value) => setFilterType(value)}
               className="w-full sm:w-auto"
-              size="small"
+              size="middle"
             >
               <Option value="all">Tất cả loại</Option>
               <Option value="exercise">Bài tập</Option>
@@ -584,7 +584,7 @@ export default function AssignmentsStudent() {
             <Button
               icon={<ReloadOutlined />}
               onClick={fetchAssignments}
-              size="small"
+              size="middle"
               className="w-full sm:w-auto"
             >
               <span className="hidden sm:inline">Refresh</span>

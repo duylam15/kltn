@@ -468,23 +468,42 @@ export default function AssignmentsTeacherOut() {
   };
 
   const openAssignModal = async (assignment: Assignment) => {
+    console.log("📌 Mở modal gán bài tập:", assignment);
+
+    // Lưu bài tập đang chọn
     setSelectedAssignment(assignment);
+
+    // Reset trước để tránh hiển thị data cũ
+    setAssignedSectionIds([]);
+    setTempSelectedSectionIds([]);
+
     try {
-      const res = await instance.get<{ success: boolean; data: any[] }>(
+      console.log("➡️ Fetch lớp đã gán assignment", assignment.id);
+
+      const res = await instance.get(
         `/sections-assignments/assignments/${assignment.id}/sections`
       );
+
       if (res.data.success) {
-        const sectionIds = res.data.data.map((s) => s.sectionId);
-        setAssignedSectionIds(sectionIds);
-        setTempSelectedSectionIds(sectionIds);
+        const assignedIds = res.data.data.map((s) => s.sectionId);
+
+        console.log("🔥 Các lớp đã gán:", assignedIds);
+
+        // Lưu vào state
+        setAssignedSectionIds(assignedIds);
+        setTempSelectedSectionIds(assignedIds); // nếu bạn muốn check trước trong UI
+      } else {
+        console.warn("⚠️ API không trả success");
       }
-    } catch {
+    } catch (err) {
+      console.error("❌ Lỗi fetch lớp đã gán:", err);
       toast.error("Không tải được danh sách lớp đã gán");
-      setAssignedSectionIds([]);
-      setTempSelectedSectionIds([]);
     }
+
+    // Mở modal
     setAssignModalOpen(true);
   };
+
 
   const openCreateEditModal = async (assignment?: Assignment) => {
     if (assignment) {

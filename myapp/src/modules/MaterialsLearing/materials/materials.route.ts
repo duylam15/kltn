@@ -10,6 +10,9 @@ router.post("/upload", upload.single("file"), controller.uploadMaterial);
 // Gán tài liệu vào lớp
 router.post("/assign", controller.assignMaterialToClass);
 
+router.get("/:id/assigned-sections", controller.getAssignedSections);
+
+
 // Lấy tài liệu theo lớp
 router.get("/class/:courseSectionId", controller.getMaterialsByClass);
 // Cập nhật mở/đóng tài liệu cho lớp

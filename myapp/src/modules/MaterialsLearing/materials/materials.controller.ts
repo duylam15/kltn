@@ -91,6 +91,96 @@ export async function uploadMaterial(req: Request, res: Response) {
     }
 }
 
+export async function getAssignedSections(req: Request, res: Response) {
+    try {
+        const materialId = Number(req.params.id);
+
+        const result = await prisma.courseMaterial.findMany({
+            where: { materialId },
+            select: { courseSectionId: true },
+        });
+
+        const sections = result.map((r) => r.courseSectionId);
+
+        return res.json({
+            success: true,
+            sections,
+        });
+    } catch (err: any) {
+        console.error("getAssignedSections error:", err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+}
+
+
+
+export async function getAssignedMaterials(req: Request, res: Response) {
+    try {
+        const sectionId = Number(req.params.sectionId);
+
+        if (!sectionId) {
+            return res.status(400).json({
+                success: false,
+                message: "Thiếu sectionId",
+            });
+        }
+
+        // 🔥 Lấy toàn bộ tài liệu đã gán vào lớp
+        const assignedMaterials = await prisma.courseMaterial.findMany({
+            where: {
+                courseSectionId: sectionId,
+            },
+            include: {
+                material: {
+                    select: {
+                        id: true,
+                        title: true,
+                        description: true,
+                        category: true,
+                        filePath: true,
+                        fileType: true,
+                        uploadedBy: true,
+                    },
+                },
+                assigner: {
+                    select: {
+                        id: true,
+                        fullName: true,
+                        email: true,
+                    },
+                },
+                courseSection: {
+                    select: {
+                        id: true,
+                        sectionName: true,
+                        sectionCode: true,
+                        subject: {
+                            select: {
+                                subjectCode: true,
+                                subjectName: true,
+                            },
+                        },
+                        term: true,
+                    },
+                },
+            },
+        });
+
+        res.json({
+            success: true,
+            count: assignedMaterials.length,
+            data: assignedMaterials,
+        });
+    } catch (error: any) {
+        console.error("❌ getAssignedMaterials error:", error);
+        res.status(500).json({
+            success: false,
+            message: error.message || "Lỗi khi lấy tài liệu đã gán",
+        });
+    }
+}
+
+
 export async function assignMaterialToClass(req: Request, res: Response) {
     try {
         const { courseSectionId, materialId, assignedBy } = req.body;

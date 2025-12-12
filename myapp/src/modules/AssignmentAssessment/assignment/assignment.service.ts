@@ -474,8 +474,7 @@ export async function updateAssignment(
     if (data.allowLateSubmission !== undefined)
         updateData.allowLateSubmission = data.allowLateSubmission;
 
-    if (data.difficulty !== undefined)
-        updateData.difficulty = data.difficulty;
+    if (data.difficulty !== undefined) updateData.difficulty = data.difficulty;
 
     // 🔥 THÊM: Xử lý subjectId và chapterId
     if (data.subjectId !== undefined) {
@@ -684,7 +683,18 @@ export async function submitAssignment(
                 continue;
             }
 
-            const scoreResult = await calculateAnswerScore(ans);
+            let scoreResult;
+
+            if (question.type === "coding" && ans.isFinal) {
+                // 🔥 lấy điểm FE đã gửi
+                scoreResult = {
+                    score: ans.score ?? 0,
+                    maxScore: ans.maxScore ?? question.points,
+                };
+            } else {
+                // MCQ / TrueFalse → vẫn chấm tự động
+                scoreResult = await calculateAnswerScore(ans);
+            }
 
             // 🔥 CHUẨN BỊ DATA TÙY THEO TYPE
             const answerData: any = {
@@ -700,7 +710,7 @@ export async function submitAssignment(
                 answerData.language = ans.language
                     ? (ans.language as ProgrammingLanguage)
                     : null;
-                answerData.judgeStatus = "queued";
+                answerData.judgeStatus = ans.isFinal ? "graded" : "queued";
                 allAutoGraded = false;
             }
             // 🔥 ESSAY QUESTION
@@ -737,11 +747,6 @@ export async function submitAssignment(
                     },
                 },
             });
-
-            // 🔥 ĐẨY CODE VÀO QUEUE JUDGE
-            if (question.type === "coding" && ans.codeAnswer && ans.language) {
-                await queue.add("judge", { answerId: savedAnswer.id });
-            }
 
             totalScore += scoreResult.score;
             totalMaxScore += scoreResult.maxScore;

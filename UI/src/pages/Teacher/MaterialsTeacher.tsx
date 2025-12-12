@@ -125,7 +125,7 @@ export default function MaterialsTeacher() {
 	const [file, setFile] = useState<any>(null);
 
 	const [materialType, setMaterialType] = useState<"file" | "link">("file");
-
+	console.log("assigningMaterial", assigningMaterial);
 	const [form] = Form.useForm();
 	const [addForm] = Form.useForm();
 	const [assignForm] = Form.useForm();
@@ -136,6 +136,20 @@ export default function MaterialsTeacher() {
 	const [loadingLibrary, setLoadingLibrary] = useState(false);
 	const [selectedMaterialIds, setSelectedMaterialIds] = useState<number[]>([]);
 	const [libraryKeyword, setLibraryKeyword] = useState("");
+
+	const [assignedSections, setAssignedSections] = useState<number[]>([]);
+
+	useEffect(() => {
+		if (assigningMaterial) {
+			instance
+				.get(`/materials/${assigningMaterial.id}/assigned-sections`)
+				.then((res) => {
+					setAssignedSections(res.data.sections || []);
+					console.log("🔥 assignedSections =", res.data.sections);
+				});
+		}
+	}, [assigningMaterial]);
+
 
 	useEffect(() => {
 		if (userId) {
@@ -164,7 +178,7 @@ export default function MaterialsTeacher() {
 	const fetchChaptersBySubject = async (subjectId: number) => {
 		try {
 			setLoadingChapters(true);
-			const res = await instance.get(`/chapters? subjectId=${subjectId}`);
+			const res = await instance.get(`/chapters?subjectId=${subjectId}`);
 			if (res.data.success) {
 				setChapters(res.data.data || []);
 			}
@@ -407,13 +421,23 @@ export default function MaterialsTeacher() {
 			const values = await assignForm.validateFields();
 			if (!assigningMaterial) return;
 
-			await instance.post(`/materials/assign`, {
-				courseSectionId: values.sectionId,
-				materialId: assigningMaterial.id,
-				assignedBy: userId,
-			});
+			const { sectionIds } = values;
 
-			toast.success("Đã thêm tài liệu vào lớp");
+			console.log("📌 Các lớp được chọn =", sectionIds);
+
+			// 🔥 Loop gọi API cũ nhiều lần
+			for (const sectionId of sectionIds) {
+				console.log(`➡️ Assign material to section ${sectionId}`);
+
+				await instance.post(`/materials/assign`, {
+					courseSectionId: sectionId,
+					materialId: assigningMaterial.id,
+					assignedBy: userId,
+				});
+			}
+
+			toast.success("🎉 Đã thêm tài liệu vào các lớp đã chọn!");
+
 			setAssignModalOpen(false);
 			setAssigningMaterial(null);
 			assignForm.resetFields();
@@ -422,6 +446,8 @@ export default function MaterialsTeacher() {
 			toast.error(err.response?.data?.message || "Không thể thêm vào lớp");
 		}
 	};
+
+
 
 	const handleView = (material: Material) => {
 		if (material.link) {
@@ -1188,31 +1214,30 @@ export default function MaterialsTeacher() {
 						<Text strong>Tài liệu:</Text> {assigningMaterial.title}
 					</div>
 				)}
+
 				<Form form={assignForm} layout="vertical">
 					<Form.Item
-						name="sectionId"
+						name="sectionIds"
 						label="Chọn lớp học"
-						rules={[{ required: true, message: "Vui lòng chọn lớp" }]}
+						rules={[{ required: true, message: "Vui lòng chọn ít nhất 1 lớp" }]}
 					>
-						<Select
-							showSearch
-							placeholder="Chọn lớp học"
-							filterOption={(input, option) =>
-								String(option?.children || "")
-									?.toLowerCase()
-									.includes(input.toLowerCase())
-							}
-						>
-							{mySections.map((section) => (
-								<Option key={section.id} value={section.id}>
-									{section.subject.subjectCode} - {section.subject.subjectName} -{" "}
-									{section.sectionName} ({section.term.name})
-								</Option>
-							))}
+						<Select mode="multiple" placeholder="Chọn lớp học">
+							{mySections
+								.filter((s) => !(assignedSections || []).includes(s.id))
+								.map((section) => (
+									<Option key={section.id} value={section.id}>
+										{section.subject.subjectName} - {section.sectionName} ({section.term.name})
+									</Option>
+								))}
 						</Select>
+
+
 					</Form.Item>
 				</Form>
+
+				
 			</Modal>
+
 
 			<Modal
 				title={
