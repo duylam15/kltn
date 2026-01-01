@@ -9,8 +9,9 @@ import {
   Tooltip,
   Form,
   DatePicker,
-  Space, InputNumber,
-  Flex
+  Space,
+  Flex,
+  InputNumber
 } from "antd";
 import {
   ReloadOutlined,
@@ -32,7 +33,9 @@ import toast from "react-hot-toast";
 import { useAuth } from "../../context/authContext";
 import { DynamicQr } from "../../pages/Teacher/DynamicQr";
 import instance from "../../utils/axiosInstance";
-import { FileX } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
+
+
 
 
 type Session = {
@@ -84,6 +87,9 @@ type Enrollment = {
 };
 
 export default function RollCall() {
+  
+const FRONTEND_URL = import.meta.env.VITE_FE_URL?.replace(/\/$/, "") || window.location.origin;
+
   const path = window.location.pathname;
   const sectionId = Number(path.split("/")[3]);
   const { user } = useAuth();
@@ -104,6 +110,10 @@ export default function RollCall() {
 
   const [form] = Form.useForm<Session>();
   const [createForm] = Form.useForm<Session>();
+
+  const [creating, setCreating] = useState(false);
+
+
 
   useEffect(() => {
     if (!listModalOpen || !selectedSession?.id) return;
@@ -178,13 +188,16 @@ export default function RollCall() {
   };
 
   const createSession = async () => {
+     // ✅ Guard: đang tạo thì không cho bấm tiếp
+if (creating) return;
+  setCreating(true);
     try {
       const values = await createForm.validateFields();
 
       const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
-          timeout: 10000,
+      
         });
       });
 
@@ -219,13 +232,17 @@ export default function RollCall() {
         toast.success("Tạo phiên điểm danh thành công");
         setCreateModalOpen(false);
         createForm.resetFields();
-        fetchSessions();
+          // ✅ chỉ refresh 1 lần sau khi thành công
+      await fetchSessions();
       }
     } catch (err: any) {
       if (err?.errorFields) return;
       console.error(err);
       toast.error(err?.response?.data?.message || "Tạo phiên thất bại");
-    }
+    } finally {
+    // ✅ đảm bảo luôn nhả loading
+    setCreating(false);
+  }
   };
 
   const updateSession = async () => {
@@ -395,7 +412,7 @@ export default function RollCall() {
         (a.sessionCode || "").localeCompare(b.sessionCode || ""),
       render: (text: string) => text || <Tag color="default">N/A</Tag>,
     }, {
-      title: "Điểm buổi",
+      title: "Điểm phiên điểm danh",
       dataIndex: "sessionScore",
       key: "sessionScore",
       width: 110,
@@ -427,7 +444,7 @@ export default function RollCall() {
           type="link"
           size="small"
           onClick={() => {
-            const link = `http://localhost:5173/diemdanh?sessionId=${record.id}`;
+            const link = `${FRONTEND_URL}/diemdanh?sessionId=${record.id}`;
             navigator.clipboard.writeText(link);
             toast.success("Đã copy link điểm danh");
           }}
@@ -972,44 +989,31 @@ export default function RollCall() {
 
       {/* Modal QR */}
       <Modal
-        title="QR Code điểm danh (Động - Cập nhật mỗi 10 giây)"
-        open={qrModalOpen}
-        onCancel={() => setQrModalOpen(false)}
-        footer={null}
-        width={500}
-        centered // ← Ant Design tự động căn giữa theo chiều dọc
-        bodyStyle={{
-          padding: 24,
-          display: "flex",
-          justifyContent: "center",  // ← Căn giữa ngang
-          alignItems: "center",      // ← Căn giữa dọc
-          minHeight: 400,            // Đảm bảo Modal đủ cao
-        }}
-      >
-        {selectedSession?.totpSecretBase32 ? (
-          <DynamicQr
-            sessionId={selectedSession.sectionId}
-            secretBase32={selectedSession.totpSecretBase32}
-            period={selectedSession.totpPeriod ?? 10}
-            digits={selectedSession.totpDigits ?? 6}
-            size={320}
-          />
-        ) : selectedSession?.qrCodeUrl ? (
-          <div style={{ textAlign: "center" }}>
-            <img
-                src={`${import.meta.env.VITE_API_URL}${selectedSession.qrCodeUrl}`}
-              alt="QR Code động"
-              width={320}
-              height={320}
-            />
-            <p style={{ color: "orange", marginTop: 8 }}>
-              Warning: Không có TOTP → đang dùng QR tĩnh
-            </p>
-          </div>
-        ) : (
-          <p>Không có QR để hiển thị</p>
-        )}
-      </Modal>
+  title="QR Code điểm danh (Động - Cập nhật mỗi 60 giây)"
+  open={qrModalOpen}
+  onCancel={() => setQrModalOpen(false)}
+  footer={null}
+  width={500}
+  centered
+>
+  <div
+    style={{
+      textAlign: "center",
+      padding: 24,
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      flexDirection: "column",
+    }}
+  >
+    {selectedSession ? (
+      <DynamicQr sessionId={selectedSession.id} size={320} />
+    ) : (
+      <p>Không có QR để hiển thị</p>
+    )}
+  </div>
+</Modal>
+
 
 
       {/* Modal danh sách sinh viên */}
@@ -1051,7 +1055,7 @@ export default function RollCall() {
           </Form.Item>
 
           <Form.Item
-            label="Bán kính cho phép (m)"
+            label="Bán kính cho phép (20-500m)"
             name="radius"
             rules={[
               { required: true, message: "Vui lòng nhập bán kính" },
@@ -1076,9 +1080,9 @@ export default function RollCall() {
             <DatePicker showTime style={{ width: "100%" }} />
           </Form.Item>
 
-          {/* ⬇️ Thêm điểm buổi */}
+          {/* ⬇️ Sửa điểm phiên điểm danh */}
           <Form.Item
-            label="Điểm buổi"
+            label="Điểm phiên điểm danh"
             name="sessionScore"
             rules={[
               { required: true, message: "Vui lòng nhập điểm" },
@@ -1086,17 +1090,17 @@ export default function RollCall() {
                 type: "number",
                 transform: (v) => Number(v),
                 min: 0,
-                max: 10,
-                message: "0–10 điểm",
+                max: 100,
+                message: "0–100 điểm",
               },
             ]}
           >
             <InputNumber
               style={{ width: "100%" }}
               min={0}
-              max={10}
-              step={0.5}
-              placeholder="VD: 10"
+              max={100}
+              step={0.25}
+              placeholder="VD: 100"
             />
           </Form.Item>
         </Form>
@@ -1105,23 +1109,31 @@ export default function RollCall() {
 
 
       {/* Modal tạo phiên */}
-      <Modal
-        title="Tạo phiên điểm danh mới"
-        open={createModalOpen}
-        onCancel={() => setCreateModalOpen(false)}
-        onOk={createSession}
-        okText="Tạo mới"
-        centered
-        bodyStyle={{
-          maxHeight: "70vh",
-          overflowY: "auto",
-          overflowX: "hidden",
-        }}
+     <Modal
+  title="Tạo phiên điểm danh mới"
+  open={createModalOpen}
+  onCancel={() => {
+    if (creating) return;        // ✅ đang tạo thì không cho đóng
+    setCreateModalOpen(false);
+  }}
+  onOk={createSession}
+  okText="Tạo mới"
+  centered
+  confirmLoading={creating}      // ✅ spinner ngay trên nút OK
+  okButtonProps={{ disabled: creating }}
+  cancelButtonProps={{ disabled: creating }}
+  maskClosable={!creating}       // ✅ click ra ngoài không đóng
+  keyboard={!creating}           // ✅ ESC không đóng
+  bodyStyle={{
+    maxHeight: "70vh",
+    overflowY: "auto",
+    overflowX: "hidden",
+  }}
       >
         <Form
           form={createForm}
           layout="vertical"
-          initialValues={{ radius: 100, sessionScore: 10 }}  // ⬅️ mặc định 10
+        
         >
           <Form.Item
             label="Tên phiên điểm danh"
@@ -1139,8 +1151,32 @@ export default function RollCall() {
             <DatePicker showTime style={{ width: "100%" }} />
           </Form.Item>
 
+          {/* ⬇️ Điểm phiên điểm danh */}
           <Form.Item
-            label="Bán kính cho phép (m)"
+            label="Điểm phiên điểm danh"
+            name="sessionScore"
+            rules={[
+              { required: true, message: "Vui lòng nhập điểm" },
+              {
+                type: "number",
+                transform: (v) => Number(v),
+                min: 0,
+                max: 100,
+                message: "0–100 điểm",
+              },
+            ]}
+          >
+            <InputNumber
+              style={{ width: "100%" }}
+              min={0}
+              max={100}
+              step={0.25}
+              placeholder="VD: 100"
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="Bán kính cho phép (20-500m)"
             name="radius"
             rules={[
               { required: true, message: "Vui lòng nhập bán kính" },
@@ -1153,26 +1189,11 @@ export default function RollCall() {
               },
             ]}
           >
-            <Input type="number" placeholder="VD: 100" />
+            <InputNumber style={{ width: "100%" }} placeholder="VD: 100" />
           </Form.Item>
+          
 
-          {/* ⬇️ Điểm buổi */}
-          <Form.Item
-            label="Điểm buổi (tối đa)"
-            name="sessionScore"
-            rules={[
-              { required: true, message: "Vui lòng nhập điểm" },
-              {
-                type: "number",
-                transform: (v) => Number(v),
-                min: 0,
-                max: 10,
-                message: "0–10 điểm",
-              },
-            ]}
-          >
-            <Input type="number" step="0.5" placeholder="VD: 10" />
-          </Form.Item>
+          
         </Form>
       </Modal>
 

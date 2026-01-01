@@ -1,52 +1,32 @@
 import { Request, Response } from "express";
 import * as attendanceService from "./attendance.service";
-import QRCode from "qrcode";
-import path from "path";
-import fs from "fs";
 import { randomBytes } from "crypto";
 import { getClientIp, getIpGeo, haversineMeters } from "../../../common/net.utils";
 import { verify } from "../../../common/hmac";
 import { UAParser } from "ua-parser-js";
-import crypto from "crypto";
-import { totp } from "otplib";  
+import crypto from "crypto"; 
 import { prisma } from "../../../prisma/client";
+import {  authenticator, totp } from "otplib";
+import bcrypt from "bcryptjs";
 
 const SECRET = process.env.ATTENDANCE_HMAC_SECRET || "dev-secret";
 
 
-
-// cấu hình mặc định cho toàn hệ thống (có thể chuyển .env)
-const DEFAULT_TOTP_PERIOD = 10;  // 10 giây
-const DEFAULT_TOTP_DIGITS = 6;
-
-// ===== helper sinh secret base32 mạnh
-function generateTotpSecretBase32() {
-  // 20 bytes random -> base32 (tương thích otplib)
-  return Buffer.from(crypto.randomBytes(20)).toString("base64") // raw
-    .replace(/[^A-Z2-7]/gi, "A")                                // normalize
-    .slice(0, 32)                                               // 32 chars
-    .toUpperCase();                                             // base32-like
-}
-
 /* ===================== ====================================
  * 1) TẠO PHIÊN ĐIỂM DANH (bổ sung secret TOTP)
  * ========================================================= */
+
+const DEFAULT_TOTP_PERIOD = 60;
+const DEFAULT_TOTP_DIGITS = 6;
+
 export async function createSession(req: Request, res: Response) {
   try {
-    const {
-      sectionId,
-      name,
-      expiresAt,
-      latitude,
-      longitude,
-      radius,
-      requireDeviceCheck,
-      maxCheckInsPerIP,
-      sessionScore,            // ⬅️ thêm
-    } = req.body;
+    const { sectionId, name, expiresAt, latitude, longitude, radius, sessionScore } = req.body;
 
     const sessionCode = Math.random().toString(36).substring(2, 10).toUpperCase();
-    const totpSecretBase32 = generateTotpSecretBase32();
+
+    // ✅ secret chuẩn base32
+    const totpSecretBase32 = authenticator.generateSecret();
 
     const session = await prisma.attendanceSession.create({
       data: {
@@ -56,38 +36,23 @@ export async function createSession(req: Request, res: Response) {
         latitude: latitude ?? null,
         longitude: longitude ?? null,
         radius: radius ?? 100,
-        requireDeviceCheck: requireDeviceCheck ?? true,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
 
-        // TOTP
         totpSecretBase32,
         totpPeriod: DEFAULT_TOTP_PERIOD,
         totpDigits: DEFAULT_TOTP_DIGITS,
 
-        // ⬇️ lưu điểm của buổi
-        sessionScore:
-          sessionScore !== undefined && sessionScore !== null
-            ? Number(sessionScore)
-            : 10,
+        sessionScore: sessionScore != null ? Number(sessionScore) : 10,
       },
     });
 
-    return res.json({
-      success: true,
-      data: session,
-      totp: {
-        secretBase32: totpSecretBase32,
-        period: DEFAULT_TOTP_PERIOD,
-        digits: DEFAULT_TOTP_DIGITS,
-      },
-    });
+    return res.json({ success: true, data: session });
   } catch (err: any) {
     console.error(err);
-    return res
-      .status(500)
-      .json({ success: false, message: err.message || "Server error" });
+    return res.status(500).json({ success: false, message: err.message || "Server error" });
   }
 }
+
 
 
 /* =========================================================
@@ -123,22 +88,38 @@ export async function getSessionTotpConfig(req: Request, res: Response) {
 export async function getSessionCurrentTotp(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
-    const sess = await prisma.attendanceSession.findUnique({ where: { id }});
-    if (!sess) return res.json({ success: false, message: "Session not found" });
+    const sess = await prisma.attendanceSession.findUnique({
+      where: { id },
+      select: { totpSecretBase32: true, totpPeriod: true, totpDigits: true },
+    });
 
-    totp.options = { digits: 6, step: 10 };
+    if (!sess || !sess.totpSecretBase32) {
+      return res.status(404).json({ success: false, message: "Session không có QR động" });
+    }
 
-    const token = generateTotpSecretBase32();
+    const step = sess.totpPeriod || DEFAULT_TOTP_PERIOD;
+    const digits = sess.totpDigits || DEFAULT_TOTP_DIGITS;
+
+    totp.options = { step, digits };
+
+    // ✅ token 6 số đổi theo thời gian, nhìn ngẫu nhiên
+    const token = totp.generate(sess.totpSecretBase32);
+
+    const now = Math.floor(Date.now() / 1000);
+    const remaining = step - (now % step);
 
     return res.json({
       success: true,
       token,
-      period: 10
+      period: step,
+      remaining,
     });
   } catch (err: any) {
-    return res.json({ success: false, message: err.message });
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message || "Server error" });
   }
 }
+
 
 
 /* =========================================================
@@ -193,10 +174,17 @@ export async function checkIn(req: Request, res: Response) {
       latitude,
       longitude,
       accuracy,
-      deviceId,
       nonce,
       payloadSig,
+      password,
     } = req.body;
+
+    // ✅ "cờ hiệu" = đã login
+    const notLoggedIn = !!req.user;
+
+    const deviceId = req.deviceIdFromCookie; // thay vì req.body.deviceId
+if (!deviceId) return res.status(400).json({ success:false, message:"Thiếu deviceId" });
+
 
     if (!sessionId || !studentCode) {
       return res.status(400).json({ success: false, message: "sessionId và studentCode là bắt buộc" });
@@ -204,10 +192,17 @@ export async function checkIn(req: Request, res: Response) {
     if (latitude == null || longitude == null) {
       return res.status(400).json({ success: false, message: "Vị trí GPS là bắt buộc để điểm danh" });
     }
-   
 
-    // accuracy client phải <= 100m
-    const MAX_ALLOWED_ACCURACY = 100;
+    if (notLoggedIn) {
+      // ❌ chưa login => phải check password
+      if (!password || !String(password).trim()) {
+        return res.status(400).json({ success: false, message: "Vui lòng nhập mật khẩu" });
+      }
+    }
+
+
+    // accuracy client phải <= 50m
+    const MAX_ALLOWED_ACCURACY = 50;
     const accNum = Number(accuracy);
     if (!Number.isFinite(accNum) || accNum > MAX_ALLOWED_ACCURACY) {
       return res.status(400).json({
@@ -218,60 +213,107 @@ export async function checkIn(req: Request, res: Response) {
       });
     }
 
-      // -- Lấy session & secret
+    // -- Lấy session (để kiểm TOTP, expires, radius,...)
     const sessionDb = await prisma.attendanceSession.findUnique({
       where: { id: Number(sessionId) },
+      select: {
+        id: true,
+        sectionId: true,
+        expiresAt: true,
+        latitude: true,
+        longitude: true,
+        radius: true,
+        totpSecretBase32: true,
+        totpPeriod: true,
+        totpDigits: true,
+        sessionScore: true,
+      },
     });
-    if (!sessionDb) return res.status(404).json({ success:false, message:"Session not found" });
 
-    // ✅ TOTP chỉ kiểm khi client có gửi scannedToken
-if (sessionDb.totpSecretBase32 && scannedToken) {
-  totp.options = {
-    step: sessionDb.totpPeriod || DEFAULT_TOTP_PERIOD,
-    digits: sessionDb.totpDigits || DEFAULT_TOTP_DIGITS,
-  };
-  const isValidToken = (totp as any).verify({
-    token: String(scannedToken),
-    secret: sessionDb.totpSecretBase32,
-    window: 1, // chấp nhận lệch 1 step
-  });
-  if (!isValidToken) {
+    if (!sessionDb) {
+      return res.status(404).json({ success: false, message: "Session not found" });
+    }
+
+const tokenStr = String(scannedToken).trim();
+
+    // ✅ Nếu session có TOTP thì bắt buộc tokenStr
+    if (sessionDb.totpSecretBase32) {
+  const step = sessionDb.totpPeriod || DEFAULT_TOTP_PERIOD;
+  const digits = sessionDb.totpDigits || DEFAULT_TOTP_DIGITS;
+
+  const tokenStr = String(scannedToken || "").replace(/\D/g, ""); // chỉ lấy số
+
+  if (!tokenStr) {
     return res.status(400).json({
       success: false,
-      message: "Mã QR đã hết hạn hoặc không hợp lệ. Hãy quét lại QR đang hiển thị.",
+      message: "Thiếu mã QR động. Vui lòng quét QR mới nhất rồi thử lại.",
+    });
+  }
+
+const verifier = totp.clone();
+verifier.options = {
+  step,
+  digits,
+  window: 1,
+};
+
+const ok = verifier.check(tokenStr, sessionDb.totpSecretBase32);
+if (!ok) return res.status(400).json({ success:false, message:"Mã QR đã hết hạn hoặc không hợp lệ." });
+
+
+  if (!ok) {
+    return res.status(400).json({
+      success: false,
+      message: "Mã QR đã hết hạn hoặc không hợp lệ.",
     });
   }
 }
-// Nếu không có scannedToken -> bỏ qua bước TOTP (nút bấm thuần)
 
-    // 1) IP & UA
+    // ✅ hết hạn (dùng sessionDb)
+    if (sessionDb.expiresAt && new Date() > new Date(sessionDb.expiresAt)) {
+      return res.status(410).json({ success: false, message: "Buổi điểm danh đã hết hạn." });
+    }
+
+       // 1) Student
+const student = await prisma.student.findUnique({
+  where: { studentCode },
+  include: { user: true },
+});
+if (!student || !student.user) {
+  return res.status(404).json({ success: false, message: "Sinh viên không tồn tại" });
+}
+if (notLoggedIn) {
+// ✅ check mật khẩu
+const okPass = await bcrypt.compare(String(password), student.user.passwordHash);
+if (!okPass) {
+  return res.status(400).json({ success: false, message: "Sai mật khẩu" });
+}
+}
+
+    // 2) IP & UA
     const ipAddress = getClientIp(req);
     const userAgent = req.headers["user-agent"] || "";
     const ua = new UAParser(userAgent).getResult();
     const deviceInfo = `${ua.os.name ?? ""} ${ua.os.version ?? ""} | ${ua.browser.name ?? ""} ${ua.browser.version ?? ""}`;
 
-    // 2) Nonce
+    // 3) Nonce
     const found = await prisma.attendanceNonce.findUnique({ where: { value: nonce } });
     if (!found || found.used || found.expiresAt < new Date()) {
       return res.status(400).json({ success: false, message: "Nonce invalid or expired." });
     }
 
-    // 3) Verify HMAC
+    // 4) Verify HMAC
     const base = [sessionId, latitude, longitude, accuracy, nonce].join("|");
     if (!verify(base, payloadSig)) {
       return res.status(400).json({ success: false, message: "Signature mismatch." });
     }
 
-    // 4) Session
+    // 5) Session
     const session = await prisma.attendanceSession.findUnique({ where: { id: Number(sessionId) } });
     if (!session) return res.status(404).json({ success: false, message: "Session not found" });
     if (session.expiresAt && new Date() > new Date(session.expiresAt)) {
       return res.status(410).json({ success: false, message: "Buổi điểm danh đã hết hạn." });
     }
-
-    // 5) Student
-    const student = await prisma.student.findUnique({ where: { studentCode }, include: { user: true } });
-    if (!student) return res.status(404).json({ success: false, message: "Sinh viên không tồn tại" });
 
     // 6) Enrollment
     const enrolled = await prisma.sectionEnrollment.findFirst({
@@ -312,9 +354,7 @@ if (sessionDb.totpSecretBase32 && scannedToken) {
     if (suspiciousByIpGeo) isValid = false;
 
     // 11) DEVICE trong session (không cho 1 device dùng cho SV khác)
-    if (!deviceId) {
-      return res.status(400).json({ success: false, message: "Thiếu deviceId. Không thể điểm danh." });
-    }
+    
     const existingDeviceInSession = await prisma.deviceFingerprint.findFirst({
       where: { sessionId: session.id, deviceId },
     });

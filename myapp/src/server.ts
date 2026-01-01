@@ -1,6 +1,6 @@
+import env, { buildDbUrl } from "./config/env";
 import { createServer } from "http";
 import app from "./app";
-import env, { buildDbUrl } from "./config/env";
 import { prisma } from "./prisma/client";
 import { Server } from "socket.io";
 

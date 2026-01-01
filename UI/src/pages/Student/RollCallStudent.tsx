@@ -14,6 +14,7 @@ import {
   Fingerprint,
   CalendarClock,
   Timer,
+  KeyRound,
 } from "lucide-react";
 import instance from "../../utils/axiosInstance";
 
@@ -58,61 +59,7 @@ type AttendanceSession = {
 };
 
 
-/* ========================
- *  Fingerprint & DeviceId
- * ======================== */
-const toHex = (buf: ArrayBuffer) =>
-  Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
 
-async function sha256Hex(input: string) {
-  const enc = new TextEncoder();
-  const data = enc.encode(input);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return toHex(digest);
-}
-
-function getDeviceFingerprintFields() {
-  const ua = navigator.userAgent;
-  const platform = navigator.platform;
-  const language = navigator.language;
-  const sw = window.screen.width;
-  const sh = window.screen.height;
-  const colorDepth = window.screen.colorDepth;
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const deviceMemory = (navigator as any).deviceMemory ?? "unknown";
-  const hardwareConcurrency = navigator.hardwareConcurrency ?? "unknown";
-  const touchSupport = "ontouchstart" in window;
-
-  return {
-    userAgent: ua,
-    platform,
-    language,
-    screen: `${sw}x${sh}`,
-    colorDepth,
-    timezone,
-    deviceMemory,
-    hardwareConcurrency,
-    touchSupport,
-  };
-}
-
-async function buildDeviceId() {
-  const f = getDeviceFingerprintFields();
-  const raw = [
-    f.platform,
-    f.screen,
-    f.colorDepth,
-    f.timezone,
-    f.language,
-    String(f.deviceMemory),
-    String(f.hardwareConcurrency),
-    String(f.touchSupport),
-  ].join("|");
-  const deviceId = await sha256Hex(raw);
-  return { deviceId, userAgent: f.userAgent, fields: f };
-}
 
 /* ========================
  *  Nonce & HMAC helpers
@@ -197,13 +144,19 @@ export default function RollCallStudent() {
   const [loading, setLoading] = useState(true);
   const [checkingIn, setCheckingIn] = useState<number | null>(null);
   const [error, setError] = useState("");
+  
 
   const { user } = useAuth();
   const studentId = user?.student?.id;
   const studentCode = user?.studentCode;
+  
 
   const path = window.location.pathname;
   const sectionId = Number(path.split("/")[3]);
+  const [tokenBySession, setTokenBySession] = useState<Record<number, string>>(
+    {}
+  );
+
 
   async function fetchSessions() {
     setLoading(true);
@@ -231,99 +184,102 @@ export default function RollCallStudent() {
   }, [sectionId]);
 
   const handleCheckIn = async (sessionId: number) => {
-    if (!studentCode) {
-      setError("Không tìm thấy mã sinh viên");
-      return;
-    }
-    if (!navigator.geolocation) {
-      setError("Trình duyệt không hỗ trợ định vị GPS");
-      return;
-    }
+  if (!studentCode) {
+    setError("Không tìm thấy mã sinh viên");
+    return;
+  }
+  if (!navigator.geolocation) {
+    setError("Trình duyệt không hỗ trợ định vị GPS");
+    return;
+  }
 
-    setCheckingIn(sessionId);
-    setError("");
+  const scannedToken = (tokenBySession[sessionId] || "").trim();
+  if (!scannedToken) {
+    const msg = "Vui lòng nhập mã QR (6 số) từ QR động";
+    setError(msg);
+    toast.error(msg);
+    return;
+  }
 
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          const { latitude, longitude, accuracy } = pos.coords;
+  setCheckingIn(sessionId);
+  setError("");
+  // nếu có success banner:
+  // setSuccessMsg("");
 
-          const MAX_ALLOWED_ACCURACY_FOR_TEACHER = 100;
-          if (accuracy == null || accuracy > MAX_ALLOWED_ACCURACY_FOR_TEACHER) {
-            toast.error(
-              `Không thể lấy vị trí chính xác.  Vui lòng tắt->bật lại Wi-Fi THỬ. `
-            );
-            return;
-          }
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      try {
+        const { latitude, longitude, accuracy } = pos.coords;
 
-          const { deviceId, userAgent, fields } = await buildDeviceId();
-          const nonce = await getNonce(sessionId);
+        const MAX_ALLOWED_ACCURACY_FOR_STUDENT = 100;
+        if (accuracy == null || accuracy > MAX_ALLOWED_ACCURACY_FOR_STUDENT) {
+          const msg = "Không thể lấy vị trí chính xác. Vui lòng bật GPS/Wi-Fi rồi thử lại.";
+          setError(msg);
+          toast.error(msg);
+          return;
+        }
 
-          const base = [
-            sessionId,
+        const nonce = await getNonce(sessionId);
+        const base = [sessionId, latitude, longitude, Math.round(accuracy), nonce].join("|");
+        const payloadSig = await getSignature(base);
+
+        const res = await instance.post(
+          "/attendance/check-in",
+          {
+            sessionId: +sessionId,
+            studentCode,
+            scannedToken,
             latitude,
             longitude,
-            Math.round(accuracy),
+            accuracy: Math.round(accuracy),
             nonce,
-          ].join("|");
-          const payloadSig = await getSignature(base);
+            payloadSig,
+          },
+          { withCredentials: true }
+        );
 
-          const res = await instance.post(
-            "/attendance/check-in",
-            {
-              sessionId: +sessionId,
-              studentCode,
-              latitude,
-              longitude,
-              accuracy: Math.round(accuracy),
-              deviceId,
-              nonce,
-              payloadSig,
-            },
-            {
-              headers: {
-                "X-Device-Screen": fields.screen,
-                "X-Device-TZ": fields.timezone,
-              },
-              withCredentials: true,
-            }
-          );
+        const data = res.data;
 
+        // ✅ message từ controller
+        const msg = data?.message || "Điểm danh thành công";
+        toast.success(msg);
+        // nếu có success banner:
+        // setSuccessMsg(msg);
 
-          const data = res.data;
-          if (data.success) {
-            toast.success(
-              `${data.message}` +
-              (data.warning ? `\n⚠️ ${data.warning}` : "") +
-              (data.scoreInfo?.score != null
-                ? `\nĐiểm: ${data.scoreInfo.score}/10`
-                : "")
-            );
-            fetchSessions();
-          } else {
-            setError(data.message || "Điểm danh thất bại");
-          }
-        } catch (e: any) {
-          setError(e?.message || "Lỗi khi điểm danh");
-        } finally {
-          setCheckingIn(null);
-        }
-      },
-      (err) => {
-        let msg = "Không thể lấy vị trí GPS";
-        if (err.code === err.PERMISSION_DENIED) {
-          msg = "Vui lòng cho phép truy cập vị trí";
-        } else if (err.code === err.POSITION_UNAVAILABLE) {
-          msg = "Không xác định được vị trí (POSITION_UNAVAILABLE)";
-        } else if (err.code === err.TIMEOUT) {
-          msg = "Lấy vị trí quá thời gian (TIMEOUT)";
-        }
+        if (data?.warning) toast(data.warning);
+
+        setError("");
+        setTokenBySession((prev) => ({ ...prev, [sessionId]: "" }));
+        fetchSessions();
+      } catch (e: any) {
+        // ✅ message từ controller (Express)
+        const msg =
+          e?.response?.data?.message ||
+          e?.response?.data?.error ||
+          e?.message ||
+          "Lỗi khi điểm danh";
+
         setError(msg);
+        toast.error(msg);
+      } finally {
         setCheckingIn(null);
-      },
-      { enableHighAccuracy: true, timeout: 20_000, maximumAge: 0 }
-    );
-  };
+      }
+    },
+    (err) => {
+      let msg = "Không thể lấy vị trí GPS";
+      if (err.code === err.PERMISSION_DENIED) msg = "Vui lòng cho phép truy cập vị trí";
+      else if (err.code === err.POSITION_UNAVAILABLE) msg = "Không xác định được vị trí";
+      else if (err.code === err.TIMEOUT) msg = "Mã quá thời gian";
+
+      setError(msg);
+      toast.error(msg);
+      setCheckingIn(null);
+    },
+    { enableHighAccuracy: true, timeout: 20_000, maximumAge: 0 }
+  );
+};
+
+
 
   const myAttendanceIn = (s: AttendanceSession) =>
     s.attendances.find((a) => a.studentId === studentId);
@@ -384,8 +340,6 @@ export default function RollCallStudent() {
   `}
                 >
 
-
-
                   {/* Header Gradient */}
 
                   <div className="p-5 ">
@@ -414,7 +368,7 @@ export default function RollCallStudent() {
                     </div>
 
                     {/* Info Grid */}
-                    <div className="space-y-2. 5 mb-4">
+                    <div className="space-y-2.5 mb-4">
                       {session.expiresAt && (
                         <div className="flex items-center gap-2 text-sm text-gray-600">
                           <span className="truncate">
@@ -439,7 +393,28 @@ export default function RollCallStudent() {
                         </div>
                       </div>
                     ) : canCheckIn ? (
-                      <button
+                      <div className="space-y-3">
+                        {/* ✅ Mã QR */}
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-gray-700 flex items-center gap-1">
+                            <KeyRound className="w-4 h-4 text-gray-400" />
+                            Mã QR (6 số)
+                          </label>
+                          <input
+                            value={tokenBySession[session.id] || ""}
+                            onChange={(e) =>
+                              setTokenBySession((prev) => ({ ...prev, [session.id]: e.target.value }))
+                            }
+                            className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="Nhập mã từ QR động"
+                            inputMode="numeric"
+                          />
+                          <p className="text-[11px] text-gray-400">
+                            Mã đổi theo chu kỳ. Nếu báo hết hạn, hãy nhập lại mã mới.
+                          </p>
+                        </div>
+
+                        <button
                         onClick={() => handleCheckIn(session.id)}
                         disabled={checkingIn === session.id}
                         className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white rounded-xl text-sm font-semibold disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2"
@@ -456,6 +431,7 @@ export default function RollCallStudent() {
                           </>
                         )}
                       </button>
+                      </div>
                     ) : (
                       <div className="flex items-center justify-center gap-2 text-sm text-red-600 py-3 bg-red-50 border-2 border-red-200 rounded-xl font-medium">
                         <XCircle className="w-4 h-4" />

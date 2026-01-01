@@ -11,6 +11,7 @@ import routes from "./routes";
 import { notFound } from "./middlewares/notFound";
 import errorHandler from "./middlewares/errorHandler";
 import { cookieLogger } from "./middlewares/cookieLogger";
+import { deviceIdCookie } from "./middlewares/deviceId";
 
 const logger = pino({
     transport:
@@ -46,7 +47,7 @@ app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieLogger); // ✅ Add logger
-
+app.use(deviceIdCookie);
 // Routes
 app.use("/api/v1", routes);
 

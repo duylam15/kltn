@@ -1,7 +1,11 @@
 import { Router } from "express";
 import * as attendanceController from "./attendance.controller";
+import { deviceIdCookie } from "../../../middlewares/deviceId";
+
 
 const router = Router();
+
+router.use(deviceIdCookie);
 
 // Tạo QR session
 router.post("/sessions", attendanceController.createSession);
