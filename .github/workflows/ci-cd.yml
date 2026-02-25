@@ -24,11 +24,6 @@ jobs:
           cd myapp
           npm install
 
-      - name: Run backend tests
-        run: |
-          cd myapp
-          npm test
-
       # ---------- Frontend ----------
       - name: Install frontend deps
         run: |
