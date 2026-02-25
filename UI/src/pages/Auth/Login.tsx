@@ -66,7 +66,7 @@ export default function Login() {
 
 				<div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
 					<h2 className="text-2xl font-semibold text-gray-900 mb-6 text-center">
-						Đăng nhập CICD auto2222
+						Đăng nhập CICD xxxx
 					</h2>
 
 					<form onSubmit={onSubmit} className="space-y-5">
