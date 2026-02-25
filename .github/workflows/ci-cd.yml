@@ -6,14 +6,16 @@ on:
   pull_request:
 
 jobs:
+  # ================================
+  # 1. BUILD CHECK (Kiểm tra lỗi code)
+  # ================================
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # ---------- Backend ----------
+      # ---------- Backend Check ----------
       - name: Setup Node
         uses: actions/setup-node@v3
         with:
@@ -24,22 +26,24 @@ jobs:
           cd myapp
           npm install
 
-      # ---------- Frontend ----------
+      # ---------- Frontend Check ----------
       - name: Install frontend deps
         run: |
           cd UI
           npm install
 
-      - name: Build frontend
+      - name: Build frontend test
         run: |
           cd UI
           npm run build
 
-  docker:
+  # ================================
+  # 2. DEPLOY BACKEND (Docker)
+  # ================================
+  deploy-backend:
     needs: build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-
     steps:
       - uses: actions/checkout@v3
 
@@ -55,11 +59,11 @@ jobs:
       - name: Push image
         run: docker push duylamdocker/myapp:latest
 
-      - name: Deploy to VPS
+      - name: Deploy Backend to VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
+          host: ${{ secrets.SERVER_HOST }} # 42.96.15.24
+          username: ${{ secrets.SERVER_USER }} # root
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 26266
           script: |
@@ -76,30 +80,34 @@ jobs:
               --restart unless-stopped \
               duylamdocker/myapp:latest
 
-      # - name: Build frontend
-      #   working-directory: UI
-      #   run: |
-      #     npm ci
-      #     npm run build
-      #     ls -la dist
+  # ================================
+  # 3. DEPLOY FRONTEND (SCP) - MỚI
+  # ================================
+  deploy-frontend:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v3
 
-      # - name: Clean old frontend on VPS
-      #   uses: appleboy/ssh-action@v1.0.3
-      #   with:
-      #     host: ${{ secrets.SERVER_HOST }}
-      #     username: ${{ secrets.SERVER_USER }}
-      #     key: ${{ secrets.SERVER_SSH_KEY }}
-      #     port: 26266
-      #     script: |
-      #       rm -rf /root/frontend/*
-      #       mkdir -p /root/frontend
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
 
-      # - name: Upload frontend to VPS
-      #   uses: appleboy/scp-action@v0.1.7
-      #   with:
-      #     host: ${{ secrets.SERVER_HOST }}
-      #     username: ${{ secrets.SERVER_USER }}
-      #     key: ${{ secrets.SERVER_SSH_KEY }}
-      #     port: 26266
-      #     source: "UI/dist/*"
-      #     target: "/root/frontend/"
+      - name: Install & Build Frontend
+        run: |
+          cd UI
+          npm install
+          npm run build
+
+      - name: Deploy Frontend to VPS via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }} # Sử dụng lại biến Host cũ hoặc điền 42.96.15.24
+          username: ${{ secrets.SERVER_USER }} # root
+          password: ${{ secrets.SERVER_PASSWORD }} # Cần tạo Secret này mới dùng được
+          port: 26266
+          source: "UI/dist/*"
+          target: "/root/frontend/"
+          strip_components: 2 # Quan trọng: Loại bỏ UI/dist để file nằm trực tiếp trong /root/frontend/
