@@ -1,5 +1,0 @@
-venv/
-*.dll
-*.so
-*.pkl
-__pycache__/
