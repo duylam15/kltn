@@ -40,45 +40,45 @@ jobs:
   # ================================
   # 2. DEPLOY BACKEND (Docker)
   # ================================
-  deploy-backend:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v3
+  # deploy-backend:
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main'
+  #   steps:
+  #     - uses: actions/checkout@v3
 
-      - name: Login DockerHub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USER }}
-          password: ${{ secrets.DOCKER_PASS }}
+  #     - name: Login DockerHub
+  #       uses: docker/login-action@v2
+  #       with:
+  #         username: ${{ secrets.DOCKER_USER }}
+  #         password: ${{ secrets.DOCKER_PASS }}
 
-      - name: Build image
-        run: docker build -t duylamdocker/myapp:latest ./myapp
+  #     - name: Build image
+  #       run: docker build -t duylamdocker/myapp:latest ./myapp
 
-      - name: Push image
-        run: docker push duylamdocker/myapp:latest
+  #     - name: Push image
+  #       run: docker push duylamdocker/myapp:latest
 
-      - name: Deploy Backend to VPS
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }} # 42.96.15.24
-          username: ${{ secrets.SERVER_USER }} # root
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: 26266
-          script: |
-            docker pull duylamdocker/myapp:latest
-            docker stop myapp || true
-            docker rm myapp || true
-            docker run -d \
-              --name myapp \
-              --network myapp-network \
-              -p 3000:4000 \
-              --env-file /root/myapp/.env \
-              -v /root/myapp/private.key:/app/private.key \
-              -v /root/myapp/public.key:/app/public.key \
-              --restart unless-stopped \
-              duylamdocker/myapp:latest
+  #     - name: Deploy Backend to VPS
+  #       uses: appleboy/ssh-action@v1.0.3
+  #       with:
+  #         host: ${{ secrets.SERVER_HOST }} # 42.96.15.24
+  #         username: ${{ secrets.SERVER_USER }} # root
+  #         key: ${{ secrets.SERVER_SSH_KEY }}
+  #         port: 26266
+  #         script: |
+  #           docker pull duylamdocker/myapp:latest
+  #           docker stop myapp || true
+  #           docker rm myapp || true
+  #           docker run -d \
+  #             --name myapp \
+  #             --network myapp-network \
+  #             -p 3000:4000 \
+  #             --env-file /root/myapp/.env \
+  #             -v /root/myapp/private.key:/app/private.key \
+  #             -v /root/myapp/public.key:/app/public.key \
+  #             --restart unless-stopped \
+  #             duylamdocker/myapp:latest
 
   # ================================
   # 3. DEPLOY FRONTEND (SCP) - MỚI
@@ -106,7 +106,7 @@ jobs:
         with:
           host: ${{ secrets.SERVER_HOST }} # Sử dụng lại biến Host cũ hoặc điền 42.96.15.24
           username: ${{ secrets.SERVER_USER }} # root
-          password: ${{ secrets.SERVER_SSH_KEY}} # Cần tạo Secret này mới dùng được
+          key: ${{ secrets.SERVER_SSH_KEY }}          
           port: 26266
           source: "UI/dist/*"
           target: "/root/frontend/"
