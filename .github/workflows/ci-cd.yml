@@ -106,7 +106,7 @@ jobs:
         with:
           host: ${{ secrets.SERVER_HOST }} # Sử dụng lại biến Host cũ hoặc điền 42.96.15.24
           username: ${{ secrets.SERVER_USER }} # root
-          password: ${{ secrets.SERVER_PASS}} # Cần tạo Secret này mới dùng được
+          password: ${{ secrets.SERVER_SSH_KEY}} # Cần tạo Secret này mới dùng được
           port: 26266
           source: "UI/dist/*"
           target: "/root/frontend/"
