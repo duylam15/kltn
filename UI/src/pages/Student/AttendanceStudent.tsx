@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Table, Tag, Typography, Spin, message } from "antd";
 import dayjs from "dayjs";
-import api from "../../utils/api"; // axios instance có token
 import { useAuth } from "../../context/authContext";
+import axios from "axios";
 
 const { Title } = Typography;
 
@@ -41,7 +41,7 @@ useEffect(() => {
       setLoading(true);
 
       // 1) Từ userId -> gọi API lấy studentId
-      const stu = await api.get<{ success: boolean; data: { id: number } }>(
+      const stu = await axios.get<{ success: boolean; data: { id: number } }>(
         `/students/user/${userId}`
       );
 
@@ -55,7 +55,7 @@ useEffect(() => {
       }
 
       // 2) Lấy danh sách điểm danh
-      const att = await api.get<{ success: boolean; data: AttendanceItem[] }>(
+      const att = await axios.get<{ success: boolean; data: AttendanceItem[] }>(
         `/attendance/section/${sectionId}/student/${studentId}`
       );
 

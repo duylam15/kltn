@@ -1,6 +1,7 @@
 // context/AuthContext. tsx
 import React, { createContext, useContext, useEffect, useState } from "react";
 import instance from "../utils/axiosInstance";
+import axios from "axios";
 
 type Permission = { id: number; name: string };
 

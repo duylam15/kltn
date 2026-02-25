@@ -16,7 +16,7 @@ export default function AuthGuard() {
 	useEffect(() => {
 		async function checkAuth() {
 			try {
-				const res = await instance.get("http://localhost:4000/api/v1/auths/me", {
+				const res = await instance.get("/auths/me", {
 					withCredentials: true,
 				});
 

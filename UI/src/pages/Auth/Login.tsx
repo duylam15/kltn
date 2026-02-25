@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock, LogIn, User as UserIcon, AlertCircle } from "lucide-react";
+import { log } from 'node:console';
 import { useAuth } from "../../context/authContext";
 
 export default function Login() {
@@ -12,7 +13,8 @@ export default function Login() {
 	const [password, setPassword] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
-
+	
+	
 	const onSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setError("");
