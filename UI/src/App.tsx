@@ -12,7 +12,7 @@ import { AuthProvider } from "./context/authContext";
 export default function App() {
   return (
     <AuthProvider>
-      <Suspense fallback={<div className="p-4">Đang tải…</div>}>
+      <Suspense fallback={<div className="p-4">Đang22 tải…</div>}>
         <RouterProvider router={router} />
         <Toaster position="top-right" reverseOrder={false} />
       </Suspense>
