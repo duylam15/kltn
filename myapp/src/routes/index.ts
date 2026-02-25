@@ -35,7 +35,7 @@ import submissionRoutes from "../modules/AssignmentAssessment/submission/submiss
 
 const router = Router();
 
-router.get("/healthxxx", (_req, res) => res.json({ status: "ok" }));
+router.get("/health222", (_req, res) => res.json({ status: "ok" }));
 router.use("/auths", authRoutes);
 router.use("/users", userRoute);
 router.use("/students", studentRoute);
