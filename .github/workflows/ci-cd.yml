@@ -21,23 +21,23 @@ jobs:
 
       - name: Install backend deps
         run: |
-          cd backend
+          cd myapp
           npm install
 
       - name: Run backend tests
         run: |
-          cd backend
+          cd myapp
           npm test
 
       # ---------- Frontend ----------
       - name: Install frontend deps
         run: |
-          cd frontend
+          cd UI
           npm install
 
       - name: Build frontend
         run: |
-          cd frontend
+          cd UI
           npm run build
 
   docker:
