@@ -69,7 +69,7 @@ jobs:
             docker run -d \
               --name myapp \
               --network myapp-network \
-              -p 3000:3000 \
+              -p 3000:4000 \
               --env-file /root/myapp/.env \
               -v /root/myapp/private.key:/app/private.key \
               -v /root/myapp/public.key:/app/public.key \
