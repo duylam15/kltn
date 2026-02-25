@@ -24,12 +24,16 @@ const app = express();
 // Middleware
 app.use(
     cors({
-        origin: process.env.CLIENT_URL || "http://localhost:5173",
+        origin: [
+            "http://localhost:5173",
+            "https://quanlyhoctapsgu.cloud",
+            "https://www.quanlyhoctapsgu.cloud",
+        ],
         credentials: true,
         methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allowedHeaders: ["Content-Type", "Authorization"],
         exposedHeaders: ["Set-Cookie"], // ✅ Expose Set-Cookie header
-    })
+    }),
 );
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
