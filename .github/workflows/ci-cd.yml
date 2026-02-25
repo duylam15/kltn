@@ -49,13 +49,8 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_PASS }}
 
-      - name: Build backend image
-        run: docker build -t yourdockerhub/backend ./backend
-
       - name: Build frontend image
-        run: docker build -t yourdockerhub/frontend ./frontend
+        run: docker build -t duylamdocker/myapp:latest ./myapp
 
-      - name: Push images
-        run: |
-          docker push yourdockerhub/backend
-          docker push yourdockerhub/frontend
+      - name: Push image
+        run: docker push duylamdocker/myapp:latest
