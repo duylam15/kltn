@@ -778,7 +778,7 @@ export default function QuestionsTeacher() {
 						<div className="mt-1">
 							<BookOpen />
 						</div>{" "}
-						Câu hỏi của tôixx
+						Câu hỏi của tôi
 					</div>
 				</Title>
 				<div style={{ display: "flex", gap: 8 }}>

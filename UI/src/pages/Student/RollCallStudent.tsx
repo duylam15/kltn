@@ -1,5 +1,18 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../../context/authContext";
+import {
+  ClipboardCheck,
+  Clock,
+  Users,
+  Hash,
+  MapPin,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  Loader2,
+  AlertCircle,
+  CalendarDays,
+} from "lucide-react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/vi";
@@ -52,7 +65,6 @@ const getDeviceFingerprint = () => {
   const screenHeight = window.screen.height;
   const colorDepth = window.screen.colorDepth;
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
   const fingerprint = `${platform}_${screenWidth}x${screenHeight}_${colorDepth}bit_${timezone}`;
 
   return {
@@ -82,8 +94,8 @@ export default function RollCallStudent() {
   const path = window.location.pathname;
   const sectionId = Number(path.split("/")[3]);
 
-  const fetchSessions = async () => {
-    setLoading(true);
+  const fetchSessions = async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
     try {
       const res = await fetch(
         `http://localhost:4000/api/v1/attendance/sections/${sectionId}/sessions`,
@@ -92,7 +104,6 @@ export default function RollCallStudent() {
         }
       );
       const data = await res.json();
-
       if (data.success) {
         setSessions(data.data);
       } else {
@@ -101,14 +112,14 @@ export default function RollCallStudent() {
     } catch (err) {
       setError("Lỗi kết nối server");
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
   useEffect(() => {
     if (sectionId) {
       fetchSessions();
-      const interval = setInterval(fetchSessions, 30000);
+      const interval = setInterval(() => fetchSessions(true), 30000);
       return () => clearInterval(interval);
     }
   }, [sectionId]);
@@ -166,7 +177,7 @@ export default function RollCallStudent() {
           const data = await res.json();
 
           if (data.success) {
-            alert(`✅ ${data.message}\n\nĐiểm: ${data.scoreInfo?.score || "N/A"}/10`);
+            alert(`${data.message}\n\nĐiểm: ${data.scoreInfo?.score || "N/A"}/10`);
             fetchSessions();
           } else {
             setError(data.message || "Điểm danh thất bại");
@@ -177,12 +188,11 @@ export default function RollCallStudent() {
           setCheckingIn(null);
         }
       },
-      (error) => {
+      (err) => {
         let errorMessage = "Không thể lấy vị trí GPS";
-        if (error.code === error.PERMISSION_DENIED) {
-          errorMessage = "Vui lòng cho phép truy cập vị trí";
+        if (err.code === err.PERMISSION_DENIED) {
+          errorMessage = "Vui lòng cho phép truy cập vị trí trên trình duyệt";
         }
-        alert(errorMessage);
         setError(errorMessage);
         setCheckingIn(null);
       },
@@ -198,24 +208,30 @@ export default function RollCallStudent() {
     return session.attendances.find((a) => a.studentId === studentId);
   };
 
-  const getStatusText = (status: AttendanceStatus) => {
-    const statusMap = {
-      present: "Có mặt",
-      late: "Muộn",
-      warning: "Cảnh báo",
-      absent: "Vắng",
+  const getStatusBadge = (status: AttendanceStatus) => {
+    const config = {
+      present: {
+        label: "Có mặt",
+        icon: CheckCircle2,
+        style: "bg-emerald-50 text-emerald-700 border-emerald-200/80",
+      },
+      late: {
+        label: "Đi muộn",
+        icon: Clock,
+        style: "bg-amber-50 text-amber-700 border-amber-200/80",
+      },
+      warning: {
+        label: "Cảnh báo",
+        icon: AlertTriangle,
+        style: "bg-orange-50 text-orange-700 border-orange-200/80",
+      },
+      absent: {
+        label: "Vắng mặt",
+        icon: XCircle,
+        style: "bg-rose-50 text-rose-700 border-rose-200/80",
+      },
     };
-    return statusMap[status];
-  };
-
-  const getStatusColor = (status: AttendanceStatus) => {
-    const colorMap = {
-      present: "text-green-700",
-      late: "text-yellow-700",
-      warning: "text-orange-700",
-      absent: "text-red-700",
-    };
-    return colorMap[status];
+    return config[status];
   };
 
   const formatDate = (dateString: string) => {
@@ -223,107 +239,244 @@ export default function RollCallStudent() {
     const now = dayjs();
     const diffDays = now.diff(date, "day");
 
-    if (diffDays === 0) return `Hôm nay ${date.format("HH:mm")}`;
-    if (diffDays === 1) return `Hôm qua ${date.format("HH:mm")}`;
-    return date.format("DD/MM/YYYY HH:mm");
+    if (diffDays === 0) return `Hôm nay, ${date.format("HH:mm")}`;
+    if (diffDays === 1) return `Hôm qua, ${date.format("HH:mm")}`;
+    return date.format("DD/MM/YYYY • HH:mm");
   };
 
   if (loading) {
     return (
-      <div className="w-full min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-600">Đang tải...</p>
+      <div className="w-full px-6 py-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="h-52 bg-slate-100/80 animate-pulse rounded-xl border border-slate-200/60"
+            />
+          ))}
+        </div>
       </div>
     );
   }
 
+  const attendedCount = sessions.filter((s) => getMyAttendance(s)).length;
+  const openCount = sessions.filter((s) => {
+    const expired = s.expiresAt && new Date(s.expiresAt) <= new Date();
+    return !expired && !getMyAttendance(s);
+  }).length;
+
   return (
-    <div className="w-full min-h-screen bg-gray-50">
-      {/* Content */}
-      <div className="px-4 py-6">
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
-            {error}
+    <div className="w-full px-6 py-6">
+      {/* Header gọn gàng, trung tính */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">
+            Danh sách điểm danh
+          </h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Theo dõi lịch sử chuyên cần và thực hiện điểm danh theo buổi học
+          </p>
+        </div>
+
+        {sessions.length > 0 && (
+          <div className="flex items-center gap-3 text-xs">
+            <div className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-600">
+              Tổng số buổi:{" "}
+              <span className="font-semibold text-slate-900">
+                {sessions.length}
+              </span>
+            </div>
+            <div className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-600">
+              Đã điểm danh:{" "}
+              <span className="font-semibold text-emerald-600">
+                {attendedCount}/{sessions.length}
+              </span>
+            </div>
+            {openCount > 0 && (
+              <div className="px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 font-medium">
+                Đang mở: {openCount}
+              </div>
+            )}
           </div>
         )}
+      </div>
 
-        {sessions.length === 0 ? (
-          <div className="bg-white rounded-lg border p-8 text-center">
-            <p className="text-gray-600">Không có buổi điểm danh nào</p>
+      {/* Thông báo lỗi */}
+      {error && (
+        <div className="mb-5 p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2.5 text-sm text-red-700">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Nội dung chính */}
+      {sessions.length === 0 ? (
+        <div className="w-full bg-white rounded-xl border border-dashed border-slate-300 py-14 px-4 text-center">
+          <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+            <ClipboardCheck className="w-6 h-6" />
           </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {sessions.map((session) => {
-              const myAttendance = getMyAttendance(session);
-              const isExpired = session.expiresAt && new Date(session.expiresAt) <= new Date();
-              const canCheckIn = !isExpired && !myAttendance;
+          <p className="text-sm font-medium text-slate-800">
+            Chưa có buổi điểm danh nào
+          </p>
+          <p className="text-xs text-slate-500 mt-1">
+            Khi giảng viên mở phiên điểm danh, thông tin sẽ hiển thị tại đây.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {sessions.map((session) => {
+            const myAttendance = getMyAttendance(session);
+            const isExpired =
+              session.expiresAt && new Date(session.expiresAt) <= new Date();
+            const canCheckIn = !isExpired && !myAttendance;
+            const isCheckingThis = checkingIn === session.id;
 
-              return (
-                <div
-                  key={session.id}
-                  className="bg-white rounded-lg border border-blue-200 hover:shadow-md transition-shadow"
-                >
-                  <div className="p-4">
-                    {/* Header with Icon and Title */}
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className="flex-shrink-0 w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white text-xl">
-                        📝
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-gray-900 text-sm truncate">
-                          {session.name || "Điểm danh"}
+            return (
+              <div
+                key={session.id}
+                className={`flex flex-col justify-between bg-white rounded-xl border p-5 transition-all ${
+                  canCheckIn
+                    ? "border-blue-300 shadow-sm ring-1 ring-blue-500/10"
+                    : "border-slate-200 hover:border-slate-300"
+                }`}
+              >
+                <div>
+                  {/* Top: Icon + Tên buổi */}
+                  <div className="flex items-start gap-3 mb-4">
+                    <div
+                      className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 border ${
+                        canCheckIn
+                          ? "bg-blue-50 border-blue-200 text-blue-600"
+                          : "bg-slate-50 border-slate-200/80 text-slate-600"
+                      }`}
+                    >
+                      <ClipboardCheck className="w-5 h-5" />
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="font-semibold text-slate-900 text-sm truncate">
+                          {session.name || "Buổi điểm danh"}
                         </h3>
-                        <p className="text-xs text-gray-600 mt-0.5">
-                          {formatDate(session.createdAt)}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Info */}
-                    <div className="space-y-1.5 mb-3 text-xs text-gray-600">
-                      <p className="truncate">Mã: {session.sessionCode}</p>
-                      <p>{session.attendances.length} sinh viên</p>
-                      {session.expiresAt && (
-                        <p className="truncate">
-                          Hết: {formatDate(session.expiresAt)}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Status or Action */}
-                    {myAttendance ? (
-                      <div className="space-y-2">
-                        <div className={`text-xs font-medium ${getStatusColor(myAttendance.status)} text-center py-2 bg-gray-50 rounded`}>
-                          ✓ {getStatusText(myAttendance.status)}
-                        </div>
-                        <p className="text-xs text-gray-600 text-center">
-                          {dayjs(myAttendance.checkedInAt).format("HH:mm:ss")}
-                        </p>
-                        {myAttendance.distance !== null && (
-                          <p className="text-xs text-gray-500 text-center">
-                            {myAttendance.distance.toFixed(0)}m
-                          </p>
+                        {canCheckIn && (
+                          <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200/70">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+                            Đang mở
+                          </span>
                         )}
                       </div>
-                    ) : canCheckIn ? (
-                      <button
-                        onClick={() => handleCheckIn(session.id)}
-                        disabled={checkingIn === session.id}
-                        className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-medium disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {checkingIn === session.id ? "Đang xử lý..." : "Điểm danh"}
-                      </button>
-                    ) : (
-                      <div className="text-center text-xs text-red-600 py-2 bg-red-50 rounded">
-                        Đã hết hạn
+                      <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                        <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                        {formatDate(session.createdAt)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Thông tin chi tiết phiên */}
+                  <div className="space-y-2 py-3 border-t border-slate-100 text-xs text-slate-600">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 flex items-center gap-1.5">
+                        <Hash className="w-3.5 h-3.5" /> Mã phiên
+                      </span>
+                      <span className="font-mono font-medium text-slate-700">
+                        {session.sessionCode}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5" /> Đã tham gia
+                      </span>
+                      <span className="font-medium text-slate-700">
+                        {session.attendances.length} sinh viên
+                      </span>
+                    </div>
+
+                    {session.expiresAt && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5" /> Hạn chót
+                        </span>
+                        <span
+                          className={`font-medium ${
+                            isExpired && !myAttendance
+                              ? "text-slate-400"
+                              : "text-slate-700"
+                          }`}
+                        >
+                          {dayjs(session.expiresAt).format("HH:mm, DD/MM")}
+                        </span>
                       </div>
                     )}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+
+                {/* Footer: Trạng thái hoặc Nút hành động */}
+                <div className="pt-3 mt-1 border-t border-slate-100">
+                  {myAttendance ? (
+                    (() => {
+                      const badge = getStatusBadge(myAttendance.status);
+                      const StatusIcon = badge.icon;
+                      return (
+                        <div className="bg-slate-50 rounded-lg p-2.5 border border-slate-200/60">
+                          <div className="flex items-center justify-between">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium border ${badge.style}`}
+                            >
+                              <StatusIcon className="w-3.5 h-3.5" />
+                              {badge.label}
+                            </span>
+                            <span className="text-xs font-mono text-slate-500">
+                              {dayjs(myAttendance.checkedInAt).format(
+                                "HH:mm:ss"
+                              )}
+                            </span>
+                          </div>
+
+                          {myAttendance.distance !== null && (
+                            <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-2 pt-1.5 border-t border-slate-200/60">
+                              <MapPin className="w-3 h-3 text-slate-400" />
+                              <span>
+                                Khoảng cách GPS:{" "}
+                                <strong className="font-medium text-slate-700">
+                                  {myAttendance.distance.toFixed(0)}m
+                                </strong>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()
+                  ) : canCheckIn ? (
+                    <button
+                      onClick={() => handleCheckIn(session.id)}
+                      disabled={isCheckingThis}
+                      className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    >
+                      {isCheckingThis ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Đang định vị...</span>
+                        </>
+                      ) : (
+                        <>
+                          <MapPin className="w-4 h-4" />
+                          <span>Điểm danh ngay</span>
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="w-full py-2 px-3 bg-slate-100 text-slate-500 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5">
+                      <XCircle className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Đã hết hạn điểm danh</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

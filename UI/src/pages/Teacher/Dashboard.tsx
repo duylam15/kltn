@@ -426,7 +426,7 @@ export default function Dashboard() {
       ).length > 0 && (
           <div style={{ marginBottom: 24 }}>
             <Title level={4} style={{ marginBottom: 16 }}>
-              📚 Môn học được phân công (chưa có lớp)
+              Môn học được phân công (chưa có lớp)
             </Title>
             <Row gutter={[16, 16]}>
               {assignedSubjects

@@ -17,7 +17,8 @@ import {
   Plus,
   Archive,
   FolderOpen,
-  Tag
+  Tag,
+  HelpCircle
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import api from "../utils/axiosInstance";
@@ -34,8 +35,8 @@ export default function LayoutTeacher() {
   const sidebarMenu = [
     { to: "/teacher", label: "Màn hình chính", icon: Home, end: true },
     { to: "/teacher/materials", label: "Tài liệu", icon: BookOpen },
-    { to: "/teacher/assignments", label: "Bài tập", icon: BookOpen },
-    { to: "/teacher/questions", label: "Câu hỏi", icon: BookOpen },
+    { to: "/teacher/assignments", label: "Bài tập", icon: ClipboardList },
+    { to: "/teacher/questions", label: "Câu hỏi", icon: HelpCircle },
   ];
 
   const { user, logout } = useAuth();
@@ -106,9 +107,14 @@ export default function LayoutTeacher() {
             </button>
 
             {/* Logo */}
+            {/* Logo */}
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded bg-green-600 flex items-center justify-center">
-                <BookOpen className="h-6 w-6 text-white" />
+              <div className="h-10 w-10 rounded-lg bg-white p-0.5 border border-gray-200 shadow-sm flex items-center justify-center overflow-hidden">
+                <img
+                  src="/logo-sgu.jpg"
+                  alt="Logo SGU"
+                  className="h-full w-full object-contain"
+                />
               </div>
               <span className="text-xl font-normal text-gray-700">Lớp học</span>
             </div>
@@ -193,6 +199,7 @@ export default function LayoutTeacher() {
           </div>
 
           {/* Navigation */}
+          {/* Navigation */}
           <nav className="px-3 py-4 overflow-y-auto flex-1">
             {sidebarMenu.map((item) => (
               <NavLink
@@ -200,22 +207,14 @@ export default function LayoutTeacher() {
                 to={item.to}
                 end={item.end}
                 onClick={() => setSidebarOpen(false)}
-                className={({ isActive }) => {
-                  // luôn sáng khi URL bắt đầu bằng /teacher
-                  const active =
-                    location.pathname.startsWith("/teacher") && item.to === "/teacher"
-                      ? true
-                      : isActive;
-
-                  return `
-      flex items-center ${sidebarCollapsed ? "justify-center px-2" : "justify-between px-4"} 
-      py-3 rounded-lg text-sm font-medium transition-all duration-300 group overflow-x-hidden
-      ${active ? "bg-blue-200 text-blue-700" : "text-gray-700 hover:bg-blue-200"}
-    `;
-                }}
-                title={sidebarCollapsed ? item.label : ''}
+                className={({ isActive }) => `
+        flex items-center ${sidebarCollapsed ? "justify-center px-2" : "justify-between px-4"} 
+        py-3 rounded-lg text-sm font-medium transition-all duration-300 group overflow-x-hidden
+        ${isActive ? "bg-blue-200 text-blue-700" : "text-gray-700 hover:bg-blue-200"}
+      `}
+                title={sidebarCollapsed ? item.label : ""}
               >
-                <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-6'} ${sidebarCollapsed ? 'w-full' : ''}`}>
+                <div className={`flex items-center ${sidebarCollapsed ? "justify-center w-full" : "gap-6"}`}>
                   <item.icon className="h-5 w-5 flex-shrink-0" />
                   {!sidebarCollapsed && (
                     <span className="whitespace-nowrap overflow-hidden">{item.label}</span>
@@ -227,7 +226,7 @@ export default function LayoutTeacher() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 bg-[#e7effc] flex flex-col overflow-hidden">
+        <main className="flex-1 bg-[#edf3fc] flex flex-col overflow-hidden">
           {/* Sub Navigation Tabs */}
           <div className="flex-1 overflow-y-auto p-3 bg-[#fff] rounded-tl-3xl ">
             <Outlet />

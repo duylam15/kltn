@@ -322,7 +322,6 @@ export default function Roles() {
 							}}
 						/>
 					</Tooltip>
-					{hasPermission("role:update") && (
 						<Tooltip title="Sửa">
 							<Tooltip title="Sửa">
 								<Button
@@ -340,8 +339,6 @@ export default function Roles() {
 								/>
 							</Tooltip>
 						</Tooltip>
-					)}
-					{hasPermission("role:delete") && (
 						<Tooltip title="Xóa">
 							<Popconfirm
 								title="Xóa vai trò"
@@ -354,7 +351,6 @@ export default function Roles() {
 								<Button danger size="small" icon={<DeleteOutlined />} />
 							</Popconfirm>
 						</Tooltip>
-					)}
 				</div>
 			),
 		},
@@ -391,7 +387,6 @@ export default function Roles() {
 					<Button icon={<ReloadOutlined />} onClick={fetchRoles}>
 						Refresh
 					</Button>
-					{hasPermission("role:create") && (
 						<Button
 							type="primary"
 							icon={<PlusOutlined />}
@@ -404,7 +399,6 @@ export default function Roles() {
 						>
 							Thêm vai trò
 						</Button>
-					)}
 
 				</div>
 			</div>

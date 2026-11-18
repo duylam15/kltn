@@ -19,8 +19,8 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
-        "@prisma/client": "^6.16.0",
-        "adm-zip": "^0.5.16",
+        "@prisma/client": "^6.4.0",
+        "adm-zip": "^0.6.1",
         "axios": "^1.12.2",
         "bcrypt": "^6.0.0",
         "bullmq": "^5.61.0",
@@ -45,8 +45,7 @@
         "qrcode": "^1.5.4",
         "snakecase-keys": "^8.1.0",
         "socket.io": "^4.8.1",
-        "uuid": "^13.0.0",
-        "xlsx": "^0.18.5",
+        "uuid": "^14.0.3",
         "zod": "^4.1.7"
     },
     "devDependencies": {
@@ -64,7 +63,7 @@
         "eslint": "^9.38.0",
         "htmlhint": "^1.7.1",
         "playwright": "^1.56.1",
-        "prisma": "^6.16.0",
+        "prisma": "^6.4.0",
         "rimraf": "^6.0.1",
         "stylelint": "^16.25.0",
         "ts-node": "^10.9.2",

@@ -15,7 +15,7 @@ const SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
 
 export async function register(req: Request, res: Response) {
     try {
-        const { email, password, fullName, roleId } = req.body;
+        const { email, password, fullName, roleId } = req.body; 
 
         const existed = await prisma.user.findUnique({ where: { email } });
         if (existed)

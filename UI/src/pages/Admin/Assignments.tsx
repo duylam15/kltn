@@ -232,7 +232,7 @@ export default function Assignments() {
 			setLoading(true);
 
 			// ✅ Dùng instance thay vì axios
-			const res:any = await instance.get<{ success: boolean; data: Assignment[] }>(
+			const res: any = await instance.get<{ success: boolean; data: Assignment[] }>(
 				"/assignments" // ✅ Không cần `${API_BASE}` vì baseURL đã set
 			);
 
@@ -1399,6 +1399,7 @@ export default function Assignments() {
 
 			{/* Modal gán lớp */}
 			<Modal
+				centered
 				title={`Gán bài tập "${selectedAssignment?.title}" vào lớp`}
 				open={assignModalOpen}
 				onCancel={() => {
@@ -1411,10 +1412,23 @@ export default function Assignments() {
 				cancelText="Hủy"
 				confirmLoading={savingAssignment}
 				width={600}
+				styles={{
+					header: {
+						marginBottom: 12,
+					},
+					body: {
+						maxHeight: "60vh",
+						overflowY: "auto",
+						paddingRight: 4,
+					},
+					footer: {
+						marginTop: 12,
+					},
+				}}
 			>
 				<div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
 					{sections.length === 0 ? (
-						<p style={{ textAlign: "center", color: "#999" }}>
+						<p style={{ textAlign: "center", color: "#999", margin: "24px 0" }}>
 							Không có lớp nào
 						</p>
 					) : (
@@ -1426,29 +1440,28 @@ export default function Assignments() {
 									style={{
 										display: "flex",
 										alignItems: "center",
-										gap: 8,
+										gap: 10,
 										cursor: "pointer",
-										padding: "8px 12px",
-										borderRadius: 4,
-										border: "1px solid #d9d9d9",
-										transition: "all 0.3s",
+										padding: "10px 12px",
+										borderRadius: 6,
+										border: checked ? "1px solid #1677ff" : "1px solid #d9d9d9",
+										backgroundColor: checked ? "#f0f5ff" : "#ffffff",
+										transition: "all 0.2s",
 									}}
 									onMouseEnter={(e) => {
-										e.currentTarget.style.backgroundColor = "#f5f5f5";
+										if (!checked) e.currentTarget.style.backgroundColor = "#f5f5f5";
 									}}
 									onMouseLeave={(e) => {
-										e.currentTarget.style.backgroundColor = "transparent";
+										if (!checked) e.currentTarget.style.backgroundColor = "#ffffff";
 									}}
 								>
 									<input
 										type="checkbox"
 										checked={checked}
-										onChange={(e) =>
-											toggleTempSelection(s.id, e.target.checked)
-										}
-										style={{ cursor: "pointer" }}
+										onChange={(e) => toggleTempSelection(s.id, e.target.checked)}
+										style={{ cursor: "pointer", width: 16, height: 16 }}
 									/>
-									<span>
+									<span style={{ fontWeight: checked ? 500 : 400 }}>
 										{s.sectionCode} - {s.sectionName}
 									</span>
 								</label>

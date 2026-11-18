@@ -231,9 +231,7 @@ export const router = createBrowserRouter([
           const { default: RequirePermission } = await import("./RequirePermission");
           return {
             element: (
-              <RequirePermission permission="user.read">
                 <Students />
-              </RequirePermission>
             ),
           };
         },

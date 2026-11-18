@@ -3,44 +3,38 @@ import {
   Card,
   Row,
   Col,
-  Statistic,
-  Typography,
   Spin,
   Progress,
-  List,
-  Avatar,
   Tag,
   Timeline,
   Empty,
-  Divider,
-  Space,
   Button,
 } from "antd";
-import {
-  UserOutlined,
-  BookOutlined,
-  FileTextOutlined,
-  CalendarOutlined,
-  TeamOutlined,
-  CheckCircleOutlined,
-  ClockCircleOutlined,
-  TrophyOutlined,
-  FolderOpenOutlined,
-  BarChartOutlined,
-  RocketOutlined,
-  ArrowRightOutlined,
-} from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/vi";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
+import {
+  Users,
+  Layers,
+  FileText,
+  FolderOpen,
+  CalendarCheck,
+  BarChart3,
+  Clock,
+  Trophy,
+  ArrowRight,
+  CheckCircle2,
+  RefreshCw,
+  LayoutDashboard,
+  AlertCircle,
+} from "lucide-react";
 
 dayjs.extend(relativeTime);
 dayjs.locale("vi");
 
-const { Title, Text } = Typography;
 const API_BASE = "http://localhost:4000/api/v1";
 
 export default function Overview() {
@@ -49,6 +43,7 @@ export default function Overview() {
   const sectionId = Number(path.split("/")[3]);
 
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<string>(dayjs().format("DD/MM/YYYY HH:mm"));
   const [stats, setStats] = useState({
     totalStudents: 0,
     totalGroups: 0,
@@ -69,12 +64,19 @@ export default function Overview() {
   const [topStudents, setTopStudents] = useState<any[]>([]);
 
   useEffect(() => {
-    fetchOverviewData();
+    if (sectionId) {
+      fetchOverviewData();
+    }
   }, [sectionId]);
 
   const fetchOverviewData = async () => {
     try {
       setLoading(true);
+      const token =
+        localStorage.getItem("accessToken") ||
+        localStorage.getItem("token") ||
+        sessionStorage.getItem("accessToken");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
       const [
         studentsRes,
@@ -84,12 +86,12 @@ export default function Overview() {
         sessionsRes,
         gradesRes,
       ] = await Promise.all([
-        axios.get(`${API_BASE}/sections-enrollments/section/${sectionId}/students`),
-        axios.get(`${API_BASE}/sections-groups/sections/${sectionId}/groups`),
-        axios.get(`${API_BASE}/sections-assignments/sections/${sectionId}/assignments`),
-        axios.get(`${API_BASE}/materials/class/${sectionId}`),
-        axios.get(`${API_BASE}/attendance/sections/${sectionId}/sessions`),
-        axios.get(`${API_BASE}/grades/sections/${sectionId}/gradebook?includeUnpublished=true`),
+        axios.get(`${API_BASE}/sections-enrollments/section/${sectionId}/students`, { headers }),
+        axios.get(`${API_BASE}/sections-groups/sections/${sectionId}/groups`, { headers }),
+        axios.get(`${API_BASE}/sections-assignments/sections/${sectionId}/assignments`, { headers }),
+        axios.get(`${API_BASE}/materials/class/${sectionId}`, { headers }),
+        axios.get(`${API_BASE}/attendance/sections/${sectionId}/sessions`, { headers }),
+        axios.get(`${API_BASE}/grades/sections/${sectionId}/gradebook?includeUnpublished=true`, { headers }),
       ]);
 
       const students = studentsRes.data.data || [];
@@ -128,7 +130,8 @@ export default function Overview() {
         activeSessions,
         avgAttendanceRate,
         totalGradeColumns: gradeBook?.columns?.length || 0,
-        publishedColumns: gradeBook?.columns?.filter((c: any) => c.isPublished).length || 0,
+        publishedColumns:
+          gradeBook?.columns?.filter((c: any) => c.isPublished).length || 0,
       });
 
       // Recent activities
@@ -137,15 +140,13 @@ export default function Overview() {
           type: "attendance",
           title: `Điểm danh: ${s.name || `Phiên #${s.id}`}`,
           time: s.createdAt,
-          icon: <CalendarOutlined />,
-          color: "blue",
+          color: "#2563eb",
         })),
         ...assignments.slice(0, 5).map((a: any) => ({
           type: "assignment",
           title: `Bài tập: ${a.title}`,
           time: a.createdAt,
-          icon: <FileTextOutlined />,
-          color: "purple",
+          color: "#7c3aed",
         })),
       ]
         .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
@@ -156,7 +157,10 @@ export default function Overview() {
       // Upcoming deadlines
       const upcoming = assignments
         .filter((a: any) => a.dueDate && dayjs(a.dueDate).isAfter(dayjs()))
-        .sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+        .sort(
+          (a: any, b: any) =>
+            new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+        )
         .slice(0, 5);
 
       setUpcomingDeadlines(upcoming);
@@ -165,13 +169,15 @@ export default function Overview() {
       if (gradeBook?.students) {
         const studentsWithScores = gradeBook.students
           .map((s: any) => {
-            const scores = Object.values(s.columns).filter(
-              (col: any) => col.score !== null
+            const scores = Object.values(s.columns || {}).filter(
+              (col: any) => col && col.score !== null && col.score !== undefined
             );
             const avgScore =
               scores.length > 0
-                ? scores.reduce((sum: number, col: any) => sum + (col.percentage || 0), 0) /
-                scores.length
+                ? scores.reduce(
+                    (sum: number, col: any) => sum + (col.percentage || 0),
+                    0
+                  ) / scores.length
                 : 0;
             return { ...s, avgScore };
           })
@@ -180,6 +186,8 @@ export default function Overview() {
 
         setTopStudents(studentsWithScores);
       }
+
+      setLastUpdated(dayjs().format("DD/MM/YYYY HH:mm"));
     } catch (err) {
       console.error("Lỗi tải dữ liệu overview:", err);
       toast.error("Không thể tải dữ liệu tổng quan");
@@ -190,226 +198,265 @@ export default function Overview() {
 
   if (loading) {
     return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '80vh',
-        background: '#fff'
-      }}>
-        <Spin size="large" tip="Đang tải dữ liệu tổng quan..." />
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          minHeight: "75vh",
+          gap: 12,
+        }}
+      >
+        <Spin size="large" />
+        <span style={{ color: "#64748b", fontSize: 13.5 }}>
+          Đang tải dữ liệu tổng quan lớp học...
+        </span>
       </div>
     );
   }
 
+  const groupPercentage =
+    stats.totalStudents > 0
+      ? Math.round((stats.studentsWithGroup / stats.totalStudents) * 100)
+      : 0;
+
+  const publishedRate =
+    stats.totalGradeColumns > 0
+      ? Math.round((stats.publishedColumns / stats.totalGradeColumns) * 100)
+      : 0;
+
+  const attendanceColor =
+    stats.avgAttendanceRate >= 75
+      ? "#10b981"
+      : stats.avgAttendanceRate >= 50
+      ? "#f59e0b"
+      : "#ef4444";
+
   return (
-    <div style={{
-      paddingLeft: "24px", paddingRight: "24px",
-      background: "#fff",
-      minHeight: "100vh"
-    }}>
-      {/* Header */}
-      <div style={{
-        paddingBottom: 16,
-        borderBottom: '1px solid #f0f0f0'
-      }}>
-        <Space align="center" style={{ marginBottom: 8 }}>
-          <Title level={3} style={{ margin: 0, color: '#262626' }}>
-            📊 Tổng quan lớp học
-          </Title>
-        </Space>
-        <Text type="secondary" style={{ fontSize: 13, marginLeft: 12 }}>
-          Cập nhật lúc: {dayjs().format("DD/MM/YYYY HH:mm")}
-        </Text>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 20,
+        padding: "4px 4px 24px 4px",
+      }}
+    >
+      {/* Compact Header */}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          padding: "16px 20px",
+          background: "#ffffff",
+          borderRadius: 12,
+          border: "1px solid #e2e8f0",
+          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.03)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: 10,
+              background: "linear-gradient(135deg, #2563eb, #4f46e5)",
+              color: "#ffffff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <LayoutDashboard size={20} />
+          </div>
+          <div>
+            <h2
+              style={{
+                margin: 0,
+                fontSize: 17,
+                fontWeight: 700,
+                color: "#0f172a",
+                lineHeight: 1.3,
+              }}
+            >
+              Tổng quan lớp học phần
+            </h2>
+            <p style={{ margin: 0, fontSize: 12.5, color: "#64748b" }}>
+              Cập nhật lần cuối lúc {lastUpdated}
+            </p>
+          </div>
+        </div>
+
+        <Button
+          icon={<RefreshCw size={14} />}
+          onClick={fetchOverviewData}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            borderRadius: 8,
+            fontWeight: 500,
+          }}
+        >
+          Làm mới
+        </Button>
       </div>
 
-      {/* Stats Cards - Simple Style */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+      {/* 4 KPI Cards */}
+      <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
-          <Card
-            bordered={false}
-            style={{
-              background: '#fafafa',
-              borderRadius: 8,
-              border: '1px solid #f0f0f0',
-            }}
-          >
-            <Statistic
-              title={<Text type="secondary">Sinh viên</Text>}
-              value={stats.totalStudents}
-              prefix={<UserOutlined style={{ color: '#1890ff' }} />}
-              valueStyle={{ color: '#262626', fontSize: 28, fontWeight: 600 }}
-            />
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f0f0f0' }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                <CheckCircleOutlined style={{ color: '#52c41a', marginRight: 4 }} />
-                {stats.studentsWithGroup} đã có nhóm
-              </Text>
-            </div>
-          </Card>
+          <KpiCard
+            title="Sinh viên trong lớp"
+            value={stats.totalStudents}
+            footerText={`${stats.studentsWithGroup} sinh viên đã vào nhóm`}
+            icon={<Users size={20} />}
+            iconBg="#eff6ff"
+            iconColor="#2563eb"
+          />
         </Col>
-
         <Col xs={24} sm={12} lg={6}>
-          <Card
-            bordered={false}
-            style={{
-              background: '#fafafa',
-              borderRadius: 8,
-              border: '1px solid #f0f0f0',
-            }}
-          >
-            <Statistic
-              title={<Text type="secondary">Nhóm học tập</Text>}
-              value={stats.totalGroups}
-              prefix={<TeamOutlined style={{ color: '#52c41a' }} />}
-              valueStyle={{ color: '#262626', fontSize: 28, fontWeight: 600 }}
-            />
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f0f0f0' }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Tỷ lệ: {Math.round((stats.studentsWithGroup / stats.totalStudents) * 100)}%
-              </Text>
-            </div>
-          </Card>
+          <KpiCard
+            title="Nhóm học tập"
+            value={stats.totalGroups}
+            footerText={`Tỷ lệ phân nhóm: ${groupPercentage}%`}
+            icon={<Layers size={20} />}
+            iconBg="#ecfdf5"
+            iconColor="#10b981"
+          />
         </Col>
-
         <Col xs={24} sm={12} lg={6}>
-          <Card
-            bordered={false}
-            style={{
-              background: '#fafafa',
-              borderRadius: 8,
-              border: '1px solid #f0f0f0',
-            }}
-          >
-            <Statistic
-              title={<Text type="secondary">Bài tập</Text>}
-              value={stats.totalAssignments}
-              prefix={<FileTextOutlined style={{ color: '#722ed1' }} />}
-              valueStyle={{ color: '#262626', fontSize: 28, fontWeight: 600 }}
-            />
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f0f0f0' }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                <CheckCircleOutlined style={{ color: '#52c41a', marginRight: 4 }} />
-                {stats.visibleAssignments} đang hiển thị
-              </Text>
-            </div>
-          </Card>
+          <KpiCard
+            title="Bài tập đã tạo"
+            value={stats.totalAssignments}
+            footerText={`${stats.visibleAssignments} bài đang mở cho SV`}
+            icon={<FileText size={20} />}
+            iconBg="#f5f3ff"
+            iconColor="#7c3aed"
+          />
         </Col>
-
         <Col xs={24} sm={12} lg={6}>
-          <Card
-            bordered={false}
-            style={{
-              background: '#fafafa',
-              borderRadius: 8,
-              border: '1px solid #f0f0f0',
-            }}
-          >
-            <Statistic
-              title={<Text type="secondary">Tài liệu</Text>}
-              value={stats.totalMaterials}
-              prefix={<FolderOpenOutlined style={{ color: '#fa8c16' }} />}
-              valueStyle={{ color: '#262626', fontSize: 28, fontWeight: 600 }}
-            />
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f0f0f0' }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                <CheckCircleOutlined style={{ color: '#52c41a', marginRight: 4 }} />
-                {stats.visibleMaterials} đang hiển thị
-              </Text>
-            </div>
-          </Card>
+          <KpiCard
+            title="Tài liệu học tập"
+            value={stats.totalMaterials}
+            footerText={`${stats.visibleMaterials} tài liệu đang hiển thị`}
+            icon={<FolderOpen size={20} />}
+            iconBg="#fff7ed"
+            iconColor="#ea580c"
+          />
         </Col>
       </Row>
 
-      {/* Attendance & Grades */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+      {/* Attendance & Grades Progress Cards */}
+      <Row gutter={[16, 16]}>
         <Col xs={24} lg={12}>
           <Card
-            bordered={false}
             style={{
-              borderRadius: 8,
-              border: '1px solid #f0f0f0',
+              borderRadius: 12,
+              border: "1px solid #e2e8f0",
+              height: "100%",
             }}
+            styles={{ body: { padding: "18px 20px" } }}
             title={
-              <Space>
-                <CalendarOutlined style={{ color: '#1890ff' }} />
-                <span style={{ fontWeight: 500, fontSize: 15 }}>Điểm danh</span>
-              </Space>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: "#0f172a",
+                }}
+              >
+                <CalendarCheck size={18} color="#2563eb" />
+                Tình hình điểm danh
+              </span>
             }
             extra={
               <Button
-                type="text"
+                type="link"
                 size="small"
                 onClick={() => navigate(`/teacher/courses/${sectionId}/roll-call`)}
-                icon={<ArrowRightOutlined />}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: 0,
+                  fontWeight: 500,
+                }}
               >
-                Chi tiết
+                Chi tiết <ArrowRight size={14} />
               </Button>
             }
           >
-            <Row gutter={16} style={{ marginBottom: 20 }}>
-              <Col span={8}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{
-                    fontSize: 32,
-                    fontWeight: 600,
-                    color: '#262626',
-                    marginBottom: 4
-                  }}>
-                    {stats.totalSessions}
-                  </div>
-                  <Text type="secondary" style={{ fontSize: 13 }}>Tổng phiên</Text>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: 12,
+                padding: "12px 0",
+                background: "#f8fafc",
+                borderRadius: 10,
+                marginBottom: 18,
+              }}
+            >
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 26, fontWeight: 700, color: "#0f172a" }}>
+                  {stats.totalSessions}
                 </div>
-              </Col>
-              <Col span={8}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{
-                    fontSize: 32,
-                    fontWeight: 600,
-                    color: '#52c41a',
-                    marginBottom: 4
-                  }}>
-                    {stats.activeSessions}
-                  </div>
-                  <Text type="secondary" style={{ fontSize: 13 }}>Đang hoạt động</Text>
+                <div style={{ fontSize: 12.5, color: "#64748b" }}>Tổng phiên</div>
+              </div>
+              <div
+                style={{
+                  textAlign: "center",
+                  borderLeft: "1px solid #e2e8f0",
+                  borderRight: "1px solid #e2e8f0",
+                }}
+              >
+                <div style={{ fontSize: 26, fontWeight: 700, color: "#10b981" }}>
+                  {stats.activeSessions}
                 </div>
-              </Col>
-              <Col span={8}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{
-                    fontSize: 32,
-                    fontWeight: 600,
-                    color: '#8c8c8c',
-                    marginBottom: 4
-                  }}>
-                    {stats.totalSessions - stats.activeSessions}
-                  </div>
-                  <Text type="secondary" style={{ fontSize: 13 }}>Đã kết thúc</Text>
+                <div style={{ fontSize: 12.5, color: "#64748b" }}>Đang mở</div>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 26, fontWeight: 700, color: "#64748b" }}>
+                  {Math.max(0, stats.totalSessions - stats.activeSessions)}
                 </div>
-              </Col>
-            </Row>
-            <Divider style={{ margin: '16px 0' }} />
+                <div style={{ fontSize: 12.5, color: "#64748b" }}>Đã đóng</div>
+              </div>
+            </div>
+
             <div>
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginBottom: 8
-              }}>
-                <Text style={{ fontSize: 13 }}>Tỷ lệ điểm danh trung bình</Text>
-                <Text strong style={{
-                  color: stats.avgAttendanceRate >= 75 ? '#52c41a' :
-                    stats.avgAttendanceRate >= 50 ? '#faad14' : '#ff4d4f'
-                }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 6,
+                }}
+              >
+                <span style={{ fontSize: 13, color: "#475569", fontWeight: 500 }}>
+                  Tỷ lệ chuyên cần trung bình
+                </span>
+                <span
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 700,
+                    color: attendanceColor,
+                  }}
+                >
                   {stats.avgAttendanceRate.toFixed(1)}%
-                </Text>
+                </span>
               </div>
               <Progress
                 percent={Number(stats.avgAttendanceRate.toFixed(1))}
-                strokeColor={
-                  stats.avgAttendanceRate >= 75 ? '#52c41a' :
-                    stats.avgAttendanceRate >= 50 ? '#faad14' : '#ff4d4f'
-                }
-                strokeWidth={8}
+                strokeColor={attendanceColor}
+                trailColor="#f1f5f9"
+                showInfo={false}
+                size={["100%", 8]}
               />
             </div>
           </Card>
@@ -417,121 +464,166 @@ export default function Overview() {
 
         <Col xs={24} lg={12}>
           <Card
-            bordered={false}
             style={{
-              borderRadius: 8,
-              border: '1px solid #f0f0f0',
+              borderRadius: 12,
+              border: "1px solid #e2e8f0",
+              height: "100%",
             }}
+            styles={{ body: { padding: "18px 20px" } }}
             title={
-              <Space>
-                <BarChartOutlined style={{ color: '#722ed1' }} />
-                <span style={{ fontWeight: 500, fontSize: 15 }}>Điểm số</span>
-              </Space>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: "#0f172a",
+                }}
+              >
+                <BarChart3 size={18} color="#7c3aed" />
+                Quản lý bảng điểm
+              </span>
             }
             extra={
               <Button
-                type="text"
+                type="link"
                 size="small"
                 onClick={() => navigate(`/teacher/courses/${sectionId}/grades`)}
-                icon={<ArrowRightOutlined />}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: 0,
+                  fontWeight: 500,
+                }}
               >
-                Chi tiết
+                Bảng điểm <ArrowRight size={14} />
               </Button>
             }
           >
-            <Row gutter={16} style={{ marginBottom: 20 }}>
-              <Col span={12}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{
-                    fontSize: 32,
-                    fontWeight: 600,
-                    color: '#262626',
-                    marginBottom: 4
-                  }}>
-                    {stats.totalGradeColumns}
-                  </div>
-                  <Text type="secondary" style={{ fontSize: 13 }}>Tổng cột điểm</Text>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, 1fr)",
+                gap: 12,
+                padding: "12px 0",
+                background: "#f8fafc",
+                borderRadius: 10,
+                marginBottom: 18,
+              }}
+            >
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 26, fontWeight: 700, color: "#0f172a" }}>
+                  {stats.totalGradeColumns}
                 </div>
-              </Col>
-              <Col span={12}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{
-                    fontSize: 32,
-                    fontWeight: 600,
-                    color: '#52c41a',
-                    marginBottom: 4
-                  }}>
-                    {stats.publishedColumns}
-                  </div>
-                  <Text type="secondary" style={{ fontSize: 13 }}>Đã công bố</Text>
+                <div style={{ fontSize: 12.5, color: "#64748b" }}>Tổng cột điểm</div>
+              </div>
+              <div
+                style={{
+                  textAlign: "center",
+                  borderLeft: "1px solid #e2e8f0",
+                }}
+              >
+                <div style={{ fontSize: 26, fontWeight: 700, color: "#10b981" }}>
+                  {stats.publishedColumns}
                 </div>
-              </Col>
-            </Row>
-            <Divider style={{ margin: '16px 0' }} />
+                <div style={{ fontSize: 12.5, color: "#64748b" }}>Đã công bố</div>
+              </div>
+            </div>
+
             <div>
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginBottom: 8
-              }}>
-                <Text style={{ fontSize: 13 }}>Tỷ lệ công bố điểm</Text>
-                <Text strong style={{ color: '#52c41a' }}>
-                  {stats.totalGradeColumns > 0
-                    ? Math.round((stats.publishedColumns / stats.totalGradeColumns) * 100)
-                    : 0}%
-                </Text>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 6,
+                }}
+              >
+                <span style={{ fontSize: 13, color: "#475569", fontWeight: 500 }}>
+                  Tiến độ công bố điểm
+                </span>
+                <span
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 700,
+                    color: "#10b981",
+                  }}
+                >
+                  {publishedRate}%
+                </span>
               </div>
               <Progress
-                percent={stats.totalGradeColumns > 0
-                  ? Math.round((stats.publishedColumns / stats.totalGradeColumns) * 100)
-                  : 0}
-                strokeColor="#52c41a"
-                strokeWidth={8}
+                percent={publishedRate}
+                strokeColor="#10b981"
+                trailColor="#f1f5f9"
+                showInfo={false}
+                size={["100%", 8]}
               />
             </div>
           </Card>
         </Col>
       </Row>
 
-      {/* Bottom Section */}
+      {/* Bottom 3 Columns */}
       <Row gutter={[16, 16]}>
+        {/* Recent Activities */}
         <Col xs={24} lg={8}>
           <Card
-            bordered={false}
             style={{
-              borderRadius: 8,
-              border: '1px solid #f0f0f0',
-              height: 450,
+              borderRadius: 12,
+              border: "1px solid #e2e8f0",
+              height: 440,
+            }}
+            styles={{
+              body: {
+                padding: "16px 20px",
+                height: "calc(100% - 56px)",
+                overflowY: "auto",
+              },
             }}
             title={
-              <Space>
-                <ClockCircleOutlined style={{ color: '#1890ff' }} />
-                <span style={{ fontWeight: 500, fontSize: 15 }}>Hoạt động gần đây</span>
-              </Space>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: "#0f172a",
+                }}
+              >
+                <Clock size={17} color="#2563eb" />
+                Hoạt động gần đây
+              </span>
             }
-            bodyStyle={{
-              padding: '16px 24px',
-              height: 'calc(100% - 57px)',
-              overflowY: 'auto'
-            }}
           >
             {recentActivities.length === 0 ? (
               <Empty
                 description="Chưa có hoạt động nào"
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
+                style={{ marginTop: 60 }}
               />
             ) : (
               <Timeline
                 items={recentActivities.map((act) => ({
                   color: act.color,
                   children: (
-                    <div style={{ marginBottom: 4 }}>
-                      <div style={{ fontSize: 13, marginBottom: 4 }}>
+                    <div style={{ paddingBottom: 2 }}>
+                      <div
+                        style={{
+                          fontSize: 13.5,
+                          fontWeight: 500,
+                          color: "#1e293b",
+                          lineHeight: 1.4,
+                        }}
+                      >
                         {act.title}
                       </div>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
+                      <span style={{ fontSize: 12, color: "#94a3b8" }}>
                         {dayjs(act.time).fromNow()}
-                      </Text>
+                      </span>
                     </div>
                   ),
                 }))}
@@ -540,162 +632,325 @@ export default function Overview() {
           </Card>
         </Col>
 
+        {/* Upcoming Deadlines */}
         <Col xs={24} lg={8}>
           <Card
-            bordered={false}
             style={{
-              borderRadius: 8,
-              border: '1px solid #f0f0f0',
-              height: 450,
+              borderRadius: 12,
+              border: "1px solid #e2e8f0",
+              height: 440,
+            }}
+            styles={{
+              body: {
+                padding: "12px 16px",
+                height: "calc(100% - 56px)",
+                overflowY: "auto",
+              },
             }}
             title={
-              <Space>
-                <CalendarOutlined style={{ color: '#fa8c16' }} />
-                <span style={{ fontWeight: 500, fontSize: 15 }}>Deadline sắp tới</span>
-              </Space>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: "#0f172a",
+                }}
+              >
+                <AlertCircle size={17} color="#ea580c" />
+                Hạn nộp sắp tới
+              </span>
             }
-            bodyStyle={{
-              padding: '12px 16px',
-              height: 'calc(100% - 57px)',
-              overflowY: 'auto'
-            }}
           >
             {upcomingDeadlines.length === 0 ? (
               <Empty
-                description="Không có deadline nào"
+                description="Không có bài tập sắp hết hạn"
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
+                style={{ marginTop: 60 }}
               />
             ) : (
-              <List
-                dataSource={upcomingDeadlines}
-                renderItem={(item: any) => {
-                  const daysLeft = dayjs(item.dueDate).diff(dayjs(), 'day');
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {upcomingDeadlines.map((item: any) => {
+                  const daysLeft = dayjs(item.dueDate).diff(dayjs(), "day");
                   const isUrgent = daysLeft <= 3;
 
                   return (
-                    <List.Item style={{ padding: '12px 8px', border: 'none' }}>
-                      <List.Item.Meta
-                        avatar={
-                          <div style={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: 8,
-                            background: isUrgent ? '#fff1f0' : '#f0f5ff',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            border: `1px solid ${isUrgent ? '#ffccc7' : '#d6e4ff'}`,
-                          }}>
-                            <ClockCircleOutlined
-                              style={{
-                                fontSize: 20,
-                                color: isUrgent ? '#ff4d4f' : '#1890ff'
-                              }}
-                            />
-                          </div>
-                        }
-                        title={
-                          <div style={{ fontSize: 13, marginBottom: 4 }}>
-                            {item.title}
-                          </div>
-                        }
-                        description={
-                          <Space direction="vertical" size={2}>
-                            <Text type="secondary" style={{ fontSize: 12 }}>
-                              {dayjs(item.dueDate).format("DD/MM/YYYY HH:mm")}
-                            </Text>
-                            <Tag
-                              color={isUrgent ? 'red' : 'orange'}
-                              style={{ fontSize: 11, marginTop: 4 }}
-                            >
-                              {daysLeft === 0 ? 'Hôm nay' :
-                                daysLeft === 1 ? 'Ngày mai' :
-                                  `Còn ${daysLeft} ngày`}
-                            </Tag>
-                          </Space>
-                        }
-                      />
-                    </List.Item>
+                    <div
+                      key={item.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 12,
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        background: "#f8fafc",
+                        border: "1px solid #f1f5f9",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 38,
+                          height: 38,
+                          borderRadius: 8,
+                          background: isUrgent ? "#fef2f2" : "#eff6ff",
+                          color: isUrgent ? "#ef4444" : "#2563eb",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                          marginTop: 2,
+                        }}
+                      >
+                        <Clock size={18} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: 13.5,
+                            fontWeight: 600,
+                            color: "#0f172a",
+                            marginBottom: 4,
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {item.title}
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 8,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <span style={{ fontSize: 12, color: "#64748b" }}>
+                            {dayjs(item.dueDate).format("DD/MM/YYYY HH:mm")}
+                          </span>
+                          <Tag
+                            color={isUrgent ? "red" : "orange"}
+                            style={{ margin: 0, borderRadius: 6, fontSize: 11 }}
+                          >
+                            {daysLeft === 0
+                              ? "Hôm nay"
+                              : daysLeft === 1
+                              ? "Ngày mai"
+                              : `Còn ${daysLeft} ngày`}
+                          </Tag>
+                        </div>
+                      </div>
+                    </div>
                   );
-                }}
-              />
+                })}
+              </div>
             )}
           </Card>
         </Col>
 
+        {/* Top Students */}
         <Col xs={24} lg={8}>
           <Card
-            bordered={false}
             style={{
-              borderRadius: 8,
-              border: '1px solid #f0f0f0',
-              height: 450,
+              borderRadius: 12,
+              border: "1px solid #e2e8f0",
+              height: 440,
+            }}
+            styles={{
+              body: {
+                padding: "12px 16px",
+                height: "calc(100% - 56px)",
+                overflowY: "auto",
+              },
             }}
             title={
-              <Space>
-                <TrophyOutlined style={{ color: '#faad14' }} />
-                <span style={{ fontWeight: 500, fontSize: 15 }}>Sinh viên xuất sắc</span>
-              </Space>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: "#0f172a",
+                }}
+              >
+                <Trophy size={17} color="#eab308" />
+                Sinh viên nổi bật
+              </span>
             }
-            bodyStyle={{
-              padding: '12px 16px',
-              height: 'calc(100% - 57px)',
-              overflowY: 'auto'
-            }}
           >
             {topStudents.length === 0 ? (
               <Empty
                 description="Chưa có dữ liệu điểm"
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
+                style={{ marginTop: 60 }}
               />
             ) : (
-              <List
-                dataSource={topStudents}
-                renderItem={(student: any, index: number) => {
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {topStudents.map((student: any, index: number) => {
+                  const badgeStyles = [
+                    { bg: "#fef3c7", color: "#d97706", border: "#fde68a" }, // Top 1
+                    { bg: "#f1f5f9", color: "#475569", border: "#e2e8f0" }, // Top 2
+                    { bg: "#ffedd5", color: "#c2410c", border: "#fed7aa" }, // Top 3
+                  ][index] || { bg: "#f8fafc", color: "#64748b", border: "#e2e8f0" };
+
                   return (
-                    <List.Item style={{ padding: '12px 8px', border: 'none' }}>
-                      <List.Item.Meta
-                        avatar={
-                          <Avatar
-                            size={40}
+                    <div
+                      key={student.studentId || index}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        background: "#f8fafc",
+                        border: "1px solid #f1f5f9",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                        <div
+                          style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: 8,
+                            background: badgeStyles.bg,
+                            color: badgeStyles.color,
+                            border: `1px solid ${badgeStyles.border}`,
+                            fontWeight: 700,
+                            fontSize: 13.5,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                          }}
+                        >
+                          #{index + 1}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div
                             style={{
-                              background: index === 0 ? '#faad14' :
-                                index === 1 ? '#8c8c8c' :
-                                  index === 2 ? '#d4380d' : '#f0f0f0',
-                              color: index < 3 ? '#fff' : '#262626',
+                              fontSize: 13.5,
                               fontWeight: 600,
+                              color: "#0f172a",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
                             }}
                           >
-                            {index + 1}
-                          </Avatar>
-                        }
-                        title={
-                          <div style={{ fontSize: 13, marginBottom: 4 }}>
                             {student.fullName}
                           </div>
+                          <div style={{ fontSize: 12, color: "#64748b" }}>
+                            {student.studentCode}
+                          </div>
+                        </div>
+                      </div>
+
+                      <Tag
+                        color={
+                          student.avgScore >= 80
+                            ? "green"
+                            : student.avgScore >= 70
+                            ? "geekblue"
+                            : "orange"
                         }
-                        description={
-                          <Space>
-                            <Text type="secondary" style={{ fontSize: 12 }}>
-                              {student.studentCode}
-                            </Text>
-                            <Tag
-                              color={student.avgScore >= 80 ? 'green' :
-                                student.avgScore >= 70 ? 'blue' : 'orange'}
-                            >
-                              {student.avgScore.toFixed(1)}%
-                            </Tag>
-                          </Space>
-                        }
-                      />
-                    </List.Item>
+                        style={{
+                          margin: 0,
+                          borderRadius: 6,
+                          fontWeight: 600,
+                          padding: "2px 8px",
+                        }}
+                      >
+                        {student.avgScore.toFixed(1)}%
+                      </Tag>
+                    </div>
                   );
-                }}
-              />
+                })}
+              </div>
             )}
           </Card>
         </Col>
       </Row>
     </div>
+  );
+}
+
+/** --------------------------------------
+ *  Reusable KPI Card
+ *  -------------------------------------- */
+function KpiCard({
+  title,
+  value,
+  footerText,
+  icon,
+  iconBg,
+  iconColor,
+}: {
+  title: string;
+  value: number | string;
+  footerText: string;
+  icon: React.ReactNode;
+  iconBg: string;
+  iconColor: string;
+}) {
+  return (
+    <Card
+      style={{
+        borderRadius: 12,
+        border: "1px solid #e2e8f0",
+        height: "100%",
+      }}
+      styles={{ body: { padding: "16px 20px" } }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 12,
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 13, color: "#64748b", fontWeight: 500, marginBottom: 4 }}>
+            {title}
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: "#0f172a", lineHeight: 1.2 }}>
+            {value}
+          </div>
+        </div>
+        <div
+          style={{
+            width: 42,
+            height: 42,
+            borderRadius: 10,
+            background: iconBg,
+            color: iconColor,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          {icon}
+        </div>
+      </div>
+      <div
+        style={{
+          marginTop: 12,
+          paddingTop: 10,
+          borderTop: "1px solid #f1f5f9",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          fontSize: 12,
+          color: "#64748b",
+        }}
+      >
+        <CheckCircle2 size={14} color="#10b981" />
+        <span>{footerText}</span>
+      </div>
+    </Card>
   );
 }

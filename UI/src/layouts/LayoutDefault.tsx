@@ -29,7 +29,7 @@ export default function LayoutDefault() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const { user,  logout } = useAuth();
+  const { user, logout } = useAuth();
 
   // Menu cho thanh navigation dọc (sidebar) - giống Google Classroom
   const sidebarMenu = [
@@ -107,8 +107,12 @@ export default function LayoutDefault() {
 
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded bg-green-600 flex items-center justify-center">
-                <BookOpen className="h-6 w-6 text-white" />
+              <div className="h-10 w-10 rounded-lg bg-white p-0.5 border border-gray-200 shadow-sm flex items-center justify-center overflow-hidden">
+                <img
+                  src="/logo-sgu.jpg"
+                  alt="Logo SGU"
+                  className="h-full w-full object-contain"
+                />
               </div>
               <span className="text-xl font-normal text-gray-700">Lớp học</span>
             </div>
@@ -172,7 +176,7 @@ export default function LayoutDefault() {
         <aside className={`
           fixed lg:static inset-y-0 left-0 z-50 
           ${sidebarCollapsed ? 'w-20 lg:w-20' : 'w-60 lg:w-60'}
-          bg-[#e7effc] flex-shrink-0
+          bg-[#edf3fc] flex-shrink-0
           transform transition-all duration-300 ease-in-out overflow-hidden
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}>
@@ -223,7 +227,7 @@ export default function LayoutDefault() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 bg-[#e7effc] flex flex-col overflow-hidden">
+        <main className="flex-1 bg-[#edf3fc] flex flex-col overflow-hidden">
           {/* Sub Navigation Tabs */}
           <div className="flex-1 overflow-y-auto p-3 bg-[#fff] rounded-tl-3xl ">
             <Outlet />

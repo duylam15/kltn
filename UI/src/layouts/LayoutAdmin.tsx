@@ -25,7 +25,7 @@ export default function LayoutAdmin() {
 	const navigate = useNavigate();
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-	const { user,  logout } = useAuth();
+	const { user, logout } = useAuth();
 
 	// Hàm check quyền
 	const hasPermission = (perm: string) =>
@@ -34,7 +34,13 @@ export default function LayoutAdmin() {
 	const sidebarMenu = [
 		// Tổng quan
 		{ to: "/admin", label: "Thống kê", icon: LineChart, end: true },
-		{ to: "/admin/reports", label: "Báo cáo", icon: ClipboardList },
+		// { to: "/admin/reports", label: "Báo cáo", icon: ClipboardList },
+
+		
+		// Quản lý con người
+		{ to: "/admin/teachers", label: "Giảng viên", icon: GraduationCap, required: "*" },
+		{ to: "/admin/students", label: "Sinh viên", icon: Users, required: "*" },
+		{ to: "/admin/instructors", label: "Phân công", icon: UserCog },
 
 		// Quản lý học tập
 		{ to: "/admin/subjects", label: "Môn học", icon: Book },
@@ -43,14 +49,10 @@ export default function LayoutAdmin() {
 		{ to: "/admin/questions", label: "Câu hỏi", icon: BookOpen },
 		{ to: "/admin/materials", label: "Tài liệu", icon: FileText },
 
-		// Quản lý con người
-		{ to: "/admin/teachers", label: "Giảng viên", icon: GraduationCap, required: "*" },
-		{ to: "/admin/students", label: "Sinh viên", icon: Users, required: "*" },
-		{ to: "/admin/instructors", label: "Phân công", icon: UserCog },
 
 		// Hệ thống
-		{ to: "/admin/roles", label: "Vai trò", icon: User, required: "role:view" },
-		{ to: "/admin/notifications", label: "Thông báo", icon: Bell },
+		{ to: "/admin/roles", label: "Vai trò", icon: User },
+		// { to: "/admin/notifications", label: "Thông báo", icon: Bell },
 	];
 
 
@@ -84,8 +86,12 @@ export default function LayoutAdmin() {
 
 						{/* Logo */}
 						<div className="flex items-center gap-3">
-							<div className="h-10 w-10 rounded bg-blue-600 flex items-center justify-center">
-								<LineChart className="h-6 w-6 text-white" />
+							<div className="h-10 w-10 rounded-lg bg-white p-0.5 border border-gray-200 shadow-sm flex items-center justify-center overflow-hidden">
+								<img
+									src="/logo-sgu.jpg"
+									alt="Logo SGU"
+									className="h-full w-full object-contain"
+								/>
 							</div>
 							<span className="text-xl font-normal text-gray-700">Admin</span>
 						</div>

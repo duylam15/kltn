@@ -1529,77 +1529,113 @@ export default function AssignmentsTeacherOut() {
       </Modal>
 
       {/* Modal gán lớp */}
-      <Modal
-        title={`Giao bài tập "${selectedAssignment?.title}" cho lớp`}
-        open={assignModalOpen}
-        onCancel={() => {
-          setAssignModalOpen(false);
-          setSelectedAssignment(null);
-          setTempSelectedSectionIds([]);
-        }}
-        onOk={handleSaveAssignment}
-        okText="Giao bài"
-        cancelText="Hủy"
-        confirmLoading={savingAssignment}
-        width={600}
-      >
-        {selectedAssignment && (
-          <div style={{ marginBottom: 16, padding: 12, backgroundColor: "#f5f5f5", borderRadius: 6 }}>
-            <div><Text strong>Bài tập:</Text> {selectedAssignment.title}</div>
-            {selectedAssignment.description && (
-              <div style={{ marginTop: 4, fontSize: 12, color: "#666" }}>
-                {selectedAssignment.description}
-              </div>
-            )}
+     <Modal
+      title={`Giao bài tập "${selectedAssignment?.title}" cho lớp`}
+      open={assignModalOpen}
+      onCancel={() => {
+        setAssignModalOpen(false);
+        setSelectedAssignment(null);
+        setTempSelectedSectionIds([]);
+      }}
+      onOk={handleSaveAssignment}
+      okText="Giao bài"
+      cancelText="Hủy"
+      confirmLoading={savingAssignment}
+      width={600}
+      centered
+      style={{ maxWidth: "calc(100vw - 32px)" }}
+      styles={{
+        body: {
+          maxHeight: "70vh",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        },
+      }}
+    >
+      {/* Thông tin bài tập - cố định phía trên */}
+      {selectedAssignment && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: 12,
+            backgroundColor: "#f5f5f5",
+            borderRadius: 6,
+            flexShrink: 0,
+          }}
+        >
+          <div>
+            <Text strong>Bài tập:</Text> {selectedAssignment.title}
           </div>
-        )}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {sections.length === 0 ? (
-            <p style={{ textAlign: "center", color: "#999" }}>Bạn chưa có lớp nào</p>
-          ) : (
-            sections.map((s) => {
-              const checked = tempSelectedSectionIds.includes(s.id);
-              return (
-                <label
-                  key={s.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    cursor: "pointer",
-                    padding: "12px",
-                    borderRadius: 4,
-                    border: "1px solid #d9d9d9",
-                    transition: "all 0.3s",
-                    backgroundColor: checked ? "#e6f7ff" : "transparent",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!checked) e.currentTarget.style.backgroundColor = "#f5f5f5";
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!checked) e.currentTarget.style.backgroundColor = "transparent";
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(e) => toggleTempSelection(s.id, e.target.checked)}
-                    style={{ cursor: "pointer" }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 500 }}>
-                      {s.sectionCode} - {s.sectionName}
-                    </div>
-                    <div style={{ fontSize: 12, color: "#666" }}>
-                      {s.subject.subjectCode} - {s.subject.subjectName} ({s.term.name})
-                    </div>
-                  </div>
-                </label>
-              );
-            })
+          {selectedAssignment.description && (
+            <div style={{ marginTop: 4, fontSize: 12, color: "#666" }}>
+              {selectedAssignment.description}
+            </div>
           )}
         </div>
-      </Modal>
+      )}
+
+      {/* Danh sách lớp - tự động cuộn bên trong Modal khi dài */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          overflowY: "auto",
+          paddingRight: 4,
+          flex: 1,
+          minHeight: 120,
+        }}
+      >
+        {sections.length === 0 ? (
+          <p style={{ textAlign: "center", color: "#999", margin: "16px 0" }}>
+            Bạn chưa có lớp nào
+          </p>
+        ) : (
+          sections.map((s) => {
+            const checked = tempSelectedSectionIds.includes(s.id);
+            return (
+              <label
+                key={s.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  cursor: "pointer",
+                  padding: "12px",
+                  borderRadius: 4,
+                  border: checked ? "1px solid #1677ff" : "1px solid #d9d9d9",
+                  transition: "all 0.2s",
+                  backgroundColor: checked ? "#e6f7ff" : "transparent",
+                  flexShrink: 0,
+                }}
+                onMouseEnter={(e) => {
+                  if (!checked) e.currentTarget.style.backgroundColor = "#f5f5f5";
+                }}
+                onMouseLeave={(e) => {
+                  if (!checked) e.currentTarget.style.backgroundColor = "transparent";
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => toggleTempSelection(s.id, e.target.checked)}
+                  style={{ cursor: "pointer" }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 500 }}>
+                    {s.sectionCode} - {s.sectionName}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#666" }}>
+                    {s.subject.subjectCode} - {s.subject.subjectName} ({s.term.name})
+                  </div>
+                </div>
+              </label>
+            );
+          })
+        )}
+      </div>
+    </Modal>
     </div>
   );
 }
